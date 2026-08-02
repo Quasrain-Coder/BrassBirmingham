@@ -51,6 +51,8 @@ export { applyLoan, enumerateLoan } from './actions/loan.js';
 export { applyScout, enumerateScout } from './actions/scout.js';
 export { applyPass } from './actions/pass.js';
 export { applySell, enumerateSells } from './actions/sell.js';
+export { applyAction, enumerateActions } from './apply.js';
+export { actionsPerRound, checkEraEnd, endTurnIfNeeded } from './turn.js';
 export {
   buyCoalCost,
   buyIronCost,

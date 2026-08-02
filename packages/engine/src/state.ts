@@ -82,6 +82,8 @@ export interface GameState {
   rngState: number;
   /** 上一步 applyX/applyAction 产生的事件。 */
   lastEvents: GameEvent[];
+  /** 时代结束待清算（牌堆空且全部手牌空的轮末由 turn.ts 置位；Task 12 消费做时代切换/终局）。 */
+  eraEndPending: boolean;
   phase: 'action' | 'game-over';
   winner: PlayerIndex[] | null;
 }
@@ -185,6 +187,7 @@ export function newGame(playerCount: 2 | 3 | 4, seed: number): GameState {
     actionsThisTurn: 0,
     rngState: rng.getState(),
     lastEvents: [],
+    eraEndPending: false,
     phase: 'action',
     winner: null,
   };
