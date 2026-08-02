@@ -10,8 +10,12 @@
  *      板块变现、够付即停，仍不足每缺 £1 扣 1 VP（VP 可为负）；
  *   c. **例外：全局最后一轮（铁路时代末轮）结束后不发收入**；运河时代末轮正常发
  *      （规则书原文例外仅限 "final round of the game"）；
- *   d. round++；时代结束条件（checkEraEnd：牌堆空且全部手牌空）满足时置
- *      eraEndPending = true——时代切换/终局清算属 Task 12，本模块只置位。
+ *   d. round++；时代结束条件（eraEndCondition：牌堆空且全部手牌空）满足时置
+ *      eraEndPending = true，并立即调 era.ts 的 checkEraEnd 消费——运河末清算进
+ *      铁路时代，铁路末终局计分进 game-over（返回态 eraEndPending 复归 false）。
+ * - 无牌自动跳过（deck 空时）：当前玩家手牌打空即视为行动完成直接推进；推进后
+ *   若下一位玩家手牌为空也一并跳过（scout 净 -2 手牌可致末轮手牌错位，否则该
+ *   玩家 enumerateActions=[] 游戏死锁）。跳过不耗行动数、该玩家本轮不再行动。
  *
  * 负收入拆板块的规范化（v1 原子结算，玩家无可选）：按"变现额升序 → LocationId 字典序
  * → 槽位序"逐块拆除；变现 £0 的板块（pottery II/IV 成本 £0）不参与拆除（不能减少亏空）。
@@ -19,6 +23,7 @@
  * 纯函数：不改入参。
  */
 import { incomeLevelAt } from './data/income.js';
+import { checkEraEnd } from './era.js';
 import type { GameState, PlayerState } from './state.js';
 import type { LocationId, PlayerIndex } from './types.js';
 
@@ -28,8 +33,21 @@ export function actionsPerRound(state: GameState): number {
 }
 
 /** 时代结束条件（§4）：牌堆空且全部玩家手牌空。 */
-export function checkEraEnd(state: GameState): boolean {
+export function eraEndCondition(state: GameState): boolean {
   return state.deck.length === 0 && state.players.every((p) => p.hand.length === 0);
+}
+
+/**
+ * deck 空时的无牌跳过：从 currentPlayerIdx 起，跳过手牌为空的玩家
+ * （时代清算后手牌重抽、终局 phase='game-over'，均不会误跳）。
+ */
+function skipCardlessPlayers(state: GameState): GameState {
+  if (state.phase === 'game-over' || state.deck.length > 0) return state;
+  let idx = state.currentPlayerIdx;
+  while (idx < state.playerCount && state.players[state.turnOrder[idx]!]!.hand.length === 0) {
+    idx++;
+  }
+  return idx === state.currentPlayerIdx ? state : { ...state, currentPlayerIdx: idx };
 }
 
 /** 替换某玩家的 PlayerState（结构共享）。 */
@@ -119,16 +137,20 @@ function settleIncome(state: GameState): GameState {
  * 未满原样返回。applyAction 在行动计数 +1 后调用；也可单独调用（测试/调试）。
  */
 export function endTurnIfNeeded(state: GameState): GameState {
-  if (state.actionsThisTurn < actionsPerRound(state)) return state;
+  // 无牌自动跳过：deck 空且当前玩家手牌打空 → 视为行动完成，直接推进
+  const current = state.players[state.turnOrder[state.currentPlayerIdx]!]!;
+  const currentCardless = state.deck.length === 0 && current.hand.length === 0;
+  if (!currentCardless && state.actionsThisTurn < actionsPerRound(state)) return state;
   let next: GameState = {
     ...state,
     actionsThisTurn: 0,
     currentPlayerIdx: state.currentPlayerIdx + 1,
   };
+  next = skipCardlessPlayers(next);
   if (next.currentPlayerIdx < next.playerCount) return next;
 
   // 一轮结束
-  const eraEnd = checkEraEnd(next);
+  const eraEnd = eraEndCondition(next);
   const finalRoundOfGame = eraEnd && next.era === 'rail';
 
   // a. 顺位重排（稳定：spent 升序，并列保持本轮相对顺序），spent 归零
@@ -147,12 +169,14 @@ export function endTurnIfNeeded(state: GameState): GameState {
   // b. 收入（c 例外：全局最后一轮不发）
   if (!finalRoundOfGame) next = settleIncome(next);
 
-  // d. round++；时代结束置位（Task 12 消费）
+  // d. round++；时代结束置位并立即清算（era.ts checkEraEnd 消费）
   next = {
     ...next,
     currentPlayerIdx: 0,
     round: next.round + 1,
     ...(eraEnd ? { eraEndPending: true } : {}),
   };
-  return next;
+  if (eraEnd) return checkEraEnd(next);
+  // 新一轮起始玩家同样可能无牌（deck 空 + scout 错位）
+  return skipCardlessPlayers(next);
 }

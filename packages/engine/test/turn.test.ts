@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { newGame, type GameState } from '../src/state.js';
 import { applyAction, enumerateActions } from '../src/apply.js';
-import { checkEraEnd, endTurnIfNeeded } from '../src/turn.js';
+import { eraEndCondition, endTurnIfNeeded } from '../src/turn.js';
 import { IllegalActionError } from '../src/errors.js';
 import { LOCATIONS } from '../src/data/board.js';
+import { buildDeck } from '../src/data/cards.js';
 import { INCOME_LEVEL_SPACES } from '../src/data/income.js';
 import { BREWERY_BARRELS } from '../src/data/market.js';
 import { tileDef } from '../src/data/tiles.js';
@@ -287,44 +288,95 @@ describe('round-end income', () => {
   });
 });
 
-describe('era end', () => {
-  it('checkEraEnd: true only when deck and all hands are empty', () => {
+describe('cardless auto-skip (deck empty)', () => {
+  it('skips a hand-empty next player without consuming their actions', () => {
     const s = newGame(4, 3);
-    expect(checkEraEnd(s)).toBe(false);
+    s.round = 2; // 每人 2 行动
     s.deck = [];
-    expect(checkEraEnd(s)).toBe(false); // 手牌非空
+    s.turnOrder = [0, 1, 2, 3];
+    s.players[1]!.hand = []; // 下一位玩家已无牌
+    const p = s.turnOrder[0]!;
+    const mid = applyAction(s, { type: 'pass', cardId: s.players[p]!.hand[0]!.id });
+    expect(mid.currentPlayerIdx).toBe(0); // 2 行动未满，仍 player 0
+    const after = endTurnIfNeeded({ ...mid, actionsThisTurn: 2 });
+    expect(after.currentPlayerIdx).toBe(2); // player 1 被跳过
+    expect(after.actionsThisTurn).toBe(0);
+  });
+
+  it('current player running out of cards mid-turn ends their turn early', () => {
+    const s = newGame(4, 3);
+    s.round = 2;
+    s.deck = [];
+    s.turnOrder = [0, 1, 2, 3];
+    s.players[0]!.hand = [{ id: 'c1', kind: 'location', location: 'worcester' }];
+    const after = applyAction(s, { type: 'pass', cardId: 'c1' });
+    // 1 行动（上限 2）但手牌打空且 deck 空 → 视为行动完成，直接推进
+    expect(after.currentPlayerIdx).toBe(1);
+    expect(after.actionsThisTurn).toBe(0);
+  });
+
+  it('scout-induced hand misalignment does not deadlock: game reaches the era transition', () => {
+    const s = newGame(2, 3);
+    s.round = 9;
+    s.deck = [];
+    s.turnOrder = [0, 1];
+    // player 0 剩 1 张，player 1 已空手（scout 净 -2 手牌造成的末轮错位）
+    s.players[0]!.hand = [{ id: 'c1', kind: 'location', location: 'worcester' }];
+    s.players[1]!.hand = [];
+    s.discard = buildDeck(2); // 40 张供重洗
+    const after = applyAction(s, { type: 'pass', cardId: 'c1' });
+    // player 0 打空 → 跳过空手玩家 → 轮末时代清算 → rail、重抽 8 张
+    expect(after.era).toBe('rail');
+    expect(after.eraEndPending).toBe(false);
+    expect(after.players.every((pl) => pl.hand.length === 8)).toBe(true);
+    // 重洗时弃牌堆 = 40 + 刚打出的 c1 = 41，抽 16 后余 25
+    expect(after.deck).toHaveLength(41 - 16);
+  });
+});
+
+describe('era end', () => {
+  it('eraEndCondition: true only when deck and all hands are empty', () => {
+    const s = newGame(4, 3);
+    expect(eraEndCondition(s)).toBe(false);
+    s.deck = [];
+    expect(eraEndCondition(s)).toBe(false); // 手牌非空
     for (const pl of s.players) pl.hand = [];
-    expect(checkEraEnd(s)).toBe(true);
+    expect(eraEndCondition(s)).toBe(true);
   });
 
   it('newGame starts with eraEndPending false', () => {
     expect(newGame(4, 3).eraEndPending).toBe(false);
   });
 
-  it('canal era final round still pays income, then flags eraEndPending', () => {
+  it('canal era final round still pays income, then resolves the era transition', () => {
     const s = roundEndState((st) => {
       st.deck = [];
       for (const pl of st.players) pl.hand = [];
+      st.discard = buildDeck(4); // 供运河末重洗重抽
       st.players[0]!.incomeSpace = INCOME_LEVEL_SPACES(5)[0]; // 等级 +5
       st.players[0]!.money = 10;
     });
     const after = endTurnIfNeeded(s);
     expect(after.players[0]!.money).toBe(15); // 运河时代末轮正常发收入
-    expect(after.eraEndPending).toBe(true);
-    expect(after.era).toBe('canal'); // 时代清算属 Task 12
+    expect(after.era).toBe('rail'); // 时代清算在轮末即时消费 eraEndPending
+    expect(after.eraEndPending).toBe(false);
     expect(after.round).toBe(3);
+    expect(after.players.every((pl) => pl.hand.length === 8)).toBe(true);
   });
 
-  it('final round of the game (rail era end) skips income', () => {
+  it('final round of the game (rail era end) skips income and ends the game', () => {
     const s = roundEndState((st) => {
       st.era = 'rail';
       st.deck = [];
       for (const pl of st.players) pl.hand = [];
       st.players[0]!.incomeSpace = INCOME_LEVEL_SPACES(5)[0];
       st.players[0]!.money = 10;
+      st.players[1]!.vp = 30;
     });
     const after = endTurnIfNeeded(s);
     expect(after.players[0]!.money).toBe(10); // 全局最后一轮不收收入
-    expect(after.eraEndPending).toBe(true);
+    expect(after.phase).toBe('game-over');
+    expect(after.winner).toEqual([1]);
+    expect(after.eraEndPending).toBe(false);
   });
 });
