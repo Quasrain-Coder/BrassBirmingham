@@ -307,7 +307,11 @@ export function applyBuild(
     ...psNow2,
     hand: [...psNow2.hand.slice(0, cardIdx), ...psNow2.hand.slice(cardIdx + 1)],
   });
-  if (card.kind !== 'wild-location' && card.kind !== 'wild-industry') {
+  if (card.kind === 'wild-location') {
+    next = { ...next, wildSupply: { ...next.wildSupply, location: next.wildSupply.location + 1 } };
+  } else if (card.kind === 'wild-industry') {
+    next = { ...next, wildSupply: { ...next.wildSupply, industry: next.wildSupply.industry + 1 } };
+  } else {
     next = { ...next, discard: [...next.discard, card] };
   }
 

@@ -438,10 +438,22 @@ describe('applyBuild execution', () => {
   it('wild cards return to supply (not the discard pile)', () => {
     const s = newGame(4, 5);
     setHand(s, 0, [{ id: 'wild-industry-0', kind: 'wild-industry' }]);
+    s.wildSupply = { location: 4, industry: 3 }; // 手里这张 wild-industry 来自供应堆
     const discardBefore = s.discard.length;
     const r = applyBuild(s, 0, { type: 'build', cardId: 'wild-industry-0', industry: 'coal', location: 'dudley' });
     expect(r.state.players[0]!.hand.length).toBe(0);
     expect(r.state.discard.length).toBe(discardBefore); // §9.14
+    expect(r.state.wildSupply).toEqual({ location: 4, industry: 4 }); // 回 wild 供应堆
+  });
+
+  it('wild location card returns to the location wild supply', () => {
+    const s = newGame(4, 5);
+    setHand(s, 0, [{ id: 'wild-location-0', kind: 'wild-location' }]);
+    s.wildSupply = { location: 3, industry: 4 };
+    const discardBefore = s.discard.length;
+    const r = applyBuild(s, 0, { type: 'build', cardId: 'wild-location-0', industry: 'coal', location: 'dudley' });
+    expect(r.state.discard.length).toBe(discardBefore);
+    expect(r.state.wildSupply).toEqual({ location: 4, industry: 4 });
   });
 
   it('brewery places barrels by era (canal 1 / rail 2)', () => {
