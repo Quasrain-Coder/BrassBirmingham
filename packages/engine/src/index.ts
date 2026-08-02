@@ -27,6 +27,23 @@ export type { TileDef } from './data/tiles.js';
 export { buildDeck, WILD_INDUSTRY_COUNT, WILD_LOCATION_COUNT } from './data/cards.js';
 export type { Card } from './data/cards.js';
 export { newGame } from './state.js';
+export {
+  canBuyCoalFromMarket,
+  coalSources,
+  connectedMerchants,
+  ironSources,
+  isConnected,
+  playerNetwork,
+} from './network.js';
+export type { NetworkNode } from './network.js';
+export {
+  buyCoalCost,
+  buyIronCost,
+  marketBuyCost,
+  marketSellRevenue,
+  sellCoalToMarket,
+  sellIronToMarket,
+} from './market.js';
 export type {
   PlacedTile,
   BuiltLink,
