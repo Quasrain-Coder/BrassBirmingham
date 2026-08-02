@@ -8,7 +8,7 @@ import { buildDeck } from '../src/data/cards.js';
 import { INCOME_LEVEL_SPACES } from '../src/data/income.js';
 import { BREWERY_BARRELS } from '../src/data/market.js';
 import { tileDef } from '../src/data/tiles.js';
-import type { IndustryType, LocationId, PlayerIndex } from '../src/types.js';
+import type { Action, IndustryType, LocationId, PlayerIndex } from '../src/types.js';
 
 // 辅助：给玩家一块板（直接改 state.board.slots，放到该产业首个匹配空槽）。
 function withTile(
@@ -170,6 +170,29 @@ describe('applyAction post-processing', () => {
     expect(after.lastEvents).toEqual([
       { kind: 'flip', player: p, location: 'dudley', incomeAdvance: 3 },
     ]);
+  });
+
+  it('network with explicit beerFromOpponentBrewery passes the legality gate and drinks the pinned brewery', () => {
+    const s = newGame(4, 3);
+    s.era = 'rail';
+    const p = s.turnOrder[0]!;
+    withTile(s, p, 'coventry', 'coal'); // 煤矿（2 块）供两条铁路的煤
+    withTile(s, (p + 1) % 4, 'nuneaton', 'brewery', 1); // 对手酒厂（铁路时代 2 桶）
+    s.players[p]!.money = 30;
+
+    const dbl = enumerateActions(s, p).find(
+      (a): a is Extract<Action, { type: 'network' }> =>
+        a.type === 'network' && a.links.length === 2 && a.links.includes(22),
+    )!;
+    expect(dbl).toBeDefined();
+    const after = applyAction(s, { ...dbl, beerFromOpponentBrewery: 'nuneaton' });
+    expect(after.board.links).toHaveLength(2);
+    // 啤酒来自指定的对手酒厂（2 桶喝 1，不翻面），而非默认来源
+    const brewery = after.board.slots['nuneaton']!.find(
+      (t) => t !== null && t.tile.industry === 'brewery',
+    )!;
+    expect(brewery.resources).toBe(1);
+    expect(brewery.flipped).toBe(false);
   });
 
   it('money spent on market purchases counts toward spentThisRound', () => {

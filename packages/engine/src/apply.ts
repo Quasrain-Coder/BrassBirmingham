@@ -60,8 +60,17 @@ function saleKey(s: Sale): string {
   return `${s.location} ${s.slotIndex} ${s.merchant} ${s.useMerchantBeer ? 1 : 0}`;
 }
 
-/** 规范化：sell 的 sales 排序（顺序无关）；其余行动原样（scout cardIds 顺序有语义）。 */
+/**
+ * 规范化：sell 的 sales 排序（顺序无关）；network 剥离 beerFromOpponentBrewery
+ * （apply-only 的显式啤酒来源覆盖，enumerateNetwork 从不出产——只影响与枚举集的
+ * 比较，原始 action 仍带该字段传给 applyNetwork）；其余行动原样（scout cardIds
+ * 顺序有语义）。
+ */
 function normalizeAction(action: Action): Action {
+  if (action.type === 'network') {
+    const { beerFromOpponentBrewery: _ignored, ...rest } = action;
+    return rest;
+  }
   if (action.type !== 'sell') return action;
   return { ...action, sales: [...action.sales].sort((a, b) => (saleKey(a) < saleKey(b) ? -1 : 1)) };
 }
