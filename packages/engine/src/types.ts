@@ -19,3 +19,21 @@ export interface Link {
   canal: boolean;
   rail: boolean;
 }
+
+/** 板块翻面事件（Sell 翻面或资源耗尽翻面）。 */
+export interface FlipEvent {
+  kind: 'flip';
+  player: PlayerIndex;
+  location: LocationId;
+  incomeAdvance: number;
+}
+
+/** 商人奖励事件（Sell 时消耗了所卖向商人板块旁的啤酒）。 */
+export interface MerchantBonusEvent {
+  kind: 'merchant-bonus';
+  player: PlayerIndex;
+  merchant: MerchantId;
+}
+
+/** applyAction 产生的事件；写入 GameState.lastEvents。 */
+export type GameEvent = FlipEvent | MerchantBonusEvent;

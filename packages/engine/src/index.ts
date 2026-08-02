@@ -10,6 +10,9 @@ export type {
   LocationId,
   IndustrySlot,
   Link,
+  FlipEvent,
+  MerchantBonusEvent,
+  GameEvent,
 } from './types.js';
 export {
   LOCATIONS,
@@ -23,6 +26,14 @@ export { TILES, tileDef } from './data/tiles.js';
 export type { TileDef } from './data/tiles.js';
 export { buildDeck, WILD_INDUSTRY_COUNT, WILD_LOCATION_COUNT } from './data/cards.js';
 export type { Card } from './data/cards.js';
+export { newGame } from './state.js';
+export type {
+  PlacedTile,
+  BuiltLink,
+  PlayerState,
+  MerchantTile,
+  GameState,
+} from './state.js';
 export {
   INCOME_LEVEL_SPACES,
   INCOME_LEVEL_MAX,
