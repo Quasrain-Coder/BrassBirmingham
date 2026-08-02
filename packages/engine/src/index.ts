@@ -52,6 +52,8 @@ export { applyScout, enumerateScout } from './actions/scout.js';
 export { applyPass } from './actions/pass.js';
 export { applySell, enumerateSells } from './actions/sell.js';
 export { applyAction, enumerateActions } from './apply.js';
+export { RandomAgent, playGame } from './agents/random.js';
+export type { PlayerAgent } from './agents/random.js';
 export { actionsPerRound, eraEndCondition, endTurnIfNeeded } from './turn.js';
 export { checkEraEnd, finalScore, scoreEraLinks, scoreFlippedIndustries } from './era.js';
 export {
