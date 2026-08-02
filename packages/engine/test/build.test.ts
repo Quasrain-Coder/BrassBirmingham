@@ -260,6 +260,66 @@ describe('enumerateBuilds: slots, era, panel, affordability', () => {
 });
 
 describe('overbuild', () => {
+  it('canal era: opponent overbuild cannot place a second own tile at a location', () => {
+    const s = newGame(4, 5);
+    s.coalMarket = 0; // 全图煤归零
+    // 己方铁厂（[iron] 槽，不含煤图标→不是煤 overbuild 候选）+ 对手耗尽煤矿（[coal] 槽）
+    withTile(s, 0, 'coalbrookdale', 'iron', { slot: 1 });
+    withTile(s, 1, 'coalbrookdale', 'coal', { slot: 2, resources: 0, flipped: true });
+    s.players[0]!.tiles = s.players[0]!.tiles.filter((t) => t.industry !== 'coal' || t.level >= 2);
+    setHand(s, 0, [locCard('coalbrookdale')]);
+    // 运河时代：覆盖对手矿会在同地放第 2 块己方板块 → 不枚举
+    expect(industriesAt(enumerateBuilds(s, 0), 'coalbrookdale').has('coal')).toBe(false);
+    // 铁路时代（不限块数）→ 对手 overbuild 合法
+    s.era = 'rail';
+    expect(industriesAt(enumerateBuilds(s, 0), 'coalbrookdale').has('coal')).toBe(true);
+  });
+
+  it('overbuild requires same industry (own and opponent)', () => {
+    // 对手跨产业：tamworth 两槽都是对手耗尽 L1 煤矿，棉 L2（等级够）也不可跨产业覆盖
+    const s = newGame(4, 5);
+    s.coalMarket = 0;
+    withTile(s, 1, 'tamworth', 'coal', { slot: 0, resources: 0, flipped: true });
+    withTile(s, 1, 'tamworth', 'coal', { slot: 1, resources: 0, flipped: true });
+    s.players[0]!.tiles = s.players[0]!.tiles.filter(
+      (t) => (t.industry === 'coal' ? t.level >= 2 : t.industry === 'cotton' ? t.level >= 2 : true),
+    );
+    withLink(s, 7, 1); // #8 birmingham-tamworth
+    withLink(s, 5, 1); // #6 birmingham-oxford → 市场买煤连通（棉 L2 需 1 煤）
+    s.players[0]!.money = 40;
+    setHand(s, 0, [locCard('tamworth')]);
+    const inds = industriesAt(enumerateBuilds(s, 0), 'tamworth');
+    expect(inds.has('cotton')).toBe(false); // 棉盖对手煤矿 = 跨产业 → 非法
+    expect(inds.has('coal')).toBe(true); // 同产业覆盖对手矿合法
+
+    // 己方跨产业：[manufacturer,coal] 槽被己煤矿占，制造 L2（等级够）也不可跨产业覆盖
+    const s2 = newGame(4, 5);
+    withTile(s2, 0, 'cannock', 'coal', { slot: 0 });
+    s2.players[0]!.tiles = s2.players[0]!.tiles.filter((t) => t.industry !== 'coal' || t.level >= 2);
+    s2.players[0]!.money = 40;
+    setHand(s2, 0, [locCard('cannock')]);
+    const inds2 = industriesAt(enumerateBuilds(s2, 0), 'cannock');
+    expect(inds2.has('manufacturer')).toBe(false); // 制造盖己煤矿 = 跨产业 → 非法
+    expect(inds2.has('coal')).toBe(true); // 同产业覆盖己方矿合法
+  });
+
+  it('opponent overbuild is enumerated and preferred even when an empty slot exists', () => {
+    const s = newGame(4, 5);
+    s.era = 'rail';
+    s.coalMarket = 0;
+    withTile(s, 1, 'cannock', 'coal', { slot: 0, level: 2, resources: 0, flipped: true }); // 对手耗尽 L2 矿
+    // slot1 [coal] 空槽可用；面板最低煤 = L3 > L2 → 对手 overbuild 非支配，优先于空槽
+    s.players[0]!.tiles = s.players[0]!.tiles.filter((t) => t.industry !== 'coal' || t.level >= 3);
+    setHand(s, 0, [locCard('cannock')]);
+    expect(buildsAt(enumerateBuilds(s, 0), 'cannock').some((a) => a.industry === 'coal')).toBe(true);
+    const r = applyBuild(s, 0, { type: 'build', cardId: 'loc-cannock-test', industry: 'coal', location: 'cannock' });
+    // 执行的是对手覆盖（剥夺其二次计分），空槽保留
+    expect(r.state.board.slots['cannock']![0]!.player).toBe(0);
+    expect(r.state.board.slots['cannock']![0]!.tile.level).toBe(3);
+    expect(r.state.board.slots['cannock']![1]).toBeNull();
+    expect(r.state.players[0]!.money).toBe(7); // £8 + 市场铁 £2
+  });
+
   it('overbuild opponent coal mine only when global coal cubes == 0 (incl. market)', () => {
     const s = newGame(4, 5);
     withTile(s, 1, 'dudley', 'coal', { resources: 1 }); // 对手矿有块

@@ -2,11 +2,15 @@
  * Build 行动：枚举 + 执行 + Overbuild（rules-reference §6.1/§6.2，§9.7/9.13/9.14）。
  *
  * 枚举规范化（Action 无槽位/目标参数，以下选择全部确定化）：
- * - 槽位：先单图标空槽后双图标空槽，同类按官方槽位序；有合法空槽时不覆盖。
- * - Overbuild 仅当无匹配空槽，且新板块等级须严格高于被覆盖板块（对自己对对手均适用，
- *   官方规则书 "replace ... with a higher level tile"）：①己方同产业多块 → 覆盖等级最低者
- *   （并列取槽位序）；②其余己方板块（槽位序）；③对手煤/铁厂（槽位序）——仅当全图
- *   （含市场）该类方块为 0。
+ * - 槽位/目标解析顺序：①对手煤/铁厂 overbuild ②空槽（先单图标后双图标，官方序）
+ *   ③己方 overbuild（同产业多块取等级最低，并列槽位序）。
+ *   对手 overbuild 优先于空槽：覆盖对手煤/铁厂剥夺其时代末/二次计分与 Link 图标，
+ *   对建造者非支配（Action 无目标字段，同三元组的被支配空槽结果不单独枚举）。
+ * - Overbuild 新板块须与被覆盖板块**同产业**且等级**严格更高**（官方规则书 "higher
+ *   level tile of the same industry type"，己方/对手分支均适用；"覆盖自己任意产业"
+ *   指被替换对象不限煤/铁，不是允许跨产业替换）。
+ * - 对手 overbuild 附加前置：全图（含市场）该类方块为 0；且运河时代同地已有己方板块时
+ *   禁用（覆盖对手是新增己方板块，会违反每地限 1 块；覆盖己方是替换，不受限）。
  * - 面板取该产业最低级板块（player.tiles 已按产业分组、等级升序，find 即最低级）。
  * - 煤源/铁源/市场购买的可行性预判与 consumeCoal/consumeIron 语义一致
  *   （免费源 + 市场购买总价 + 现金上限），故枚举只产出完全合法行动。
@@ -82,8 +86,9 @@ interface SlotTarget {
 
 /**
  * 规范化解析 (location, industry) 的目标槽位；null = 该处不可建该产业。
- * 空槽优先（单图标→双图标，官方序）；运河时代已有己方板块时禁用空槽（每地限 1 块）。
- * Overbuild 候选须满足 def.level 严格高于被覆盖板块等级。
+ * 顺序：对手 overbuild（非支配，优先）→ 空槽（单图标→双图标，官方序）→ 己方 overbuild
+ * （同产业等级最低）。Overbuild 候选须同产业且 def.level 严格更高；
+ * 对手候选另须全图该类方块为 0 且运河时代未被"每地限 1 块"阻断（canalBlocked）。
  */
 function resolveSlot(
   state: GameState,
@@ -98,6 +103,19 @@ function resolveSlot(
 
   const canalBlocked =
     state.era === 'canal' && placed.some((t) => t !== null && t.player === player);
+
+  // 1. 对手 overbuild：同产业煤/铁厂、等级严格更低、全图（含市场）该类方块为 0
+  if (!canalBlocked && (industry === 'coal' || industry === 'iron') && globalCubes(state, industry) === 0) {
+    for (let i = 0; i < slotDefs.length; i++) {
+      if (!slotDefs[i]!.industries.includes(industry)) continue;
+      const t = placed[i];
+      if (t && t.player !== player && t.tile.industry === industry && t.tile.level < def.level) {
+        return { slotIndex: i, overbuild: 'opponent' };
+      }
+    }
+  }
+
+  // 2. 空槽（运河时代同地已有己方板块时禁用，每地限 1 块）
   if (!canalBlocked) {
     for (const dual of [false, true]) {
       for (let i = 0; i < slotDefs.length; i++) {
@@ -109,28 +127,17 @@ function resolveSlot(
     }
   }
 
-  // Overbuild：无匹配空槽（或运河时代被限）时；新板块等级须严格更高
-  const own: { slotIndex: number; level: number; sameIndustry: boolean }[] = [];
-  const opp: number[] = [];
+  // 3. 己方 overbuild：同产业、等级严格更低；多块取等级最低（并列槽位序在前）
+  let best: { slotIndex: number; level: number } | null = null;
   for (let i = 0; i < slotDefs.length; i++) {
     if (!slotDefs[i]!.industries.includes(industry)) continue;
     const t = placed[i];
-    if (!t || t.tile.level >= def.level) continue;
-    if (t.player === player) {
-      own.push({ slotIndex: i, level: t.tile.level, sameIndustry: t.tile.industry === industry });
-    } else if (
-      (t.tile.industry === 'coal' || t.tile.industry === 'iron') &&
-      globalCubes(state, t.tile.industry) === 0
-    ) {
-      opp.push(i);
+    if (!t || t.player !== player || t.tile.industry !== industry || t.tile.level >= def.level) {
+      continue;
     }
+    if (!best || t.tile.level < best.level) best = { slotIndex: i, level: t.tile.level };
   }
-  const ownSame = own
-    .filter((o) => o.sameIndustry)
-    .sort((a, b) => a.level - b.level || a.slotIndex - b.slotIndex);
-  if (ownSame.length > 0) return { slotIndex: ownSame[0]!.slotIndex, overbuild: 'own' };
-  if (own.length > 0) return { slotIndex: own[0]!.slotIndex, overbuild: 'own' };
-  if (opp.length > 0) return { slotIndex: opp[0]!, overbuild: 'opponent' };
+  if (best) return { slotIndex: best.slotIndex, overbuild: 'own' };
   return null;
 }
 
