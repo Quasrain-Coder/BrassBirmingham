@@ -45,6 +45,11 @@ export type {
   ConsumeResult,
 } from './resources.js';
 export { applyBuild, enumerateBuilds } from './actions/build.js';
+export { applyNetwork, enumerateNetwork } from './actions/network.js';
+export { applyDevelop, enumerateDevelop } from './actions/develop.js';
+export { applyLoan, enumerateLoan } from './actions/loan.js';
+export { applyScout, enumerateScout } from './actions/scout.js';
+export { applyPass } from './actions/pass.js';
 export {
   buyCoalCost,
   buyIronCost,

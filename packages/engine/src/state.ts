@@ -15,7 +15,12 @@ import type {
 } from './types.js';
 import { LOCATIONS, MERCHANTS } from './data/board.js';
 import { TILES, type TileDef } from './data/tiles.js';
-import { buildDeck, type Card } from './data/cards.js';
+import {
+  buildDeck,
+  WILD_INDUSTRY_COUNT,
+  WILD_LOCATION_COUNT,
+  type Card,
+} from './data/cards.js';
 import {
   COAL_MARKET_INITIAL_FILLED,
   IRON_MARKET_INITIAL_FILLED,
@@ -59,6 +64,8 @@ export interface GameState {
     links: BuiltLink[];
   };
   merchants: Record<MerchantId, { tiles: MerchantTile[]; beer: number }>;
+  /** Wild 卡供应堆余量（§6.7 Scout 获取、Wild 弃置归还；§9.14）。 */
+  wildSupply: { location: number; industry: number };
   /** 已填充方块数（索引语义见 market.ts helper）。 */
   coalMarket: number;
   ironMarket: number;
@@ -73,7 +80,7 @@ export interface GameState {
   actionsThisTurn: number;
   /** 每步快照，供重放校验。 */
   rngState: number;
-  /** 上一步 applyAction 产生的事件（Task 11 起写入）。 */
+  /** 上一步 applyX/applyAction 产生的事件。 */
   lastEvents: GameEvent[];
   phase: 'action' | 'game-over';
   winner: PlayerIndex[] | null;
@@ -167,6 +174,7 @@ export function newGame(playerCount: 2 | 3 | 4, seed: number): GameState {
     round: 1,
     board: { slots, links: [] },
     merchants,
+    wildSupply: { location: WILD_LOCATION_COUNT, industry: WILD_INDUSTRY_COUNT },
     coalMarket: COAL_MARKET_INITIAL_FILLED,
     ironMarket: IRON_MARKET_INITIAL_FILLED,
     deck,
