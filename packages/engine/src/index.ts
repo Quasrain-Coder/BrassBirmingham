@@ -21,6 +21,8 @@ export {
 export type { Region, LocationDef, MerchantDef } from './data/board.js';
 export { TILES, tileDef } from './data/tiles.js';
 export type { TileDef } from './data/tiles.js';
+export { buildDeck, WILD_INDUSTRY_COUNT, WILD_LOCATION_COUNT } from './data/cards.js';
+export type { Card } from './data/cards.js';
 export {
   INCOME_LEVEL_SPACES,
   INCOME_LEVEL_MAX,
