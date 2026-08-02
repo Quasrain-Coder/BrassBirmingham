@@ -13,11 +13,13 @@
  * - 同一条边只能有 1 条 Link（任何玩家）。
  *
  * 枚举规范化：
- * - 双轨 links 恒为升序对 [i, j]（i < j），顺序语义 = 放置顺序（i 先放）。
+ * - 双轨 links 为有序对 [i, j]：顺序语义 = 放置顺序（规则要求逐条放置逐条判定煤、
+ *   啤酒锚定第二条），j 可小于 i，两种放置顺序分别枚举。
  * - 啤酒来源默认规范化（自己酒厂优先，其次字典序首个连通的对手酒厂，与 consumeBeer
  *   一致），枚举不产生 beerFromOpponentBrewery；该字段仅供调用方显式覆盖默认来源
  *   （例如故意喝对手最后一桶使其翻面）。
- * - 只产出完全合法行动：Link 费 + 逐条煤（含市场购买金）不超过现金；啤酒可得。
+ * - 只产出完全合法行动：枚举按 apply 的结算序列串行仿真（Link 费 → 逐条放路耗煤
+ *   → 双条耗酒），任一环节不可行即不枚举，保证枚举出的行动 apply 必成功。
  *
  * 弃牌结算不在此模块（Task 11 applyAction 统一处理行动卡）。
  * applyNetwork 返回新 GameState，本行动产生的事件写入其 lastEvents。
@@ -25,10 +27,7 @@
  */
 import { LINKS, LINK_EXTRA_ENDPOINTS, MERCHANTS } from '../data/board.js';
 import { IllegalActionError } from '../errors.js';
-import { buyCoalCost } from '../market.js';
 import {
-  canBuyCoalFromMarket,
-  coalSources,
   playerNetwork,
   reachableFrom,
   type NetworkNode,
@@ -87,41 +86,22 @@ function withLink(state: GameState, linkIndex: number, player: PlayerIndex): Gam
   };
 }
 
-/**
- * 该条铁路放置后 1 块煤的可行性与计划市场价（与 consumeCoal 语义一致）：
- * 连通免费煤矿 → 0；否则须连通商人位且市场购买金 ≤ cash。不可行返回 null。
- */
-function plannedCoalCost(
-  state: GameState,
-  player: PlayerIndex,
-  at: LocationId,
-  cash: number,
-): number | null {
-  const free = coalSources(state, player, at).reduce((s, x) => s + x.tile.resources, 0);
-  if (free >= 1) return 0;
-  if (!canBuyCoalFromMarket(state, at)) return null;
-  const cost = buyCoalCost(state, 1);
-  return cost <= cash ? cost : null;
+/** 模拟扣减 Link 费（仅枚举行仿真用：consumeCoal 的资金校验须看到扣费后的现金）。 */
+function withCashPaid(state: GameState, player: PlayerIndex, cost: number): GameState {
+  const ps = state.players[player]!;
+  const players = state.players.slice();
+  players[player] = { ...ps, money: ps.money - cost };
+  return { ...state, players };
 }
 
 /**
- * 双轨啤酒可行性（与 consumeBeer useMerchantBeer:false 语义一致，§9.4）：
- * 自己未翻面酒厂（全图）或连通 at 的对手未翻面酒厂，至少 1 桶。
- */
-function breweryBeerAvailable(state: GameState, player: PlayerIndex, at: LocationId): boolean {
-  const reach = reachableFrom(state, [at]);
-  for (const [loc, slots] of Object.entries(state.board.slots)) {
-    for (const t of slots) {
-      if (!t || t.flipped || t.tile.industry !== 'brewery' || t.resources <= 0) continue;
-      if (t.player === player || reach.has(loc)) return true;
-    }
-  }
-  return false;
-}
-
-/**
- * 枚举完全合法的 Network 行动（手牌序 → Link 下标升序；双轨升序对 [i,j]、i 先放）。
+ * 枚举完全合法的 Network 行动（手牌序 → 第一条 Link 下标升序 → 第二条下标升序）。
  * 铁路时代单条与双条分别枚举；双条要求 £15 + 1 酒厂啤酒 + 两条各自的煤。
+ *
+ * 串行仿真：枚举与 apply 走完全相同的结算序列（扣费 → 放第一条 → consumeCoal
+ * → 放第二条 → consumeCoal → consumeBeer），任一步抛 IllegalActionError 即跳过
+ * 该候选——保证枚举出的行动 apply 必成功。两条铁路的煤在同一串行快照上结算：
+ * 第一条喝干的矿/买空的市场格对第二条立即可见（市场价递进、免费源不重复计）。
  */
 export function enumerateNetwork(state: GameState, player: PlayerIndex): Action[] {
   const ps = state.players[player]!;
@@ -135,29 +115,41 @@ export function enumerateNetwork(state: GameState, player: PlayerIndex): Action[
       continue;
     }
 
-    // 铁路时代：单条 £5 + 1 煤（逐条判定市场购买金）
+    // 铁路时代：单条 £5 + 1 煤
     if (ps.money >= RAIL_SINGLE_COST) {
       for (const i of singles) {
-        const sim = withLink(state, i, player);
-        if (plannedCoalCost(sim, player, firstLocationEndpoint(i), ps.money - RAIL_SINGLE_COST) === null) {
-          continue;
+        try {
+          let sim = withLink(withCashPaid(state, player, RAIL_SINGLE_COST), i, player);
+          sim = consumeCoal(sim, player, firstLocationEndpoint(i), 1).state;
+        } catch (e) {
+          if (e instanceof IllegalActionError) continue;
+          throw e;
         }
         out.push({ type: 'network', cardId: card.id, links: [i] });
       }
     }
 
-    // 双条 £15 + 1 啤酒：第一条放完判第一条的煤，第二条放完判第二条的煤与啤酒
+    // 双条 £15 + 1 啤酒：串行仿真两条的煤与最后的啤酒
     if (ps.money >= RAIL_DOUBLE_COST) {
-      const cashAfterFee = ps.money - RAIL_DOUBLE_COST;
       for (const i of singles) {
-        const sim1 = withLink(state, i, player);
-        const cost1 = plannedCoalCost(sim1, player, firstLocationEndpoint(i), cashAfterFee);
-        if (cost1 === null) continue;
+        let sim1: GameState;
+        try {
+          sim1 = withLink(withCashPaid(state, player, RAIL_DOUBLE_COST), i, player);
+          sim1 = consumeCoal(sim1, player, firstLocationEndpoint(i), 1).state;
+        } catch (e) {
+          if (e instanceof IllegalActionError) continue;
+          throw e;
+        }
         for (const j of singleCandidates(sim1, player)) {
-          const sim2 = withLink(sim1, j, player);
-          const at2 = firstLocationEndpoint(j);
-          if (plannedCoalCost(sim2, player, at2, cashAfterFee - cost1) === null) continue;
-          if (!breweryBeerAvailable(sim2, player, at2)) continue;
+          try {
+            let sim2 = withLink(sim1, j, player);
+            const at2 = firstLocationEndpoint(j);
+            sim2 = consumeCoal(sim2, player, at2, 1).state;
+            consumeBeer(sim2, player, 1, { at: at2, useMerchantBeer: false });
+          } catch (e) {
+            if (e instanceof IllegalActionError) continue;
+            throw e;
+          }
           out.push({ type: 'network', cardId: card.id, links: [i, j] });
         }
       }

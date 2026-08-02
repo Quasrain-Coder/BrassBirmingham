@@ -159,6 +159,51 @@ describe('network', () => {
       applyNetwork(s, 0, { ...dbl, beerFromOpponentBrewery: 'burton-on-trent' }),
     ).toThrowError(IllegalActionError);
   });
+
+  it('double rail coal is settled serially: market price steps to fallback after first buy', () => {
+    const s = newGame(4, 3);
+    s.era = 'rail';
+    withTile(s, 0, 'derby', 'brewery', 2); // 啤酒 + derby-nottingham 边连通市场
+    s.coalMarket = 1; // 仅 1 块煤：filled 块占最贵格 → £7，买空后兜底 £8
+    s.players[0]!.money = 30; // £15 + £7 + £8 恰好够
+    const nets = enumerateNetwork(s, 0);
+    const doubles = nets.filter((a) => a.type === 'network' && a.links.length === 2);
+    expect(doubles.length).toBeGreaterThan(0);
+    const after = applyNetwork(s, 0, doubles[0]!);
+    expect(after.players[0]!.money).toBe(30 - 15 - 7 - 8);
+
+    // 现金够 £15+£7 买第一块、但第二块付不起真实 £8 兜底 → 不枚举双轨
+    const poor = newGame(4, 3);
+    poor.era = 'rail';
+    withTile(poor, 0, 'derby', 'brewery', 2);
+    poor.coalMarket = 1;
+    poor.players[0]!.money = 23;
+    expect(
+      enumerateNetwork(poor, 0).some((a) => a.type === 'network' && a.links.length === 2),
+    ).toBe(false);
+  });
+
+  it('double rail coal is settled serially: a 1-cube mine cannot feed both links', () => {
+    const s = newGame(4, 3);
+    s.era = 'rail';
+    withTile(s, 0, 'coventry', 'coal');
+    withTile(s, 0, 'burton-on-trent', 'brewery', 2); // 啤酒（自己的酒厂全图可用）
+    s.board.slots['coventry']!.find((t) => t !== null)!.resources = 1; // 连通矿仅 1 块煤
+    s.players[0]!.money = 30;
+    const nets = enumerateNetwork(s, 0);
+    const has = (x: number, y: number): boolean =>
+      nets.some(
+        (a) =>
+          a.type === 'network' &&
+          a.links.length === 2 &&
+          a.links.includes(x) &&
+          a.links.includes(y),
+      );
+    // [birmingham-coventry(2), coventry-nuneaton(22)] 都想吃这 1 块免费煤且无市场连通 → 不枚举
+    expect(has(2, 22)).toBe(false);
+    // 第二条改走市场（birmingham-oxford(5) 连通商人位）且付得起 → 枚举
+    expect(has(2, 5)).toBe(true);
+  });
 });
 
 describe('develop', () => {
@@ -220,6 +265,24 @@ describe('loan', () => {
     expect(() =>
       applyLoan(s, 0, { type: 'loan', cardId: s.players[0]!.hand[0]!.id }),
     ).toThrowError(IllegalActionError);
+  });
+
+  it('loan forbidden when backtracking 3 levels would go below -10 (level -8)', () => {
+    const s = newGame(4, 3);
+    s.players[0]!.incomeSpace = 2; // level -8：退 3 级会破 −10 底
+    expect(enumerateLoan(s, 0)).toHaveLength(0);
+    expect(() =>
+      applyLoan(s, 0, { type: 'loan', cardId: s.players[0]!.hand[0]!.id }),
+    ).toThrowError(IllegalActionError);
+  });
+
+  it('loan at level -7 is allowed and lands on level -10', () => {
+    const s = newGame(4, 3);
+    s.players[0]!.incomeSpace = 3; // level -7
+    expect(enumerateLoan(s, 0).length).toBeGreaterThan(0);
+    const after = applyLoan(s, 0, { type: 'loan', cardId: s.players[0]!.hand[0]!.id });
+    expect(after.players[0]!.incomeSpace).toBe(0); // level -10 最高格
+    expect(after.players[0]!.money).toBe(47);
   });
 });
 
