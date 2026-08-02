@@ -3,13 +3,17 @@
  *
  * 枚举规范化（Action 无槽位/目标参数，以下选择全部确定化）：
  * - 槽位：先单图标空槽后双图标空槽，同类按官方槽位序；有合法空槽时不覆盖。
- * - Overbuild 仅当无匹配空槽：①己方同产业多块 → 覆盖等级最低者（并列取槽位序在前）；
- *   ②其余己方板块（槽位序）；③对手煤/铁厂（槽位序）——仅当全图（含市场）该类方块为 0。
+ * - Overbuild 仅当无匹配空槽，且新板块等级须严格高于被覆盖板块（对自己对对手均适用，
+ *   官方规则书 "replace ... with a higher level tile"）：①己方同产业多块 → 覆盖等级最低者
+ *   （并列取槽位序）；②其余己方板块（槽位序）；③对手煤/铁厂（槽位序）——仅当全图
+ *   （含市场）该类方块为 0。
  * - 面板取该产业最低级板块（player.tiles 已按产业分组、等级升序，find 即最低级）。
  * - 煤源/铁源/市场购买的可行性预判与 consumeCoal/consumeIron 语义一致
  *   （免费源 + 市场购买总价 + 现金上限），故枚举只产出完全合法行动。
  *
- * 首建特例（§6.1）：场上无任何板块（任何玩家）时，产业卡/Wild Industry 可建任意合法地点。
+ * 首建特例（§6.1，官方规则书 "Building If You Have No Tiles on the Board"）：
+ * **当前玩家**自己无板块且无 Link 时，产业卡/Wild Industry 可建任意合法地点
+ * （与对手是否有板块无关）。
  *
  * 执行顺序：印刷 £（入 spentThisRound）→ consumeCoal（建造地点）→ consumeIron
  * → 面板取板块放置（被覆盖板块连同资源直接移出游戏）→ 弃卡（Wild 卡回供应不进弃牌堆）
@@ -52,8 +56,12 @@ const LOCATION_IDS = Object.keys(LOCATIONS);
 /** 20 个 named locations（排除 farm-north/farm-south；Wild Location 不可用农场）。 */
 const NAMED_LOCATION_IDS = LOCATION_IDS.filter((id) => LOCATIONS[id]!.region !== 'farm');
 
-function boardIsEmpty(state: GameState): boolean {
-  return Object.values(state.board.slots).every((slots) => slots.every((t) => t === null));
+/** 首建特例条件（§6.1）：当前玩家自己无板块且无 Link（按官方规则书，与对手无关）。 */
+function playerBoardEmpty(state: GameState, player: PlayerIndex): boolean {
+  if (state.board.links.some((l) => l.player === player)) return false;
+  return Object.values(state.board.slots).every((slots) =>
+    slots.every((t) => t === null || t.player !== player),
+  );
 }
 
 /** 全图（含市场）某类资源方块总数（Overbuild 对手前置，§6.2/§9.13）。 */
@@ -75,12 +83,14 @@ interface SlotTarget {
 /**
  * 规范化解析 (location, industry) 的目标槽位；null = 该处不可建该产业。
  * 空槽优先（单图标→双图标，官方序）；运河时代已有己方板块时禁用空槽（每地限 1 块）。
+ * Overbuild 候选须满足 def.level 严格高于被覆盖板块等级。
  */
 function resolveSlot(
   state: GameState,
   player: PlayerIndex,
   location: LocationId,
   industry: IndustryType,
+  def: TileDef,
 ): SlotTarget | null {
   const slotDefs = LOCATIONS[location]?.slots;
   const placed = state.board.slots[location];
@@ -99,13 +109,13 @@ function resolveSlot(
     }
   }
 
-  // Overbuild：无匹配空槽（或运河时代被限）时
+  // Overbuild：无匹配空槽（或运河时代被限）时；新板块等级须严格更高
   const own: { slotIndex: number; level: number; sameIndustry: boolean }[] = [];
   const opp: number[] = [];
   for (let i = 0; i < slotDefs.length; i++) {
     if (!slotDefs[i]!.industries.includes(industry)) continue;
     const t = placed[i];
-    if (!t) continue;
+    if (!t || t.tile.level >= def.level) continue;
     if (t.player === player) {
       own.push({ slotIndex: i, level: t.tile.level, sameIndustry: t.tile.industry === industry });
     } else if (
@@ -148,7 +158,7 @@ function affordable(
   return total <= state.players[player]!.money;
 }
 
-/** 产业卡/Wild Industry 的候选地点：空板特例任意地点，否则 network 连通处。 */
+/** 产业卡/Wild Industry 的候选地点：首建特例任意地点，否则 network 连通处。 */
 function networkLocations(state: GameState, player: PlayerIndex, emptyBoard: boolean): LocationId[] {
   if (emptyBoard) return LOCATION_IDS;
   return LOCATION_IDS.filter((loc) => isConnected(state, player, loc));
@@ -178,7 +188,7 @@ function cardTargets(
  */
 export function enumerateBuilds(state: GameState, player: PlayerIndex): Action[] {
   const ps = state.players[player]!;
-  const emptyBoard = boardIsEmpty(state);
+  const emptyBoard = playerBoardEmpty(state, player);
   const out: Action[] = [];
   for (const card of ps.hand) {
     const { locations, industries } = cardTargets(state, player, card, emptyBoard);
@@ -187,7 +197,7 @@ export function enumerateBuilds(state: GameState, player: PlayerIndex): Action[]
       if (!def) continue;
       if (state.era === 'canal' ? def.railEraOnly : !def.railEraBuildable) continue;
       for (const location of locations) {
-        if (!resolveSlot(state, player, location, industry)) continue;
+        if (!resolveSlot(state, player, location, industry, def)) continue;
         if (!affordable(state, player, location, def)) continue;
         out.push({ type: 'build', cardId: card.id, industry, location });
       }
@@ -267,7 +277,7 @@ export function applyBuild(
   events.push(...ri.flipped);
 
   // 3. 面板取最低级板块放置；被覆盖板块连同资源直接移出游戏（退回供应）
-  const target = resolveSlot(next, player, action.location, action.industry)!;
+  const target = resolveSlot(next, player, action.location, action.industry, def)!;
   const psNow = next.players[player]!;
   const tileIdx = psNow.tiles.findIndex((t) => t === def);
   next = withPlayer(next, player, {

@@ -83,6 +83,8 @@ describe('enumerateBuilds: card rules', () => {
     expect(enumerateBuilds(s, 0).length).toBeGreaterThan(0);
     // 在 dudley 放一块自己的板块后：只能建 dudley 及其 link 可达处
     withTile(s, 0, 'dudley', 'coal');
+    // 面板最低煤 = L2（同级不可覆盖，L2 > L1 才能覆盖 dudley 的 L1 矿）
+    s.players[0]!.tiles = s.players[0]!.tiles.filter((t) => t.industry !== 'coal' || t.level >= 2);
     const acts = enumerateBuilds(s, 0);
     const locations = new Set(acts.map((a) => (a.type === 'build' ? a.location : '')));
     expect(
@@ -91,6 +93,20 @@ describe('enumerateBuilds: card rules', () => {
       ),
     ).toBe(true);
     expect(locations.has('dudley')).toBe(true); // 覆盖自己在 dudley 的矿
+  });
+
+  it('first-build special case is per-player: opponent tiles do not close it', () => {
+    const s = newGame(4, 5);
+    withTile(s, 1, 'dudley', 'coal'); // 对手已有板块，自己无板块无 Link
+    setHand(s, 0, [indCard(['coal'], 'ind-coal-0')]);
+    // 特例仍生效：可建任意合法地点（dudley 矿槽被对手占且全图煤未归零 → dudley 除外）
+    const locations = new Set(builds(enumerateBuilds(s, 0)).map((a) => a.location));
+    expect(locations.has('cannock')).toBe(true);
+    expect(locations.has('dudley')).toBe(false);
+    // 自己有 Link（无板块）后特例关闭：network = link 端点
+    withLink(s, 3, 0); // 自己铺 #4 birmingham-dudley
+    const after = new Set(builds(enumerateBuilds(s, 0)).map((a) => a.location));
+    expect(after.has('cannock')).toBe(false);
   });
 
   it('industry card only reaches locations connected to own network via built links', () => {
@@ -172,11 +188,13 @@ describe('enumerateBuilds: slots, era, panel, affordability', () => {
   it('canal era: at most one own tile per location (no second tile, overbuild still possible)', () => {
     const s = newGame(4, 5);
     withTile(s, 0, 'birmingham', 'iron', { slot: 2 }); // 自己铁厂已占 birmingham
+    // 面板最低铁 = L2（同级不可覆盖，L2 > L1 才能覆盖自己的 L1 铁厂）
+    s.players[0]!.tiles = s.players[0]!.tiles.filter((t) => t.industry !== 'iron' || t.level >= 2);
     setHand(s, 0, [locCard('birmingham')]);
     const inds = industriesAt(enumerateBuilds(s, 0), 'birmingham');
     expect(inds.has('cotton')).toBe(false); // 空槽在但运河时代限 1 块
     expect(inds.has('manufacturer')).toBe(false);
-    // 覆盖自己的铁厂：铁槽被自己占 → overbuild 合法（铁 L1 £5+1煤，无连通→煤买不起……给连通）
+    // 覆盖自己的铁厂：铁槽被自己占 → overbuild 合法（铁 L2 £7+1煤，无连通→煤买不起……给连通）
     expect(inds.has('iron')).toBe(false); // 无煤连通 → 不可行
     withLink(s, 5, 1); // #6 birmingham-oxford → 连通商人位
     expect(industriesAt(enumerateBuilds(s, 0), 'birmingham').has('iron')).toBe(true);
@@ -248,17 +266,40 @@ describe('overbuild', () => {
     setHand(s, 0, [locCard('dudley')]);
     expect(industriesAt(enumerateBuilds(s, 0), 'dudley').has('coal')).toBe(false);
 
-    // 全图煤方块归零（市场清空 + 矿耗尽翻面）→ 可覆盖
+    // 全图煤方块归零（市场清空 + 矿耗尽翻面）→ 可覆盖（面板最低煤 = L2 > 对手 L1）
     s.coalMarket = 0;
     withTile(s, 1, 'dudley', 'coal', { resources: 0, flipped: true });
+    s.players[0]!.tiles = s.players[0]!.tiles.filter((t) => t.industry !== 'coal' || t.level >= 2);
     expect(industriesAt(enumerateBuilds(s, 0), 'dudley').has('coal')).toBe(true);
 
     const r = applyBuild(s, 0, { type: 'build', cardId: 'loc-dudley-test', industry: 'coal', location: 'dudley' });
     const placedTile = r.state.board.slots['dudley']![0]!;
     expect(placedTile.player).toBe(0); // 对手板块被移出游戏
-    expect(placedTile.tile.industry).toBe('coal');
-    expect(placedTile.resources).toBe(2); // 不连通商人位 → 不卖市场
+    expect(placedTile.tile.level).toBe(2);
+    expect(placedTile.resources).toBe(3); // 不连通商人位 → 不卖市场
     expect(r.state.coalMarket).toBe(0);
+  });
+
+  it('overbuild requires strictly higher level (own and opponent)', () => {
+    // 己方同级覆盖不出现在枚举中
+    const s = newGame(4, 5);
+    withTile(s, 0, 'worcester', 'cotton', { slot: 0, level: 1 });
+    setHand(s, 0, [locCard('worcester')]);
+    // 面板最低棉 = L1（同级）→ 不可覆盖；slot1 空槽但运河时代限 1 块
+    expect(buildsAt(enumerateBuilds(s, 0), 'worcester').length).toBe(0);
+    // 面板最低棉 = L2 后 → 覆盖合法（L2 需 1 煤 → 连通 gloucester 市场）
+    s.players[0]!.tiles = s.players[0]!.tiles.filter((t) => t.industry !== 'cotton' || t.level >= 2);
+    withLink(s, 28, 1); // #29 gloucester-worcester
+    expect(industriesAt(enumerateBuilds(s, 0), 'worcester').has('cotton')).toBe(true);
+
+    // 对手板块同理：L2 矿不可被 L1 覆盖，可被 L3 覆盖
+    const s2 = newGame(4, 5);
+    s2.coalMarket = 0;
+    withTile(s2, 1, 'dudley', 'coal', { level: 2, resources: 0, flipped: true });
+    setHand(s2, 0, [locCard('dudley')]);
+    expect(industriesAt(enumerateBuilds(s2, 0), 'dudley').has('coal')).toBe(false); // 面板最低煤 L1 < L2
+    s2.players[0]!.tiles = s2.players[0]!.tiles.filter((t) => t.industry !== 'coal' || t.level >= 3);
+    expect(industriesAt(enumerateBuilds(s2, 0), 'dudley').has('coal')).toBe(true); // L3 > L2
   });
 
   it('opponent cotton can never be overbuilt', () => {
@@ -269,17 +310,19 @@ describe('overbuild', () => {
     expect(buildsAt(enumerateBuilds(s, 0), 'worcester').length).toBe(0);
   });
 
-  it('overbuild own tile of a different industry in the same slot', () => {
+  it('overbuild own tile in a dual-icon slot with a higher-level tile', () => {
     const s = newGame(4, 5);
     withTile(s, 0, 'cannock', 'manufacturer', { slot: 0 }); // [manufacturer,coal] 槽被自己制造占
-    withTile(s, 1, 'cannock', 'coal', { slot: 1, resources: 2 }); // 免费煤源（制造 L1 需 1 煤）
+    // 面板最低制造 = L2（同级不可覆盖，L2 > L1 才能覆盖）；L2 £10+1铁（市场买 £2）
+    s.players[0]!.tiles = s.players[0]!.tiles.filter((t) => t.industry !== 'manufacturer' || t.level >= 2);
     setHand(s, 0, [locCard('cannock')]);
     // 制造：slot1 是煤槽不匹配、slot0 被自己占 → 只能覆盖 slot0
     const r = applyBuild(s, 0, { type: 'build', cardId: 'loc-cannock-test', industry: 'manufacturer', location: 'cannock' });
     expect(r.state.board.slots['cannock']![0]!.tile.industry).toBe('manufacturer');
+    expect(r.state.board.slots['cannock']![0]!.tile.level).toBe(2);
     expect(r.state.board.slots['cannock']![0]!.flipped).toBe(false);
-    expect(r.state.players[0]!.money).toBe(9); // £8，煤免费取自对手矿
-    expect(r.state.board.slots['cannock']![1]!.resources).toBe(1); // 对手矿被取 1 块未翻
+    expect(r.state.players[0]!.money).toBe(5); // 17 - 10 - 2(市场铁)
+    expect(r.state.ironMarket).toBe(7);
   });
 
   it('rail era: multiple own same-industry tiles at one location → overbuild lowest level', () => {
