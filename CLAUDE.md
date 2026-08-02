@@ -24,5 +24,5 @@ packages/
 ├── engine/   # 纯 TS 规则引擎：状态机 + enumerateActions + applyAction
 ├── server/   # WebSocket 权威服务器 + 房间 + SQLite(Drizzle)
 ├── web/      # React + Vite + SVG 棋盘
-└── llm/      # PlayerAgent: LLM/Random/MCTS + 复盘教练（Claude API）
+└── llm/      # PlayerAgent: LLM/Random（MCTS 预留接口）+ 复盘教练（Claude API）
 ```
