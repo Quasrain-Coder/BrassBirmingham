@@ -13,6 +13,7 @@ export type {
   FlipEvent,
   MerchantBonusEvent,
   GameEvent,
+  Action,
 } from './types.js';
 export {
   LOCATIONS,
@@ -43,6 +44,7 @@ export type {
   ConsumeBeerResult,
   ConsumeResult,
 } from './resources.js';
+export { applyBuild, enumerateBuilds } from './actions/build.js';
 export {
   buyCoalCost,
   buyIronCost,

@@ -37,3 +37,16 @@ export interface MerchantBonusEvent {
 
 /** applyAction 产生的事件；写入 GameState.lastEvents。 */
 export type GameEvent = FlipEvent | MerchantBonusEvent;
+
+/**
+ * 玩家行动。枚举函数（enumerateBuilds 等）只产出完全合法的行动；
+ * applyAction 按 type 分派到各行动模块。
+ */
+export type Action =
+  | { type: 'build'; cardId: string; industry: IndustryType; location: LocationId }
+  | { type: 'network'; cardId: string; links: number[]; beerFromOpponentBrewery?: LocationId } // links = LINKS 下标，len 1|2
+  | { type: 'develop'; cardId: string; removals: IndustryType[] } // len 1|2
+  | { type: 'sell'; cardId: string; sales: { location: LocationId; slotIndex: number; merchant: MerchantId; useMerchantBeer: boolean }[] }
+  | { type: 'loan'; cardId: string }
+  | { type: 'scout'; cardIds: [string, string, string] }
+  | { type: 'pass'; cardId: string };
