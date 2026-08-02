@@ -254,6 +254,53 @@ describe('sell', () => {
     expect(after.players[0]!.incomeSpace).toBe(15); // 仅翻面 +5，develop 奖励不加收入
   });
 
+  it('sale with beerToFlip 0 enumerates no phantom useMerchantBeer:true branch', () => {
+    const s = newGame(4, 9);
+    oneCard(s);
+    withTile(s, 0, 'birmingham', 'manufacturer', 3); // beerToFlip 0
+    withLink(s, 5);
+    setMerchant(s, 'oxford', ['manufacturer'], 1);
+    // 板块不需啤酒：无从消耗商人桶、无从得奖励 → 只有 false 分支
+    const sells = sellActions(s);
+    expect(sells).toHaveLength(1);
+    expect(sells[0]!.sales[0]!.useMerchantBeer).toBe(false);
+
+    const { state: after, events } = applySell(s, 0, sells[0]!);
+    expect(after.merchants.oxford.beer).toBe(1); // 商人桶原样保留
+    expect(events.some((e) => e.kind === 'merchant-bonus')).toBe(false);
+    expect(after.board.slots['birmingham']![0]!.flipped).toBe(true);
+  });
+
+  it('gloucester bonus triggers twice when two sales each drink one of its two barrels', () => {
+    const s = newGame(4, 9);
+    oneCard(s);
+    withTile(s, 0, 'redditch', 'manufacturer'); // manufacturer 1：beerToFlip 1
+    withTile(s, 0, 'worcester', 'cotton');
+    withLink(s, 27); // gloucester-redditch
+    withLink(s, 28); // gloucester-worcester
+    setMerchant(s, 'gloucester', ['any', 'any'], 2); // 2 板块 2 桶
+
+    // 无酒厂：两次销售各用 1 桶商人桶 → 全集中两块都是 useMerchantBeer:true
+    const full = sellActions(s).filter((a) => a.sales.length === 2);
+    expect(full).toHaveLength(1);
+    expect(full[0]!.sales.every((x) => x.useMerchantBeer)).toBe(true);
+
+    const { state: after, events } = applySell(s, 0, full[0]!);
+    expect(after.merchants.gloucester.beer).toBe(0);
+    // 2 次 MerchantBonusEvent + 2 次免费 develop（产业序首个：cotton 栈顶连移 2 块）
+    expect(events.filter((e) => e.kind === 'merchant-bonus')).toEqual([
+      { kind: 'merchant-bonus', player: 0, merchant: 'gloucester' },
+      { kind: 'merchant-bonus', player: 0, merchant: 'gloucester' },
+    ]);
+    expect(after.players[0]!.tiles).toHaveLength(s.players[0]!.tiles.length - 2);
+    expect(after.players[0]!.tiles.filter((t) => t.industry === 'cotton')).toHaveLength(
+      s.players[0]!.tiles.filter((t) => t.industry === 'cotton').length - 2,
+    );
+    expect(after.players[0]!.money).toBe(17); // 免费 develop 不耗铁不花钱
+    // cotton 1 与 manufacturer 1 各 +5
+    expect(after.players[0]!.incomeSpace).toBe(20);
+  });
+
   it('applySell rejects an action outside the enumerated set', () => {
     const s = newGame(4, 9);
     oneCard(s);

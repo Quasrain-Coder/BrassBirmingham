@@ -21,9 +21,9 @@
  *
  * 枚举规范化（task-10-brief）：
  * - 单块销售全枚举：板块 × 可达匹配商人位 × useMerchantBeer∈{true,false}
- *   （true 分支仅当该商人位有桶时存在）。
+ *   （true 分支仅当该商人位有桶且板块 beerToFlip>0 时存在）。
  * - 多块只枚举"可卖全集"一个行动：按规范化顺序（location 字典序 + 槽位序）
- *   贪心模拟——每块取首个可行（商人位 id 序；有桶则先用商人桶）的（商人位,
+ *   贪心模拟——每块取首个可行（MERCHANTS 插入序；有桶则先用商人桶）的（商人位,
  *   useMerchantBeer），在模拟态上实际消耗啤酒后再定下一块；某块无可行来源
  *   （啤酒被前序销售耗尽）则该块不进全集。**中间子集不枚举（v1 已知简化，
  *   LLM/前端可用连续两次 Sell 逼近）**；全集 <2 块时不重复枚举（单块已覆盖）。
@@ -113,7 +113,7 @@ function beerFeasible(
 
 /**
  * 单块板块的全部可行 sale（对给定 state）：可达且图标匹配的商人位
- * （MERCHANTS 键序）× useMerchantBeer（有桶则 true 在前，false 恒在）。
+ * （MERCHANTS 插入序）× useMerchantBeer（有桶且 beerToFlip>0 则 true 在前，false 恒在）。
  */
 function saleOptions(state: GameState, player: PlayerIndex, tile: SellableTile): Sale[] {
   const reach = reachableFrom(state, [tile.location]);
@@ -122,7 +122,9 @@ function saleOptions(state: GameState, player: PlayerIndex, tile: SellableTile):
     if (!reach.has(merchant)) continue;
     const m = state.merchants[merchant];
     if (!m.tiles.some((t) => t === 'any' || t === tile.industry)) continue;
-    const flags = m.beer > 0 ? [true, false] : [false];
+    // useMerchantBeer:true 分支仅当该商人位有桶且板块确实需要啤酒
+    // （beerToFlip=0 的板块无从消耗商人桶、无从触发奖励）
+    const flags = m.beer > 0 && tile.beerToFlip > 0 ? [true, false] : [false];
     for (const useMerchantBeer of flags) {
       if (!beerFeasible(state, player, tile.beerToFlip, merchant, useMerchantBeer)) continue;
       out.push({
@@ -157,7 +159,7 @@ function fullSetSales(state: GameState, player: PlayerIndex, tiles: SellableTile
 
 /**
  * 枚举完全合法的 Sell 行动：手牌每张卡 ×（每块单卖全组合 + 可卖全集一个）。
- * 顺序确定性：手牌序 → 板块规范化序 → 商人位 id 序 → useMerchantBeer(true→false)。
+ * 顺序确定性：手牌序 → 板块规范化序 → MERCHANTS 插入序 → useMerchantBeer(true→false)。
  */
 export function enumerateSells(state: GameState, player: PlayerIndex): Action[] {
   const ps = state.players[player]!;
