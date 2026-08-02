@@ -340,6 +340,22 @@ describe('overbuild', () => {
     expect(r.state.coalMarket).toBe(0);
   });
 
+  it('§9.13: overbuilt tile resources return to supply — the new tile gets only its own cubes', () => {
+    // 己方 L1 煤矿上还有 2 块煤；覆盖成 L2 后新矿只有自身的 3 块（不继承旧矿余块）
+    const s = newGame(4, 5);
+    withTile(s, 0, 'dudley', 'coal', { slot: 0, resources: 2 });
+    s.players[0]!.tiles = s.players[0]!.tiles.filter((t) => t.industry !== 'coal' || t.level >= 2);
+    withLink(s, 3, 1); // #4 birmingham-dudley
+    withLink(s, 5, 1); // #6 birmingham-oxford → 新矿连通商人位，建成即卖
+    setHand(s, 0, [locCard('dudley')]);
+    const r = applyBuild(s, 0, { type: 'build', cardId: 'loc-dudley-test', industry: 'coal', location: 'dudley' });
+    const placed = r.state.board.slots['dudley']![0]!;
+    expect(placed.tile.level).toBe(2);
+    // L2 放 3 块、市场 1 空格卖出 1 块 → 恰好剩 2（若继承旧矿余块会变成 4）
+    expect(placed.resources).toBe(2);
+    expect(r.state.coalMarket).toBe(14);
+  });
+
   it('overbuild requires strictly higher level (own and opponent)', () => {
     // 己方同级覆盖不出现在枚举中
     const s = newGame(4, 5);
@@ -532,6 +548,22 @@ describe('applyBuild execution', () => {
     expect(r.state.players[0]!.money).toBe(17 - 5 + 2);
     expect(r.state.players[0]!.incomeSpace).toBe(14); // 10 + 4
     expect(r.events).toEqual([{ kind: 'flip', player: 0, location: 'dudley', incomeAdvance: 4 }]);
+  });
+
+  it('§9.7: mine/works leftovers are NOT sold to market on later actions (build-action only)', () => {
+    const s = newGame(4, 5);
+    withLink(s, 3, 1); // #4 birmingham-dudley
+    withLink(s, 5, 1); // #6 birmingham-oxford → dudley 连通商人位
+    setHand(s, 0, [locCard('dudley')]);
+    const r1 = applyBuild(s, 0, { type: 'build', cardId: 'loc-dudley-test', industry: 'coal', location: 'dudley' });
+    expect(r1.state.coalMarket).toBe(14); // 建成当次卖出 1 块，剩 1 块留矿上
+    expect(r1.state.board.slots['dudley']![0]!.resources).toBe(1);
+    // 之后的行动（另一玩家在别处建造）不再触发补卖：市场与矿上余块均不变
+    setHand(r1.state, 1, [locCard('worcester')]);
+    const r2 = applyBuild(r1.state, 1, { type: 'build', cardId: 'loc-worcester-test', industry: 'cotton', location: 'worcester' });
+    expect(r2.state.coalMarket).toBe(14);
+    expect(r2.state.board.slots['dudley']![0]!.resources).toBe(1);
+    expect(r2.state.players[0]!.money).toBe(13); // 不再有卖煤收入
   });
 
   it('consumption flips drained sources before placement (opponent mine → owner income)', () => {

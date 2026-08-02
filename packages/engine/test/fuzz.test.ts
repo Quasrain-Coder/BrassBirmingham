@@ -13,7 +13,7 @@ import type { Action } from '../src/types.js';
 
 /**
  * 每局行动数下限（sanity floor，防退化提前终局）：总行动数 ≈ 两时代各循环一遍
- * 牌池 + scout 引入的 wild 卡。2p 牌池 31 张/时代（实测 ~79 步）、3p 45（~107
+ * 牌池 + scout 引入的 wild 卡。2p 牌池 40 张/时代（实测 ~79 步）、3p 54（~107
  * 步）、4p 更多——`log > 100` 仅对 4p 成立，低人数按牌池规模放宽。
  */
 const MIN_LOG_LENGTH: Record<2 | 3 | 4, number> = { 2: 40, 3: 60, 4: 100 };

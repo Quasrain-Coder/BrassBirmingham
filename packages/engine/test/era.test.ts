@@ -178,6 +178,16 @@ describe('checkEraEnd: canal → rail', () => {
 });
 
 describe('finalScore (rail era end → game over)', () => {
+  it('§9.5: level-2+ tile kept from canal era scores AGAIN at rail end (二次计分)', () => {
+    const s = eraEndingState('rail', (st) => {
+      withTile(st, 0, 'cannock', 'coal', { level: 2, flipped: true, slot: 1 }); // vp 2
+      st.players[0]!.vp = 2; // 模拟运河末已入账一次
+    });
+    const after = finalScore(s);
+    expect(after.players[0]!.vp).toBe(4); // 铁路末再计一次
+    expect(after.board.slots['cannock']![1]).not.toBeNull(); // 终局不移除板块
+  });
+
   it('winner by VP; phase game-over; eraEndPending cleared', () => {
     const s = eraEndingState('rail', (st) => {
       st.players[0]!.vp = 10;

@@ -25,26 +25,29 @@ export function createRng(seed: number): Rng {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
 
-  return {
-    next,
-    nextInt(maxExclusive: number): number {
-      if (!Number.isInteger(maxExclusive) || maxExclusive <= 0) {
-        throw new RangeError(`nextInt: maxExclusive must be a positive integer, got ${maxExclusive}`);
-      }
-      return Math.floor(next() * maxExclusive);
-    },
-    shuffle<T>(arr: T[]): T[] {
-      const out = arr.slice();
-      for (let i = out.length - 1; i > 0; i--) {
-        const j = this.nextInt(i + 1);
-        const a = out[i] as T;
-        out[i] = out[j] as T;
-        out[j] = a;
-      }
-      return out;
-    },
-    getState(): number {
-      return state >>> 0;
-    },
-  };
+  // 全部方法定义为闭包内函数、内部互相直接引用（不经 this）：
+  // 解构调用（const { shuffle } = rng）也必须可用。
+  function nextInt(maxExclusive: number): number {
+    if (!Number.isInteger(maxExclusive) || maxExclusive <= 0) {
+      throw new RangeError(`nextInt: maxExclusive must be a positive integer, got ${maxExclusive}`);
+    }
+    return Math.floor(next() * maxExclusive);
+  }
+
+  function shuffle<T>(arr: T[]): T[] {
+    const out = arr.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = nextInt(i + 1);
+      const a = out[i] as T;
+      out[i] = out[j] as T;
+      out[j] = a;
+    }
+    return out;
+  }
+
+  function getState(): number {
+    return state >>> 0;
+  }
+
+  return { next, nextInt, shuffle, getState };
 }
