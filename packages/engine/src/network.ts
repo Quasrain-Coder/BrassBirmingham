@@ -4,8 +4,9 @@
  * 概念分两层：
  * - **playerNetwork**：玩家"自己"的网络——有其板块（无论翻面与否）的地点 +
  *   其 Link 的全部端点（含商人位与三端点边的农场端点）。用于建造/铺路邻接判定。
- * - **资源连通**（isConnected/coalSources/canBuyCoalFromMarket）：从玩家网络出发，
- *   沿"当前时代可用的所有已建 Link"（任何玩家铺的都算）BFS 可达即连通。
+ * - **资源连通**（isConnected/coalSources）：从玩家网络（或建造地点）出发，
+ *   沿"当前时代可用的所有已建 Link"（任何玩家铺的都算）遍历可达即连通。
+ *   canBuyCoalFromMarket 的锚点是建造地点而非玩家 network（§5/§9.2）。
  *
  * 注意（§9.2）：商人位连通不要求该位放有商人板块——2p 局的 warrington/nottingham
  * 照样是市场连通点。铁完全不需要连通（§9.1，见 ironSources）。
@@ -45,7 +46,7 @@ function builtAdjacency(state: GameState): Map<NetworkNode, NetworkNode[]> {
   return adj;
 }
 
-/** 从种子节点集沿已建边 BFS 的可达集（含种子自身）。 */
+/** 从种子节点集沿已建边 DFS 的可达集（含种子自身）。 */
 function reachableFrom(state: GameState, seeds: Iterable<NetworkNode>): Set<NetworkNode> {
   const adj = builtAdjacency(state);
   const seen = new Set<NetworkNode>(seeds);
@@ -112,9 +113,15 @@ export function connectedMerchants(state: GameState, player: PlayerIndex): Merch
   return MERCHANT_IDS.filter((id) => reach.has(id)).sort();
 }
 
-/** 市场买煤需连通任一商人位图标（§9.2）；买铁不需要（§9.1）。 */
-export function canBuyCoalFromMarket(state: GameState, player: PlayerIndex): boolean {
-  return connectedMerchants(state, player).length > 0;
+/**
+ * 建造地点 at 是否连通任一商人位图标（§5/§9.2）——市场买煤的前提。
+ * 锚点是"建造地点"而非玩家 network：沿已建边（任何玩家的）从 at 可达商人位即可，
+ * 与 playerNetwork 无关（Location 卡可建在无 network 处；首建特例 network 为空）。
+ * 不要求该位放有商人板块。买铁不需要连通（§9.1）。
+ */
+export function canBuyCoalFromMarket(state: GameState, at: LocationId): boolean {
+  const reach = reachableFrom(state, [at]);
+  return MERCHANT_IDS.some((id) => reach.has(id));
 }
 
 /**

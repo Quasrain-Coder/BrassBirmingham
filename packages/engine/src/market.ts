@@ -24,11 +24,12 @@ export function marketBuyCost(
   n: number,
   fallback: number,
 ): number {
-  const fromMarket = Math.min(n, filled);
+  const qty = Math.max(0, n);
+  const fromMarket = Math.min(qty, filled);
   const start = prices.length - filled; // 最便宜已填格索引
   let cost = 0;
   for (let i = 0; i < fromMarket; i++) cost += prices[start + i]!;
-  return cost + (n - fromMarket) * fallback;
+  return cost + (qty - fromMarket) * fallback;
 }
 
 /** 向市场卖 n 块：从最贵空格起填；返回收入与实际卖出数（空格不足时截断）。 */
@@ -38,7 +39,7 @@ export function marketSellRevenue(
   n: number,
 ): { revenue: number; sold: number } {
   const empty = prices.length - filled;
-  const sold = Math.min(n, empty);
+  const sold = Math.min(Math.max(0, n), empty);
   let revenue = 0;
   for (let i = 0; i < sold; i++) revenue += prices[empty - 1 - i]!;
   return { revenue, sold };

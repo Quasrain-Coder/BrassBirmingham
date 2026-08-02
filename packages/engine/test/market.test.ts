@@ -19,6 +19,14 @@ describe('marketBuyCost / marketSellRevenue 纯函数', () => {
     expect(marketSellRevenue(COAL_MARKET_PRICES, 13, 0)).toEqual({ revenue: 0, sold: 0 });
   });
 
+  it('negative n is clamped to 0', () => {
+    expect(marketBuyCost(COAL_MARKET_PRICES, 13, -2, 8)).toBe(0);
+    expect(marketSellRevenue(COAL_MARKET_PRICES, 13, -2)).toEqual({ revenue: 0, sold: 0 });
+    const s = newGame(4, 1);
+    expect(buyCoalCost(s, -1)).toBe(0);
+    expect(sellIronToMarket(s, -1)).toEqual({ revenue: 0, sold: 0 });
+  });
+
   it('sell caps at empty spaces; buy falls back after market empties', () => {
     // 煤 14 格填 13 → 仅 1 空格
     expect(marketSellRevenue(COAL_MARKET_PRICES, 13, 5)).toEqual({ revenue: 1, sold: 1 });

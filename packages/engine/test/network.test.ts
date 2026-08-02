@@ -70,7 +70,7 @@ describe('isConnected / connectedMerchants', () => {
     build(s, 35, 0); // #36 stoke-on-trent-warrington
     expect(isConnected(s, 0, 'warrington')).toBe(true);
     expect(connectedMerchants(s, 0)).toContain('warrington');
-    expect(canBuyCoalFromMarket(s, 0)).toBe(true);
+    expect(canBuyCoalFromMarket(s, 'stoke-on-trent')).toBe(true);
   });
 
   it('connectivity traverses links built by any player', () => {
@@ -79,14 +79,34 @@ describe('isConnected / connectedMerchants', () => {
     build(s, 35, 1); // 对手铺的 stoke-warrington 照样可用
     expect(playerNetwork(s, 0).has('warrington')).toBe(false); // 不是自己的 link
     expect(isConnected(s, 0, 'warrington')).toBe(true);
-    expect(canBuyCoalFromMarket(s, 0)).toBe(true);
+    expect(canBuyCoalFromMarket(s, 'stoke-on-trent')).toBe(true);
   });
 
   it('no path to any merchant space → cannot buy coal from market', () => {
     const s = newGame(4, 1);
     place(s, 'stoke-on-trent', 1, 'iron', 0, 4);
     expect(connectedMerchants(s, 0)).toEqual([]);
-    expect(canBuyCoalFromMarket(s, 0)).toBe(false);
+    expect(canBuyCoalFromMarket(s, 'stoke-on-trent')).toBe(false);
+  });
+
+  it('buy-coal anchor is the build location, not the player network (isolated build site)', () => {
+    // 反例 (a)：玩家 network 在 stoke 接通 warrington，但建造地点 belper 孤立 → false
+    const s = newGame(2, 1);
+    place(s, 'stoke-on-trent', 1, 'iron', 0, 4);
+    build(s, 35, 0); // stoke-warrington（自己）
+    expect(connectedMerchants(s, 0)).toContain('warrington'); // network 确实接通商人
+    expect(canBuyCoalFromMarket(s, 'belper')).toBe(false); // 但建造点不连通
+    expect(canBuyCoalFromMarket(s, 'stoke-on-trent')).toBe(true);
+  });
+
+  it('buy-coal anchor works with empty network via opponent links (first-build special case)', () => {
+    // 反例 (b)：首建特例 network 为空，建造点经对手 link 接通商人 → true
+    const s = newGame(4, 1);
+    build(s, 35, 1); // 对手铺的 stoke-warrington
+    expect(playerNetwork(s, 0).size).toBe(0);
+    expect(connectedMerchants(s, 0)).toEqual([]);
+    expect(canBuyCoalFromMarket(s, 'stoke-on-trent')).toBe(true);
+    expect(canBuyCoalFromMarket(s, 'belper')).toBe(false);
   });
 
   it('reaches via multi-hop mixed-ownership links; unlinked locations are not connected', () => {
