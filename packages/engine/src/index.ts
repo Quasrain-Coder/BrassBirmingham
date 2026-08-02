@@ -50,6 +50,7 @@ export { applyDevelop, enumerateDevelop } from './actions/develop.js';
 export { applyLoan, enumerateLoan } from './actions/loan.js';
 export { applyScout, enumerateScout } from './actions/scout.js';
 export { applyPass } from './actions/pass.js';
+export { applySell, enumerateSells } from './actions/sell.js';
 export {
   buyCoalCost,
   buyIronCost,
