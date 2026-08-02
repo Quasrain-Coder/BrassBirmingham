@@ -47,7 +47,7 @@ function builtAdjacency(state: GameState): Map<NetworkNode, NetworkNode[]> {
 }
 
 /** 从种子节点集沿已建边 DFS 的可达集（含种子自身）。 */
-function reachableFrom(state: GameState, seeds: Iterable<NetworkNode>): Set<NetworkNode> {
+export function reachableFrom(state: GameState, seeds: Iterable<NetworkNode>): Set<NetworkNode> {
   const adj = builtAdjacency(state);
   const seen = new Set<NetworkNode>(seeds);
   const queue = [...seen];

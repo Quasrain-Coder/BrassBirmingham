@@ -34,8 +34,15 @@ export {
   ironSources,
   isConnected,
   playerNetwork,
+  reachableFrom,
 } from './network.js';
 export type { NetworkNode } from './network.js';
+export { applyFlip, consumeBeer, consumeCoal, consumeIron } from './resources.js';
+export type {
+  ConsumeBeerOpts,
+  ConsumeBeerResult,
+  ConsumeResult,
+} from './resources.js';
 export {
   buyCoalCost,
   buyIronCost,
