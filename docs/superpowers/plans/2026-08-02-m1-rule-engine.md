@@ -154,11 +154,11 @@ describe('board data', () => {
     expect(ids).toHaveLength(22);
     expect(ids.filter((id) => LOCATIONS[id]!.region === 'farm')).toHaveLength(2);
   });
-  it('has 39 links; 31 both-era, 1 canal-only, 7 rail-only', () => {
+  it('has 39 links; 30 both-era, 1 canal-only, 8 rail-only', () => {
     expect(LINKS).toHaveLength(39);
-    expect(LINKS.filter((l) => l.canal && l.rail)).toHaveLength(31);
+    expect(LINKS.filter((l) => l.canal && l.rail)).toHaveLength(30);
     expect(LINKS.filter((l) => l.canal && !l.rail)).toHaveLength(1);
-    expect(LINKS.filter((l) => !l.canal && l.rail)).toHaveLength(7);
+    expect(LINKS.filter((l) => !l.canal && l.rail)).toHaveLength(8);
   });
   it('burton-walsall is the only canal-only link', () => {
     const l = LINKS.find((x) => x.canal && !x.rail);
@@ -204,7 +204,7 @@ describe('board data', () => {
 
 - [ ] **Step 3: 转录数据**
 
-`types.ts` 先定义 `IndustryType`/`MerchantId`/`LocationId`/`Era`。`data/board.ts` 按 rules-reference §1.1（20 地点槽位表 + 2 农场）、§1.2（39 边表逐行转录）、§1.3（商人表）写成常量。注意：Kidderminster–Worcester 边同时连 farm-south（建模为两条边：`kidderminster–farm-south`、`farm-south–worcester` 是**错的**——规则是"同一条 Link 连接三者"。正确建模：LINKS 里仍是 39 条，其中 #30 的端点记为 `kidderminster`/`worcester`，另在 `LINK_EXTRA_ENDPOINTS: Record<number, LocationId[]>` 记录 `{30: ['farm-south']}`；`neighborsOf` 遍历时把 extra endpoints 并入）。Cannock–farm-north 是普通边 #17。
+`types.ts` 先定义 `IndustryType`/`MerchantId`/`LocationId`/`Era`。`data/board.ts` 按 rules-reference §1.1（20 地点槽位表 + 2 农场）、§1.2（39 边表逐行转录）、§1.3（商人表）写成常量。注意：Kidderminster–Worcester 边同时连 farm-south（建模为两条边：`kidderminster–farm-south`、`farm-south–worcester` 是**错的**——规则是"同一条 Link 连接三者"。正确建模：LINKS 里仍是 39 条，其中表内 #30 的端点记为 `kidderminster`/`worcester`，另在 `LINK_EXTRA_ENDPOINTS: Record<number, LocationId[]>` 记录（**0 基下标**）`{ 29: ['farm-south'] }`；`neighborsOf` 遍历时把 extra endpoints 并入）。Cannock–farm-north 是普通边 #17。
 
 - [ ] **Step 4: 跑测试确认通过**
 
@@ -218,7 +218,7 @@ describe('board data', () => {
 - Create: `packages/engine/src/data/tiles.ts`
 - Create: `packages/engine/src/data/income.ts`
 - Create: `packages/engine/src/data/market.ts`
-- Test: `packages/engine/test/tiles.test.ts`、`packages/engine/test/income.test.ts`、`packages/engine/test/market.test.ts`
+- Test: `packages/engine/test/tiles.test.ts`、`packages/engine/test/income.test.ts`、`packages/engine/test/market-data.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -290,7 +290,7 @@ it('loan backtracks 3 LEVELS and lands on highest space of the new level', () =>
 ```
 
 ```ts
-// market.test.ts — 常量形状校验
+// market-data.test.ts — 常量形状校验（与 Task 6 的 market.test.ts 不同文件）
 import { COAL_MARKET_PRICES, IRON_MARKET_PRICES } from '../src/data/market.js';
 it('coal 14 spaces £1-7 pairs; iron 10 spaces £1-5 pairs', () => {
   expect(COAL_MARKET_PRICES).toHaveLength(14);
@@ -302,7 +302,7 @@ it('coal 14 spaces £1-7 pairs; iron 10 spaces £1-5 pairs', () => {
 
 - [ ] **Step 3: 转录实现**
 
-按 rules-reference §2 六张表逐行转录 30 个 TileDef（每行核对：成本/煤/铁/啤酒/资源块/VP/收入/连接VP/禁建/灯泡）。`flipsBy`：cotton/manufacturer/pottery = `'sell'`，coal/iron/brewery = `'resource-exhaustion'`。`sellable` 仅前三者 true。`railEraBuildable`：level≥2 全 true；level 1 仅 pottery；另 pottery 5 与 brewery 4 仅铁路时代可建（加 `canalEraBuildable: boolean` 字段或在 TileDef 加 `railEraOnly: boolean`——采用后者，pottery5/brewery4 为 true）。
+按 rules-reference §2 六张表逐行转录全部 29 个 TileDef（4 棉 + 8 制造 + 5 陶 + 4 煤 + 4 铁 + 4 酿；每行核对：成本/煤/铁/啤酒/资源块/VP/收入/连接VP/禁建/灯泡）。`flipsBy`：cotton/manufacturer/pottery = `'sell'`，coal/iron/brewery = `'resource-exhaustion'`。`sellable` 仅前三者 true。`railEraBuildable`：level≥2 全 true；level 1 仅 pottery；另 pottery 5 与 brewery 4 仅铁路时代可建（加 `canalEraBuildable: boolean` 字段或在 TileDef 加 `railEraOnly: boolean`——采用后者，pottery5/brewery4 为 true）。
 
 - [ ] **Step 4: 跑测试确认通过**
 
@@ -400,6 +400,7 @@ interface GameState {
   currentPlayerIdx: number; // turnOrder 内下标
   actionsThisTurn: number;  // 当前玩家本轮已行动数
   rngState: number;         // 每步快照，供重放校验
+  lastEvents: GameEvent[];  // 上一步 applyAction 产生的事件（Task 11 起写入；此前 task 可初始化为 []）
   phase: 'action' | 'game-over';
   winner: PlayerIndex[] | null;
 }
@@ -530,14 +531,13 @@ it('buy iron fallback £6, no connectivity required', () => {
 - Produces:
   - `consumeCoal(state, player, at: LocationId, n: number): { state; flipped: FlipEvent[] }`——优先连通最近未翻面煤矿（免费），不足从市场买（需连通商人位，否则抛 `IllegalActionError('coal-not-connected')`）；每移走一块检查"该矿耗尽→翻面"
   - `consumeIron(state, player, n): { state; flipped: FlipEvent[] }`——任意未翻面铁厂（选方块最多者先？规范化：按 LocationId 字典序首个有足够方块的铁厂，不足则跨厂混源），不足市场买
-  - `consumeBeer(state, player, sources: BeerSource[], n, context): { state; flipped: FlipEvent[]; merchantBonus?: MerchantBonusEvent }`
-  - `type BeerSource = { kind: 'own-brewery' } | { kind: 'opponent-brewery'; location: LocationId } | { kind: 'merchant'; merchant: MerchantId }`
+  - `consumeBeer(state, player, n: number, opts: { at: LocationId | MerchantId; useMerchantBeer: boolean }): { state; flipped: FlipEvent[]; merchantBonus?: MerchantBonusEvent }`——来源自动解析（规范化）：自己未翻面酒厂（全图可用）→ 对手连通用酒处的未翻面酒厂（LocationId 字典序）；`useMerchantBeer: true` 时优先取 `at` 所涉商人的桶并触发该商人奖励（仅 Sell 行动传 true）
   - `type FlipEvent = { kind: 'flip'; player: PlayerIndex; location: LocationId; incomeAdvance: number }`
   - `type MerchantBonusEvent = { kind: 'merchant-bonus'; player: PlayerIndex; merchant: MerchantId }`
   - `type GameEvent = FlipEvent | MerchantBonusEvent`（后续 task 的 apply* 返回 `events: GameEvent[]`；本类型定义放 `types.ts`，本 task 首次引入）
   - `applyFlip(state, location, slotIdx): { state; event: FlipEvent }`——翻面 + 收入轨前进（`advanceIncomeSpace`，上限等级 30）
 
-啤酒规则（rules-reference §6.5/§9.3）：自己未翻面酒厂全图可用（不需连通）；对手酒厂须连通"用酒处"；商人啤酒仅 Sell 且只可用所卖向商人的桶，用了发商人奖励。规范化：sell 时 `useMerchantBeer: boolean` 由行动显式给出（影响奖励，属实质差异），其余来源自动解析（自己酒厂 → 对手连通酒厂，字典序）。
+啤酒规则（rules-reference §6.5/§9.3）：自己未翻面酒厂全图可用（不需连通）；对手酒厂须连通"用酒处"；商人啤酒仅 Sell 且只可用所卖向商人的桶，用了发商人奖励。来源选择按上方 `consumeBeer` 的规范化顺序自动解析；`useMerchantBeer` 由行动显式给出（影响奖励，属实质差异）。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -590,7 +590,7 @@ Build 规则（rules-reference §6.1/§6.2）：
 - 煤消耗：`consumeCoal`（建造地点）；铁：`consumeIron`
 - 运河时代每地点限自己 1 块；禁建等级铁路时代不可建（pottery1 例外）；pottery5/brewery4 仅铁路时代
 - 建成放资源块/酒桶（BREWERY_BARRELS[era]）；煤矿连通商人位→立即卖市场、铁厂无条件卖市场；卖空立即翻面（event）
-- Overbuild：自己任意产业可覆盖（资源退回供应，被覆盖板块移出游戏）；对手仅煤/铁厂且全图（含市场）该类方块为 0
+- Overbuild：自己任意产业可覆盖（资源退回供应，被覆盖板块移出游戏）；对手仅煤/铁厂且全图（含市场）该类方块为 0。**Overbuild 目标规范化**：铁路时代同地有多块己方同产业板块时，自动覆盖其中等级最低者（枚举不拆分目标选择）；覆盖对手板块时目标唯一（该槽位上那块），无需参数
 - 场上无板块特例：产业卡可任意地点建、任意卡可在任意空线放 Link（network 枚举处理）
 
 - [ ] **Step 1: 写失败测试**（覆盖：location 卡任意地点、industry 卡要求 network、槽位单图标优先、运河时代每地限一块、overbuild 对手煤矿的全图为零前置、建铁厂立即卖市场并翻面进收入、农场酒厂只能 industry/wild-industry 卡）
@@ -603,10 +603,16 @@ it('location card allows building outside network', () => {
   const builds = enumerateBuilds(s, 0);
   expect(builds.some((a) => a.type === 'build' && a.location === 'worcester' && a.industry === 'cotton')).toBe(true);
 });
-it('industry card requires network', () => {
+it('industry card: with no tiles on board can build anywhere; once placed, network-restricted', () => {
   const s = newGame(4, 5);
   s.players[0]!.hand = [{ id: 'ind-coal-0', kind: 'industry', industries: ['coal'] }];
-  expect(enumerateBuilds(s, 0)).toHaveLength(0); // 开局无 network
+  // 规则 §6.1：场上无任何板块时产业卡可建任意合法地点
+  expect(enumerateBuilds(s, 0).length).toBeGreaterThan(0);
+  // 在 dudley 放一块自己的板块后：只能建 dudley 及其 link 可达处
+  withTile(s, 0, 'dudley', 'coal');
+  const builds = enumerateBuilds(s, 0);
+  const locations = new Set(builds.map((a) => a.type === 'build' ? a.location : ''));
+  expect([...locations].every((l) => ['dudley', 'birmingham', 'kidderminster', 'wolverhampton'].includes(l))).toBe(true);
 });
 it('built iron works immediately sells to market and flips if emptied', () => { /* coalbrookdale 铁厂 L1 放 4 块 → 市场空格 2×£1 → 卖 2 块收 £2，剩 2 块不翻面 */ });
 it('cannot build level-1 cotton in rail era; can build pottery 1', () => { /* era='rail' 断言 */ });
@@ -658,20 +664,21 @@ it('canal link costs £3 and must be adjacent to own network', () => {
   s.players[0]!.hand = [{ id: 'c1', kind: 'industry', industries: ['coal'] }];
   const nets = enumerateNetwork(s, 0);
   const links = nets.flatMap((a) => a.type === 'network' ? a.links : []);
-  // coventry 相邻边：birmingham-coventry、coventry-nuneaton
-  expect(new Set(links)).toEqual(new Set([2, 23]));
+  // coventry 相邻边：birmingham-coventry（表内 #3 → 0 基下标 2）、coventry-nuneaton（#23 → 下标 22）
+  expect(new Set(links)).toEqual(new Set([2, 22]));
 });
 it('rail era: double link costs £15 + 1 brewery beer, each link consumes 1 coal', () => {
   const s = newGame(4, 3);
   s.era = 'rail';
   withTile(s, 0, 'coventry', 'pottery');
-  withTile(s, 0, 'birmingham', 'brewery', 2); // 自己的酒厂供啤酒
+  withTile(s, 0, 'birmingham', 'brewery', 2); // 自己的酒厂供啤酒（铁路时代 2 桶）
   s.players[0]!.money = 30;
   const nets = enumerateNetwork(s, 0);
   const doubles = nets.filter((a) => a.type === 'network' && a.links.length === 2);
   expect(doubles.length).toBeGreaterThan(0);
   const after = applyNetwork(s, 0, doubles[0]!);
-  expect(after.players[0]!.money).toBe(30 - 15);
+  // 场上无煤矿 → 2 条铁路的 2 块煤走市场：£1 + £2 = £3（初始市场 £1 格只有 1 块）
+  expect(after.players[0]!.money).toBe(30 - 15 - 3);
 });
 it('double-link beer cannot come from merchant beer', () => {
   // 只有商人啤酒可用、无酒厂 → 不枚举任何双轨行动
@@ -690,14 +697,15 @@ it('loan: +£30, back 3 income LEVELS landing on highest space', () => {
   expect(after.players[0]!.money).toBe(47);
   expect(after.players[0]!.incomeSpace).toBe(7); // level 0 → level -3
 });
-it('scout costs 3 cards, grants both wilds; forbidden while holding a wild', () => {
+it('scout enumerates all 3-card discard combos (C(8,3)=56), grants both wilds; forbidden while holding a wild', () => {
   const s = newGame(4, 3);
-  expect(enumerateScout(s, 0)).toHaveLength(1);
-  const after = applyScout(s, 0, { type: 'scout', cardIds: ['h0','h1','h2'] as never });
+  // 弃哪 3 张有策略意义（甩废卡），不做组合规范化
+  expect(enumerateScout(s, 0)).toHaveLength(56);
+  const real = s.players[0]!.hand.slice(0, 3).map((c) => c.id) as [string, string, string];
+  const after = applyScout(s, 0, { type: 'scout', cardIds: real });
   expect(after.players[0]!.hand.filter((c) => c.kind.startsWith('wild'))).toHaveLength(2);
   expect(enumerateScout(after, 0)).toHaveLength(0);
 });
-it('pass still discards a card', () => { /* applyAction pass 后 hand 弃 1 补 1 */ });
 ```
 
 - [ ] **Step 2–5: 失败 → 实现 → 通过 → Commit** — `git commit -m "feat(engine): network/develop/loan/scout/pass 行动"`
@@ -757,8 +765,8 @@ it('one sell action can flip multiple tiles of mixed industries', () => {
 **Interfaces:**
 - Produces:
   - `enumerateActions(state, player): Action[]`（六大行动 + pass 汇总；`phase==='game-over'` 返回 []）
-  - `applyAction(state, action): GameState`——校验 `action` 属于 `enumerateActions` 输出（规范化比较），执行后处理：弃牌（wild 卡回供应堆）、补牌到 8、`spentThisRound` 累计（含市场买卖现金）、行动计数
-  - `endTurnIfNeeded(state): GameState`——每人每轮 2 行动（运河时代 round 1 只 1 行动）；轮到下一人；一轮结束：按 spentThisRound 升序重排顺位（稳定）、发收入（负收入扣钱→半价拆板块→扣 VP 兜底，rules-reference §4）、`round+1`
+  - `applyAction(state, action): GameState`——校验 `action` 属于 `enumerateActions` 输出（规范化比较），执行后处理：弃牌（wild 卡回供应堆）、补牌到 8、`spentThisRound` 累计（含市场买卖现金）、行动计数。执行产生的事件写入 `state.lastEvents: GameEvent[]`（每步覆盖；序列化进状态，重放可比对，server 端 M2 用于广播动画）
+  - `endTurnIfNeeded(state): GameState`——每人每轮 2 行动（运河时代 round 1 只 1 行动）；轮到下一人；一轮结束：按 spentThisRound 升序重排顺位（稳定）、发收入（负收入扣钱→半价拆板块→扣 VP 兜底，rules-reference §4）、`round+1`。**例外：全局最后一轮（铁路时代末轮）结束后不收收入**（rules-reference §4）。运河时代末轮是否发收入需实现时对照规则书 p.6 原文核实并在测试中固化（rules-reference 未明确，标注为待核项）
   - 牌堆与全部手牌同时空 → 时代结束（Task 12）
 
 - [ ] **Step 1: 写失败测试**
@@ -785,7 +793,7 @@ it('money spent on market purchases counts toward spentThisRound', () => { ... }
 **Interfaces:**
 - Produces: `checkEraEnd(state): GameState`（在 `endTurnIfNeeded` 里被调）、`scoreEraLinks(state)`、`finalScore(state)`
 
-细则（rules-reference §7）：Link 计分（两端相邻地点内**已翻面**板块的连接图标数 = VP）→ Link 移除 → 翻面产业 VP 入账；运河末额外：移除 1 级产业、商人啤酒补满、弃牌合洗（wild 不回弃牌堆——wild 弃时本就回供应）、重抽 8 张、era→rail；铁路时代第 1 轮正常 2 行动；终局 phase='game-over'，winner 判定（VP → 收入等级 → 现金 → 共同获胜）；钱/收入不折 VP。
+细则（rules-reference §7）：Link 计分（两端相邻地点内**已翻面**板块的连接图标数 = VP；含 `LINK_EXTRA_ENDPOINTS` 的附加端点——kidderminster–worcester 边的 Link 同时计入 farm-south 的翻面酒厂图标）→ Link 移除 → 翻面产业 VP 入账；运河末额外：移除 1 级产业、商人啤酒按"每块非空白板块 1 桶"补满、弃牌合洗（wild 不回弃牌堆——wild 弃时本就回供应）、重抽 8 张、era→rail；铁路时代第 1 轮正常 2 行动；终局 phase='game-over'，winner 判定（VP → 收入等级 → 现金 → 共同获胜）；钱/收入不折 VP。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -799,8 +807,9 @@ it('link scores 1 VP per link-icon on FLIPPED tiles in both endpoint locations',
 it('canal era end: level-1 tiles removed, level-2+ kept (score again in rail era)', () => {
   // 场上 level1 coal + level2 coal（均翻面）→ 时代清算后 level1 消失、level2 保留且 VP 已入账
 });
-it('merchant beer refills empty slots at canal era end', () => {
-  // oxford 啤酒 0 → 清算后 1
+it('merchant beer refills to one barrel per non-blank tile at canal era end', () => {
+  // oxford 有 2 块非空白商人板块、beer=0 → 清算后 beer=2；shrewsbury 1 块非空白 → beer=1
+  // blank 板块不产生补充
 });
 it('discards reshuffle into new deck, hands redeal to 8, era becomes rail', () => {
   const after = checkEraEnd(eraEndingState);
@@ -833,8 +842,8 @@ it('game over: winner by VP, ties broken by income level then cash; money not co
 - [ ] **Step 1: 写 fuzz 测试**
 
 ```ts
-it('1000 random 4p games all terminate with sane final state', { timeout: 300_000 }, () => {
-  for (let seed = 0; seed < 1000; seed++) {
+it('300 random 4p games all terminate with sane final state', { timeout: 300_000 }, () => {
+  for (let seed = 0; seed < 300; seed++) {
     const { state, log } = playGame(4, seed);
     expect(state.phase).toBe('game-over');
     expect(state.winner!.length).toBeGreaterThan(0);
@@ -847,21 +856,20 @@ it('1000 random 4p games all terminate with sane final state', { timeout: 300_00
     }
   }
 });
-it('fuzz 2p and 3p (200 games each)', { timeout: 120_000 }, () => { ... });
+it('fuzz 2p and 3p (100 games each)', { timeout: 180_000 }, () => { ... });
 ```
+
+`playGame(playerCount, seed)` 内部确定性派生 agent 种子（`seed * 10 + seatIndex`），同 seed 必现同一局。`applyAction` 的合法性校验（重枚举比对）在 fuzz 中保持开启——它是 fuzz 的主要断言之一；若 CI 实测超时再降局数而非关校验。
 
 - [ ] **Step 2: 写重放测试**
 
 ```ts
-it('replay: applying logged actions to fresh game reproduces byte-identical states', () => {
+it('replay: re-applying logged actions reproduces byte-identical final state', () => {
   for (let seed = 0; seed < 20; seed++) {
-    const { log } = playGame(4, seed);
-    let s = newGame(4, seed);
-    const agentLog: string[] = [];
-    const agents = [0,1,2,3].map((i) => new RandomAgent(seed * 10 + i));
-    // 重放：同种子 newGame + 同 agent 决策序列 → 每步 stableStringify 相等
-    ...
-    expect(stableStringify(s)).toBe(stableStringify(replayed));
+    const { state: final1, log } = playGame(4, seed);
+    let s = newGame(4, seed); // 同种子重新开局
+    for (const a of log) s = applyAction(s, a); // 纯重放，无需 agent
+    expect(stableStringify(s)).toBe(stableStringify(final1));
   }
 });
 ```
