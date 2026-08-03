@@ -1,4 +1,4 @@
-import type { Action, GameState, PlayerIndex } from '@brass/engine';
+import type { Action, Card, GameState, PlayerIndex, PlayerState } from '@brass/engine';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -17,8 +17,15 @@ export type ServerMessage =
   | { type: 'error'; protocolVersion: number; code: string; message: string }
   | { type: 'pong'; protocolVersion: number };
 
-// FilteredState = GameState 视角过滤（Task 2 定义精确形状）
-export type FilteredState = unknown; // Task 2 替换为精确类型
+// FilteredState = GameState 按座位视角过滤（filter.ts filterStateFor 产出）：
+// 他人手牌与牌堆只露数量，弃牌堆顶公开，rngState 移除防推算洗牌。
+export type HandView = { kind: 'full'; cards: Card[] } | { kind: 'count'; count: number };
+export type FilteredPlayerState = Omit<PlayerState, 'hand'> & { hand: HandView };
+export type FilteredState = Omit<GameState, 'players'|'deck'|'discard'|'rngState'> & {
+  players: FilteredPlayerState[];
+  deck: { count: number };
+  discard: { count: number; top: Card | null };
+};
 
 // 上行
 export type ClientMessage =

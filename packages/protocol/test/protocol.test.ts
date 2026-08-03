@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Action, GameState, PlayerIndex } from '@brass/engine';
+import { newGame, type Action, type GameState, type PlayerIndex } from '@brass/engine';
+import { filterStateFor } from '../src/filter.js';
 import {
   PROTOCOL_VERSION,
   type ClientMessage,
@@ -25,7 +26,7 @@ type _noToken4 = Assert<HasKey<RoomConfig, 'token'> extends false ? true : false
 
 // 类型导出存在性（编译期锚定）
 type _roomStateShape = Assert<RoomState extends { code: string; started: boolean } ? true : false>;
-type _filteredStateIsUnknown = Assert<unknown extends FilteredState ? true : false>;
+type _filteredStateShape = Assert<FilteredState extends { players: unknown[]; deck: { count: number }; discard: { count: number } } ? true : false>;
 const _usesEngineTypes: { a?: Action; g?: GameState; p?: PlayerIndex } = {};
 void _usesEngineTypes;
 
@@ -58,7 +59,7 @@ describe('protocol', () => {
     ];
     const down: ServerMessage[] = [
       { type: 'credentials', protocolVersion: PROTOCOL_VERSION, seat: 0, token: 't' },
-      { type: 'snapshot', protocolVersion: PROTOCOL_VERSION, seq: 1, state: null, legalActions: [] },
+      { type: 'snapshot', protocolVersion: PROTOCOL_VERSION, seq: 1, state: filterStateFor(newGame(2, 42), 0), legalActions: [] },
       { type: 'game_over', protocolVersion: PROTOCOL_VERSION, winner: [0], finalScores: [100, 90] },
       { type: 'error', protocolVersion: PROTOCOL_VERSION, code: 'E', message: 'm' },
       { type: 'pong', protocolVersion: PROTOCOL_VERSION },
