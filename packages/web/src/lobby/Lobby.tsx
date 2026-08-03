@@ -183,7 +183,7 @@ export function RoomView({ store }: { store: GameStore }): ReactElement {
       </ul>
       <button
         data-testid="start-game"
-        disabled={!full}
+        disabled={!full || s.connection !== 'connected'}
         onClick={() => store.startGame()}
       >
         开始对局

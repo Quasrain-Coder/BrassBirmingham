@@ -248,6 +248,19 @@ describe('<RoomView> 房间等待视图', () => {
     });
   });
 
+  it('满员但断线：开始按钮不可用（连接状态门控）', () => {
+    const { store, ws } = setup();
+    act(() => ws.open());
+    enterRoom(ws, fullRoom());
+    render(<RoomView store={store} />);
+    expect(screen.getByTestId('start-game')).toBeEnabled();
+    act(() => {
+      ws.onclose?.();
+    });
+    expect(store.getState().connection).toBe('disconnected');
+    expect(screen.getByTestId('start-game')).toBeDisabled();
+  });
+
   it('离开房间 → store 重置回大厅态', () => {
     const { store, ws } = setup();
     act(() => ws.open());
