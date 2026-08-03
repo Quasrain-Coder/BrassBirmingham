@@ -2,6 +2,8 @@ import type { Action, Card, GameState, PlayerIndex, PlayerState } from '@brass/e
 
 export const PROTOCOL_VERSION = 1;
 
+export { filterStateFor } from './filter.js';
+
 // 房间配置与大厅
 export interface RoomConfig { playerCount: 2|3|4; seed?: number }
 export interface SeatInfo { seat: PlayerIndex; nickname: string; isAI: boolean; connected: boolean }
