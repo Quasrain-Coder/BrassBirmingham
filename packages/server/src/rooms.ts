@@ -16,7 +16,8 @@ export type RoomErrorCode =
   | 'not-in-room'
   | 'room-not-full'
   | 'invalid-nickname'
-  | 'invalid-config';
+  | 'invalid-config'
+  | 'code-exhausted';
 
 /** 与 engine 的 IllegalActionError 同模式：code 机器可读，供 WS 层映射 error 消息。 */
 export class RoomError extends Error {
@@ -44,6 +45,8 @@ export interface Room {
   started: boolean;
   /** engine 种子，startGame 时落地；开始前为 null。 */
   seed: number | null;
+  /** client 供 seed 时 true——公开标记，大厅可展示"房主指定了种子"（防作弊通道透明化）。 */
+  readonly customSeed: boolean;
 }
 
 export interface JoinResult {
@@ -58,11 +61,12 @@ const CODE_LENGTH = 6;
 const MAX_CODE_RETRIES = 100;
 const NICKNAME_MAX = 16;
 
-/** 广播安全视图：剥掉 token，只留协议 RoomState 字段。 */
+/** 广播安全视图：剥掉 token 与 config.seed（防推算洗牌），只留协议 RoomState 字段。 */
 export function toRoomState(room: Room): RoomState {
   return {
     code: room.code,
-    config: room.config,
+    config: { playerCount: room.config.playerCount },
+    customSeed: room.customSeed,
     seats: room.seats.map((s) =>
       s === null ? null : { seat: s.seat, nickname: s.nickname, isAI: false, connected: s.connected },
     ),
@@ -81,9 +85,18 @@ export class RoomManager {
     }
     const code = this.generateCode();
     const token = generateToken();
+    // 浅拷贝 config，防调用方后续 mutate 影响房间
+    const configCopy: RoomConfig = { ...config };
     const seats: (Seat | null)[] = Array.from({ length: config.playerCount }, () => null);
     seats[0] = { seat: 0, nickname: name, token, connected: true };
-    const room: Room = { code, config, seats, started: false, seed: null };
+    const room: Room = {
+      code,
+      config: configCopy,
+      seats,
+      started: false,
+      seed: null,
+      customSeed: configCopy.seed !== undefined,
+    };
     this.rooms.set(code, room);
     this.tokenIndex.set(token, room);
     return { room, seat: 0, token };
@@ -138,7 +151,7 @@ export class RoomManager {
       }
       if (!this.rooms.has(code)) return code;
     }
-    throw new RoomError('invalid-config', '房间号分配失败（重试耗尽）');
+    throw new RoomError('code-exhausted', '房间号分配失败（重试耗尽）');
   }
 }
 

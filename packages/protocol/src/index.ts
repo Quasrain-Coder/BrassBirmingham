@@ -7,7 +7,8 @@ export { filterStateFor } from './filter.js';
 // 房间配置与大厅
 export interface RoomConfig { playerCount: 2|3|4; seed?: number }
 export interface SeatInfo { seat: PlayerIndex; nickname: string; isAI: boolean; connected: boolean }
-export interface RoomState { code: string; config: RoomConfig; seats: (SeatInfo|null)[]; started: boolean }
+export interface RoomState { code: string; config: RoomConfig; customSeed: boolean; seats: (SeatInfo|null)[]; started: boolean }
+// customSeed：client 供 seed 时 true（公开标记，大厅可展示"房主指定了种子"）；广播 config 不含 seed 值。
 
 // 下行
 export type ServerMessage =

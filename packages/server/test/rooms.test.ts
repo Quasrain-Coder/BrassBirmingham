@@ -173,4 +173,31 @@ describe('RoomManager', () => {
     expect(state.seats[1]).toEqual({ seat: 1, nickname: 'bob', isAI: false, connected: true });
     expect(JSON.stringify(state)).not.toContain('token');
   });
+
+  it('toRoomState：config 显式重建，不含 seed（防泄露洗牌种子）', () => {
+    const rm = new RoomManager();
+    const { room } = rm.createRoom({ playerCount: 2, seed: 42 }, 'alice');
+    const state = toRoomState(room);
+    expect(state.config).toEqual({ playerCount: 2 });
+    expect(JSON.stringify(state)).not.toContain('42');
+    expect(JSON.stringify(state)).not.toContain('seed');
+  });
+
+  it('customSeed：client 供 seed 时公开标记 true（防作弊通道透明化），否则 false', () => {
+    const rm = new RoomManager();
+    const seeded = rm.createRoom({ playerCount: 2, seed: 7 }, 'a').room;
+    const plain = rm.createRoom({ playerCount: 2 }, 'b').room;
+    expect(seeded.customSeed).toBe(true);
+    expect(plain.customSeed).toBe(false);
+    expect(toRoomState(seeded).customSeed).toBe(true);
+    expect(toRoomState(plain).customSeed).toBe(false);
+  });
+
+  it('createRoom：config 浅拷贝，调用方后续 mutate 不影响房间', () => {
+    const rm = new RoomManager();
+    const config = { playerCount: 2 as const, seed: 9 };
+    const { room } = rm.createRoom(config, 'alice');
+    config.seed = 999;
+    expect(room.config.seed).toBe(9);
+  });
 });

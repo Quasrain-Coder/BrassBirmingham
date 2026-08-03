@@ -39,6 +39,7 @@ describe('protocol', () => {
     const room: RoomState = {
       code: 'ABCD',
       config: { playerCount: 4 },
+      customSeed: false,
       seats: [{ seat: 0, nickname: 'alice', isAI: false, connected: true }, null, null, null],
       started: false,
     };
@@ -46,7 +47,7 @@ describe('protocol', () => {
     const json = JSON.stringify(msg);
     expect(json).not.toContain('token');
     expect(Object.keys(msg).sort()).toEqual(['protocolVersion', 'room', 'type', 'yourSeat']);
-    expect(Object.keys(room).sort()).toEqual(['code', 'config', 'seats', 'started']);
+    expect(Object.keys(room).sort()).toEqual(['code', 'config', 'customSeed', 'seats', 'started']);
   });
 
   it('上下行消息可构造且可 JSON 序列化', () => {
