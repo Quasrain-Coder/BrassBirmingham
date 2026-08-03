@@ -7,12 +7,13 @@ import type { ReactElement } from 'react';
 import type { IndustryType, LocationId, PlayerIndex } from '@brass/engine';
 import { LINKS, LINK_EXTRA_ENDPOINTS, LOCATIONS, MERCHANTS } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
-import { BOARD_HEIGHT, BOARD_WIDTH, LAYOUT } from './layout';
+import { LAYOUT } from './layout';
 
 /** 玩家色板：P0 红 / P1 蓝 / P2 黄 / P3 绿。 */
 export const PLAYER_COLORS = ['#e74c3c', '#3498db', '#f1c40f', '#2ecc71'];
 
-const CANAL_COLOR = '#3498db';
+// 运河色与 P1 玩家色（#3498db）拉开区分度（Task 9 评审修复）。
+const CANAL_COLOR = '#5dade2';
 const RAIL_COLOR = '#8b5a2b';
 const INACTIVE_LINK_COLOR = '#d8d8d8';
 
@@ -39,9 +40,9 @@ export interface BoardHighlights {
 
 export interface BoardSvgProps {
   state: FilteredState;
-  highlights?: BoardHighlights;
-  onSlotClick?: (location: LocationId, slotIndex: number) => void;
-  onLinkClick?: (linkIndex: number) => void;
+  highlights?: BoardHighlights | undefined;
+  onSlotClick?: ((location: LocationId, slotIndex: number) => void) | undefined;
+  onLinkClick?: ((linkIndex: number) => void) | undefined;
 }
 
 const CITY_R = 7;
@@ -80,7 +81,7 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
   return (
     <svg
       className="board-svg"
-      viewBox={`0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`}
+      viewBox="-15 -15 1030 790"
       role="img"
       aria-label="Brass: Birmingham 棋盘"
     >
@@ -132,6 +133,7 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
                     strokeWidth={built ? 4 : 2}
                     strokeDasharray={built ? undefined : '4 3'}
                     strokeLinecap="round"
+                    onClick={onLinkClick ? () => onLinkClick(i) : undefined}
                   />
                 );
               })}
@@ -178,16 +180,40 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
                       onClick={onSlotClick ? () => onSlotClick(id, si) : undefined}
                     />
                     {tile ? (
-                      <text
-                        x={x + SLOT_W / 2}
-                        y={rowY + SLOT_H / 2 + 3.5}
-                        textAnchor="middle"
-                        fontSize={9}
-                        fill="#ffffff"
-                        pointerEvents="none"
-                      >
-                        {INDUSTRY_STYLE[tile.tile.industry].label}
-                      </text>
+                      <>
+                        <text
+                          x={x + SLOT_W / 2}
+                          y={rowY + SLOT_H / 2 + 3.5}
+                          textAnchor="middle"
+                          fontSize={9}
+                          fill="#ffffff"
+                          pointerEvents="none"
+                        >
+                          {INDUSTRY_STYLE[tile.tile.industry].label}
+                        </text>
+                        {/* 资源数角标：煤/铁方块、啤酒桶（sell/network 决策必需） */}
+                        {tile.resources > 0 ? (
+                          <g className="tile-resources" pointerEvents="none">
+                            <circle
+                              cx={x + SLOT_W - 3}
+                              cy={rowY + SLOT_H - 3}
+                              r={4.5}
+                              fill="#fffdf5"
+                              stroke="#3a3226"
+                              strokeWidth={0.8}
+                            />
+                            <text
+                              x={x + SLOT_W - 3}
+                              y={rowY + SLOT_H - 0.5}
+                              textAnchor="middle"
+                              fontSize={7}
+                              fill="#3a3226"
+                            >
+                              {tile.resources}
+                            </text>
+                          </g>
+                        ) : null}
+                      </>
                     ) : (
                       slot.industries.map((ind, ii) => {
                         // 空槽位：色块+字母；双产业槽左右各半。

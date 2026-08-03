@@ -1,8 +1,8 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { LINKS, LOCATIONS, MERCHANTS, newGame } from '@brass/engine';
+import { LINKS, LINK_EXTRA_ENDPOINTS, LOCATIONS, MERCHANTS, newGame, tileDef } from '@brass/engine';
 import { filterStateFor } from '@brass/protocol';
-import { BoardSvg } from './BoardSvg';
+import { BoardSvg, PLAYER_COLORS } from './BoardSvg';
 
 /** 用确定性 seed 起一局 4 人局，取 0 号位视角的 FilteredState。 */
 function freshState() {
@@ -69,5 +69,53 @@ describe('<BoardSvg>', () => {
       'g[data-location="derby"] rect.board-slot',
     )[2] as Element;
     expect(slot.classList.contains('highlighted')).toBe(true);
+  });
+
+  it('运河色 #5dade2，与 P1 玩家色 #3498db 可区分', () => {
+    const { container } = render(<BoardSvg state={freshState()} />);
+    const canalLink = container.querySelector('line.board-link') as SVGLineElement;
+    expect(canalLink.getAttribute('stroke')).toBe('#5dade2');
+    expect(PLAYER_COLORS[1]).toBe('#3498db');
+  });
+
+  it('viewBox 外扩到 "-15 -15 1030 790"（商人六边形不再贴边裁切）', () => {
+    const { container } = render(<BoardSvg state={freshState()} />);
+    expect(container.querySelector('svg')?.getAttribute('viewBox')).toBe('-15 -15 1030 790');
+  });
+
+  it('已建板块渲染资源数角标（煤/铁方块、啤酒桶；resources=0 不显）', () => {
+    const state = freshState();
+    const coal = tileDef('coal', 1);
+    if (coal === undefined) throw new Error('缺 coal level 1 TileDef');
+    state.board.slots['birmingham']![0] = {
+      tile: coal,
+      player: 0,
+      flipped: false,
+      resources: 3,
+    };
+    state.board.slots['birmingham']![1] = {
+      tile: coal,
+      player: 1,
+      flipped: false,
+      resources: 0,
+    };
+    const { container } = render(<BoardSvg state={state} />);
+    const badges = container.querySelectorAll(
+      'g[data-location="birmingham"] .tile-resources',
+    );
+    expect(badges).toHaveLength(1);
+    expect(badges[0]?.textContent).toContain('3');
+  });
+
+  it('三端点边的 farm-south 分支线同样可点（行为同主干）', () => {
+    const branchIdx = Number(Object.keys(LINK_EXTRA_ENDPOINTS)[0]);
+    const linkClicks: number[] = [];
+    const { container } = render(
+      <BoardSvg state={freshState()} onLinkClick={(i) => linkClicks.push(i)} />,
+    );
+    const branch = container.querySelector('line.board-link-branch') as Element;
+    expect(branch.getAttribute('data-link-index')).toBe(String(branchIdx));
+    branch.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(linkClicks).toEqual([branchIdx]);
   });
 });

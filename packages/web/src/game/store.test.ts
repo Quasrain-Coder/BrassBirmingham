@@ -119,6 +119,16 @@ describe('GameStore 状态迁移', () => {
     expect(store.getState().connection).toBe('connected');
   });
 
+  it('已 connected 时再 connect() 为空操作（不回到 connecting、不新建 ws）', () => {
+    const { store } = setup();
+    store.connect();
+    lastWs().open();
+    const n = FakeWebSocket.instances.length;
+    store.connect();
+    expect(store.getState().connection).toBe('connected');
+    expect(FakeWebSocket.instances).toHaveLength(n);
+  });
+
   it('room_state 更新 room 与 yourSeat', () => {
     const { store } = setup();
     store.connect();

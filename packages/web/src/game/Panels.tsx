@@ -91,7 +91,7 @@ export function IncomeTrack({
   room,
 }: {
   state: FilteredState;
-  room?: RoomState;
+  room?: RoomState | undefined;
 }): ReactElement {
   return (
     <section className="income-track">
@@ -114,7 +114,7 @@ export function TurnOrderBar({
   room,
 }: {
   state: FilteredState;
-  room?: RoomState;
+  room?: RoomState | undefined;
 }): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx];
   return (
@@ -139,7 +139,8 @@ export function TurnOrderBar({
   );
 }
 
-function cardLabel(card: Card): string {
+/** 手牌一句话标签（location 城市名 / industry 产业图标 / wild 标记）。 */
+export function cardLabel(card: Card): string {
   switch (card.kind) {
     case 'location':
       return locationName(card.location);
@@ -161,7 +162,7 @@ export function HandBar({
   state: FilteredState;
   seat: PlayerIndex;
   selectedCard?: string | null;
-  onSelect?: (cardId: string) => void;
+  onSelect?: ((cardId: string) => void) | undefined;
 }): ReactElement {
   const self = state.players[seat];
   return (
@@ -231,7 +232,7 @@ export function LogPanel({
   room,
 }: {
   log: LogEntry[];
-  room?: RoomState;
+  room?: RoomState | undefined;
 }): ReactElement {
   return (
     <section className="log-panel">

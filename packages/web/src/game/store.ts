@@ -199,8 +199,9 @@ export class GameStore {
     };
   };
 
-  /** 主动建连（也用于自动重连）。 */
+  /** 主动建连（也用于自动重连）。已连接时为空操作（重复调用不打断现有连接）。 */
   connect(): void {
+    if (this.state.connection === 'connected') return;
     this.intentionalClose = false;
     this.clearReconnectTimer();
     this.patch({ connection: 'connecting' });
