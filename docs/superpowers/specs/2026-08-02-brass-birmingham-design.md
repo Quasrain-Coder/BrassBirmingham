@@ -25,7 +25,7 @@ packages/
   llm/       # LLM 玩家（虚拟座位）+ 复盘教练，调 Claude API
 ```
 
-核心边界：**规则引擎是纯函数库**，被 server（权威裁决）、web（本地预检合法行动、UI 高亮）、llm（行动空间枚举）、复盘（log 重放）四方复用同一份代码。
+核心边界：**规则引擎是纯函数库**，被 server（权威裁决 + 合法行动枚举下发）、llm（行动空间枚举）、复盘（log 重放）复用同一份代码（web 不跑引擎，见 §7 修订）。
 
 ## 3. 规则引擎（engine）
 
@@ -61,7 +61,7 @@ applyAction(state, action): GameState       // 纯函数；非法行动抛结构
 
 ### 房间生命周期
 
-`创建（人数、AI 座位数、种子可选） → 大厅（房主调整 AI 座位、开始） → 对局中 → 结束 → 存档`。房间号 6 位短码；无账号体系，昵称 + op token（localStorage），断线凭 token 重连回原座位。
+`创建（人数、种子可选） → 大厅（等待加入） → 对局中 → 结束 → 存档`。房间号 6 位短码；无账号体系，昵称 + op token（localStorage），断线凭 token 重连回原座位。（M2 裁决：满员才能开始、任意座位成员可开始；AI 座位属 M3；token 经私密 `credentials` 消息单发，广播的 room_state 不含 token）
 
 ### 同步协议（WebSocket，JSON）
 
@@ -77,7 +77,9 @@ applyAction(state, action): GameState       // 纯函数；非法行动抛结构
 
 - `games`：id、房间配置、初始种子、最终状态、时间戳
 - `actions`：game_id、seq、player、action JSON（对局 = 初始状态 + action log，重放/断线重连/复盘共用此数据）
-- `reviews`：game_id、player、报告 markdown、模型、token 用量
+- `seats`：game_id、seat、nickname、token（UNIQUE）——断线重连凭据（2026-08-03 随 M2 计划新增）
+- `reviews`：game_id、player、报告 markdown、模型、token 用量（M4 落地）
+- **声明：服务器重启即丢进行中的对局（内存房间/会话不恢复）；重放恢复属 M5**
 
 ### 错误处理
 
@@ -117,7 +119,7 @@ applyAction(state, action): GameState       // 纯函数；非法行动抛结构
 ## 7. 前端（web）
 
 - 自绘简化 SVG 地图：城市为节点、连接为边、产业槽位为城市旁格子；功能性优先
-- 交互围绕 `enumerateActions`：本地预检，可打的牌高亮、可建槽位亮边，点击构造 action 提交——非法操作在 UI 层不可能出现，服务器校验兜底
+- 交互围绕 `enumerateActions`：**合法行动由服务器随快照下发**（`legalActions` 字段，2026-08-03 由"浏览器本地预检"修订——server 本就要权威校验，枚举成本可忽略，免去 web 端引擎版本同步）；可打的牌高亮、可建槽位亮边，点击构造 action 提交——非法操作在 UI 层不可能出现，服务器校验兜底
 - 面板：市场（煤/铁/啤酒）、收入轨与 VP、行动日志（含 AI 理由）、回合顺位条
 - 复盘报告页：markdown 渲染 + 分差曲线 + 跳转到对应回合的只读棋盘回放
 
