@@ -1,0 +1,35 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: #1a1d23;
+  color: #e6e6e6;
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.app h1 {
+  font-size: 2rem;
+  letter-spacing: 0.04em;
+}
+
+.subtitle {
+  color: #9aa4b2;
+}
+
+.status {
+  margin-top: 32px;
+  color: #c9a86a;
+}
