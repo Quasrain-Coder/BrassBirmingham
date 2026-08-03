@@ -5,7 +5,7 @@
  * - 建房 → 加入 → 开始：test 1（含房间号格式、customSeed 公开标记、广播 config 不含 seed、
  *   任意座位可开局、开局快照合法行动仅当前玩家非空）。
  * - 各行动类型：test 3——两局固定种子随机对局（3p + 4p），从 actions 表统计行动类型
- *   直方图并断言覆盖（scout 极稀有，见报告覆盖说明）。
+ *   直方图并断言七类全覆盖（sell 需加权选取，见 pickAction 注释）。
  * - 打完一局 → 终局：test 2 / 3 均打到 game_over（winner 非空、finalScores 覆盖全员）。
  * - 刷新重连：test 2——对局中断线 → 他端广播 connected=false → 新连接 resume 恢复原
  *   座位与当前快照 → 广播 connected=true → 继续打到终局。
@@ -365,8 +365,8 @@ describe('M2 手动验收（脚本化）', () => {
       expect(r1.total).toBeGreaterThan(80);
       expect(r2.total).toBeGreaterThan(100);
 
-      // 行动类型覆盖：核心六类（build/network/develop/sell/loan/pass）两局合并必须都出现；
-      // scout（弃 3 换 2 wild）随机策略下极稀有，不强制，出现与否写进报告。
+      // 行动类型覆盖：全部七类（build/network/develop/sell/loan/scout/pass）两局合并
+      // 必须都出现（固定种子 + 固定 RNG，实测确定性复现，见报告直方图）。
       const merged: Record<string, number> = {};
       for (const h of [r1.histogram, r2.histogram]) {
         for (const [t, n] of Object.entries(h)) merged[t] = (merged[t] ?? 0) + n;
@@ -377,7 +377,7 @@ describe('M2 手动验收（脚本化）', () => {
       console.log(
         `[验收] 覆盖局2（4p seed=200）：${r2.total} 步 ${JSON.stringify(r2.histogram)}`,
       );
-      for (const t of ['build', 'network', 'develop', 'sell', 'loan', 'pass']) {
+      for (const t of ['build', 'network', 'develop', 'sell', 'loan', 'scout', 'pass']) {
         expect(merged[t], `行动类型 ${t} 应在两局随机对局中出现`).toBeGreaterThan(0);
       }
 
