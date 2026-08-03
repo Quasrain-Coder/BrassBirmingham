@@ -1,4 +1,5 @@
-// @brass/server — M2 服务端脚手架占位。
-// Task 2+ 在此实现：WS 房间管理（ws）、状态过滤与快照（@brass/engine + @brass/protocol）、
-// 持久化（drizzle-orm + better-sqlite3）。
+// @brass/server — M2 服务端：WS 权威服务器（ws）+ 房间（rooms）+ 对局会话（session）
+// + SQLite 持久化（db）。入口见 main.ts。
 export { PROTOCOL_VERSION } from '@brass/protocol';
+export { createGameServer } from './ws.js';
+export type { GameServer, GameServerOptions } from './ws.js';

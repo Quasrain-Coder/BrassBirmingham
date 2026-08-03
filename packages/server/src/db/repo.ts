@@ -1,11 +1,12 @@
 import Database from 'better-sqlite3';
+import type { Database as SqliteDatabase } from 'better-sqlite3';
 import { asc, eq } from 'drizzle-orm';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { Action } from '@brass/engine';
 import type { RoomConfig } from '@brass/protocol';
 import { actions, games, schema, seats } from './schema.js';
 
-export type Db = BetterSQLite3Database<typeof schema>;
+export type Db = BetterSQLite3Database<typeof schema> & { $client: SqliteDatabase };
 
 // 无迁移工具（drizzle-kit 未引入）：DDL 内嵌，openDb 幂等建表。
 // 注意与 schema.ts 保持一致；测试覆盖全部往返路径。

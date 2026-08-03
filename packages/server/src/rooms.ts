@@ -142,6 +142,15 @@ export class RoomManager {
     return this.rooms.get(code.toUpperCase()) ?? null;
   }
 
+  /** token → {room, seat}。开局前 resume 走此内存索引；开局后由 WS 层查库 findSeatByToken。 */
+  findByToken(token: string): { room: Room; seat: Seat } | null {
+    const room = this.tokenIndex.get(token);
+    if (room === undefined) return null;
+    const seat = room.seats.find((s): s is Seat => s !== null && s.token === token);
+    if (seat === undefined) return null;
+    return { room, seat };
+  }
+
   private generateCode(): string {
     for (let attempt = 0; attempt < MAX_CODE_RETRIES; attempt++) {
       let code = '';
