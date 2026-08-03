@@ -10,127 +10,24 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
-import { createGameServer, type GameServer } from '../src/ws.js';
+import type { GameServer } from '../src/ws.js';
+import { createTestHarness, TestClient, type Msg } from './helpers.js';
 
-/** 收到的协议消息（测试里宽松看待字段）。 */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Msg = { type: string; [k: string]: any };
-
-interface Waiter {
-  pred: (m: Msg) => boolean;
-  resolve: (m: Msg) => void;
-  timer: NodeJS.Timeout;
-}
-
-class TestClient {
-  readonly received: Msg[] = [];
-  private readonly queue: Msg[] = [];
-  private readonly waiters: Waiter[] = [];
-
-  private constructor(readonly ws: WebSocket) {
-    ws.on('message', (data: Buffer) => {
-      const msg = JSON.parse(data.toString()) as Msg;
-      this.received.push(msg);
-      const idx = this.waiters.findIndex((w) => w.pred(msg));
-      if (idx === -1) {
-        this.queue.push(msg);
-        return;
-      }
-      const w = this.waiters.splice(idx, 1)[0]!;
-      clearTimeout(w.timer);
-      w.resolve(msg);
-    });
-  }
-
-  static async connect(
-    port: number,
-    path = '/ws',
-    options?: { autoPong?: boolean },
-  ): Promise<TestClient> {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`, {
-      autoPong: options?.autoPong ?? true,
-    });
-    await new Promise<void>((resolve, reject) => {
-      ws.once('open', () => resolve());
-      ws.once('error', (err) => reject(err));
-    });
-    return new TestClient(ws);
-  }
-
-  /** 发消息；给 awaitType 时等该类型的最早匹配消息。 */
-  send(msg: Record<string, unknown>): void;
-  send(msg: Record<string, unknown>, awaitType: string): Promise<Msg>;
-  send(msg: Record<string, unknown>, awaitType?: string): void | Promise<Msg> {
-    this.ws.send(JSON.stringify(msg));
-    if (awaitType === undefined) return;
-    return this.nextMessage(awaitType);
-  }
-
-  /** 取指定类型（可再加谓词）的最早消息；已收队列优先，否则等待。 */
-  nextMessage(type: string, pred?: (m: Msg) => boolean, timeoutMs = 5000): Promise<Msg> {
-    const matches = (m: Msg): boolean => m.type === type && (pred === undefined || pred(m));
-    const idx = this.queue.findIndex(matches);
-    if (idx !== -1) return Promise.resolve(this.queue.splice(idx, 1)[0]!);
-    return new Promise<Msg>((resolve, reject) => {
-      const waiter: Waiter = {
-        pred: matches,
-        resolve,
-        timer: setTimeout(() => {
-          const i = this.waiters.indexOf(waiter);
-          if (i !== -1) this.waiters.splice(i, 1);
-          reject(
-            new Error(
-              `等待 ${type} 超时；已收类型: ${this.received.map((m) => m.type).join(',') || '(无)'}`,
-            ),
-          );
-        }, timeoutMs),
-      };
-      this.waiters.push(waiter);
-    });
-  }
-
-  waitClose(timeoutMs = 3000): Promise<void> {
-    if (this.ws.readyState === WebSocket.CLOSED) return Promise.resolve();
-    return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('waitClose 超时')), timeoutMs);
-      this.ws.once('close', () => {
-        clearTimeout(timer);
-        resolve();
-      });
-    });
-  }
-
-  async close(): Promise<void> {
-    if (this.ws.readyState === WebSocket.CLOSED) return;
-    const closed = this.waitClose();
-    this.ws.close();
-    await closed;
-  }
-}
-
-const servers: GameServer[] = [];
-const clients: TestClient[] = [];
+const harness = createTestHarness();
 
 async function startTestServer(extra?: {
   staticDir?: string;
   heartbeatIntervalMs?: number;
   heartbeatTimeoutMs?: number;
 }): Promise<GameServer> {
-  const server = await createGameServer({ port: 0, dbPath: ':memory:', ...extra });
-  servers.push(server);
-  return server;
+  return harness.startServer(extra);
 }
 
 async function connect(port: number, options?: { autoPong?: boolean }): Promise<TestClient> {
-  const client = await TestClient.connect(port, '/ws', options);
-  clients.push(client);
-  return client;
+  return harness.connect(port, options);
 }
 
-afterEach(async () => {
-  await Promise.all(servers.splice(0).map((s) => s.close()));
-  await Promise.all(clients.splice(0).map((c) => c.close().catch(() => undefined)));
-});
+afterEach(() => harness.cleanup());
 
 interface TwoPlayerSetup {
   a: TestClient;
@@ -259,6 +156,36 @@ describe('WebSocket 传输层', () => {
     expect(rs.yourSeat).toBe(0);
     expect(rs.room.seats[0].connected).toBe(true);
     expect(rs.room.started).toBe(false);
+  });
+
+  it('同 token 重复连接：resume 踢掉旧连接，旧连接 close 不再误报断线', async () => {
+    const server = await startTestServer();
+    const { a, b, credA } = await setupTwoPlayerGame(server.port);
+
+    // 同一 token 第二个连接 resume（旧连接 a 仍开着）——同座位多连接场景
+    const a2 = await connect(server.port);
+    const cred = await a2.send(
+      { type: 'resume', protocolVersion: 1, token: credA.token },
+      'credentials',
+    );
+    expect(cred.seat).toBe(0);
+
+    // 旧连接被服务器踢掉；其 close 不得再触发 connected=false 广播
+    await a.waitClose();
+    await new Promise((r) => setTimeout(r, 200));
+    for (const c of [b, a2]) {
+      for (const m of c.received.filter((x) => x.type === 'room_state')) {
+        expect(m.room.seats[0].connected).toBe(true);
+      }
+    }
+
+    // 再触发一次广播（第三次 resume），确认座位 0 仍是 connected=true
+    const before = b.received.length;
+    const a3 = await connect(server.port);
+    await a3.send({ type: 'resume', protocolVersion: 1, token: credA.token }, 'credentials');
+    await b.nextMessage('room_state', () => b.received.length > before);
+    const last = b.received.filter((x) => x.type === 'room_state').at(-1);
+    expect(last?.room.seats[0].connected).toBe(true);
   });
 
   it('protocolVersion mismatch gets error', async () => {

@@ -14,6 +14,7 @@
  * 即 terminate。应用层 'ping' 消息另回 'pong' JSON（协议消息，与控制帧无关）。
  *
  * 断线：座位 connected=false 并广播 room_state；resume 成功 connected=true 再广播。
+ * 同座位多连接：resume 先踢掉该座位旧连接（解绑 + terminate），其 close 不再触发断线广播。
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -171,6 +172,21 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     conn.seat = seat;
   }
 
+  /**
+   * resume 抢座：解除同座位已有旧连接的绑定并 terminate。先清空 roomCode/seat 再
+   * terminate——旧连接的 close 事件随后触发 handleDisconnect 时已无座位绑定，不会再
+   * 把座位误标 connected=false 并广播（同座位多连接只保留最新连接）。
+   */
+  function kickSeatConns(room: Room, seat: PlayerIndex, except: Conn): void {
+    for (const other of conns) {
+      if (other === except) continue;
+      if (other.roomCode !== room.code || other.seat !== seat) continue;
+      other.roomCode = null;
+      other.seat = null;
+      other.ws.terminate();
+    }
+  }
+
   function assertDetached(conn: Conn): void {
     if (conn.roomCode !== null) {
       throw new WsError('already-in-room', `连接已在房间 ${conn.roomCode}，先断开再换房`);
@@ -280,6 +296,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
       }
       const seat = entry.tokenSeats.get(msg.token);
       if (seat === undefined) throw new WsError('invalid-token', 'token 与对局座位不一致');
+      kickSeatConns(entry.room, seat, conn);
       attach(conn, entry.room, seat);
       setSeatConnected(entry.room, seat, true);
       send(conn, { type: 'credentials', protocolVersion: PROTOCOL_VERSION, seat, token: msg.token });
@@ -297,6 +314,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     // 开局前：RoomManager 内存索引
     const found = rooms.findByToken(msg.token);
     if (found === null) throw new WsError('invalid-token', 'token 无效');
+    kickSeatConns(found.room, found.seat.seat, conn);
     attach(conn, found.room, found.seat.seat);
     found.seat.connected = true;
     send(conn, {
