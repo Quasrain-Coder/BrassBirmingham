@@ -6,8 +6,10 @@ on:
   pull_request:
 
 jobs:
-  engine:
-    name: engine (typecheck + test + coverage)
+  # 聚合 job：根 package.json 的 typecheck/test 均为 --workspaces --if-present，
+  # 任何带对应 scripts 的 packages/* 新包（protocol/server/...）自动纳入，无需改本文件。
+  build-test:
+    name: build-test (typecheck + test + coverage)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
