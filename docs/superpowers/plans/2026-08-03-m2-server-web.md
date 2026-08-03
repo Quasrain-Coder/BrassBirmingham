@@ -46,10 +46,11 @@ export interface RoomState { code: string; config: RoomConfig; seats: (SeatInfo|
 
 // 下行
 export type ServerMessage =
-  | { type: 'room_state'; protocolVersion: number; room: RoomState; yourSeat: PlayerIndex | null; yourToken: string }
+  | { type: 'room_state'; protocolVersion: number; room: RoomState; yourSeat: PlayerIndex | null } // 广播安全：绝不含 token
+  | { type: 'credentials'; protocolVersion: number; seat: PlayerIndex; token: string } // 仅 create/join/resume 时单发给本人
   | { type: 'snapshot'; protocolVersion: number; seq: number; state: FilteredState; legalActions: Action[] }
   | { type: 'action_applied'; protocolVersion: number; seq: number; player: PlayerIndex; action: Action; events: unknown[] }
-  | { type: 'game_over'; protocolVersion: number; winner: PlayerIndex[]; finalScores: number[] }
+  | { type: 'game_over'; protocolVersion: number; winner: PlayerIndex[]; finalScores: number[] } // finalScores = 终局 state.players[].vp 按座位序
   | { type: 'error'; protocolVersion: number; code: string; message: string }
   | { type: 'pong'; protocolVersion: number };
 
@@ -68,9 +69,9 @@ export type ClientMessage =
 
 - server 脚手架：devDeps ws/@types/ws + drizzle-orm + better-sqlite3（deps）；scripts 同 engine（test/typecheck）
 
-- [ ] **Step 1: 写 protocol 类型 + 编译测试**（类型导出存在性、PROTOCOL_VERSION===1 的断言测试）
-- [ ] **Step 2: `npm install --registry=https://registry.npmmirror.com`（网络环境要求），生成 lock**
-- [ ] **Step 3: typecheck + test 绿，确认根 `npm test --workspaces` 覆盖两个新包**
+- [ ] **Step 1: 写 protocol 类型 + 编译测试**（类型导出存在性、PROTOCOL_VERSION===1 的断言测试；**断言 room_state 类型无 token 字段——广播安全**）
+- [ ] **Step 2: `npm install --registry=https://registry.npmmirror.com`（网络环境要求；lock 域名与既有 npmjs.org 混用无害，npm ci 两边均可），生成 lock**
+- [ ] **Step 3: typecheck + test 绿，确认根 `npm test --workspaces` 覆盖两个新包；CI job 名由 engine 改为 build-test（聚合后名符其实）**
 - [ ] **Step 4: Commit** — `git commit -m "feat(protocol,server): M2 脚手架与 WS 消息类型"`
 
 ---
@@ -142,7 +143,9 @@ it('filtering does not mutate original state', () => {
 
 **Interfaces:**
 - Produces:
-  - 表：`games(id TEXT PK, room_code TEXT, player_count INT, seed INT, config TEXT(json), status TEXT('playing'|'finished'), created_at INT, final_state TEXT(json) NULL)`；`actions(id INTEGER PK AUTOINCREMENT, game_id TEXT, seq INT, player INT, action TEXT(json))`；`seats(game_id TEXT, seat INT, nickname TEXT, token TEXT, PRIMARY KEY(game_id, seat))`
+  - 表：`games(id TEXT PK, room_code TEXT, player_count INT, seed INT, config TEXT(json), status TEXT('playing'|'finished'), created_at INT, final_state TEXT(json) NULL)`；`actions(id INTEGER PK AUTOINCREMENT, game_id TEXT, seq INT, player INT, action TEXT(json))`；`seats(game_id TEXT, seat INT, nickname TEXT, token TEXT, PRIMARY KEY(game_id, seat), UNIQUE(token))`
+  - **token 生命周期**：join 时由 RoomManager 内存签发（开局前 resume 走内存）；startGame 时随 createGame 落库（开局后 resume 查库）
+  - **声明：服务器重启即丢进行中的对局（内存房间/会话不恢复）——重放恢复属 M5**
   - `openDb(path: string): Db`（`:memory:` 支持，测试用）
   - `createGame(db, {id, roomCode, playerCount, seed, config, seats: {seat, nickname, token}[]}): void`
   - `appendAction(db, gameId, seq, player, action): void`
@@ -224,26 +227,30 @@ it('legalActions empty for non-current players', () => { ... });
 **Interfaces:**
 - Consumes: RoomManager/GameSession/protocol
 - Produces:
-  - `createGameServer({ port, dbPath }): { close(): Promise<void> }`（ws.Server）
-  - main.ts：读 `PORT`（默认 8420）、`DB_PATH`（默认 ./brass.db）启动
-  - 行为：连接即收消息路由；create_room/join_room 回 room_state（含 yourSeat/yourToken）；start_game 后向全房间发 snapshot；submit_action 成功广播 action_applied + 每人视角 snapshot；非法回 error（code 透传）；resume(token) 重连回原座位（回 snapshot + room_state）；断线标记 connected=false 广播 room_state
+  - `createGameServer({ port, dbPath, staticDir? }): { close(): Promise<void> }`——**结构：http.createServer + ws.Server({ noServer })**；upgrade 只接受路径 `/ws`（其余 426/404）；`staticDir` 存在时同一 http.Server 托管静态文件（生产单端口：静态 + /ws 共端口）；dev 时不起 staticDir，vite proxy 转发 /ws
+  - main.ts：读 `PORT`（默认 8420）、`DB_PATH`（默认 ./brass.db）、`WEB_DIST`（存在则托管）启动
+  - 行为：连接即收消息路由；create_room/join_room 回 room_state（**广播版，无 token**）+ 单发 credentials（seat+token 仅本人）；start_game 后向全房间发 snapshot；submit_action 成功广播 action_applied + 每人视角 snapshot；非法回 error（code 透传）；resume(token) 重连回原座位（回 credentials + snapshot + room_state）；断线标记 connected=false 广播 room_state
   - 心跳：30s ping/pong（ws 库自带 pong；server 端 interval 检活，60s 无响应断开）
 
-- [ ] **Step 1: 失败测试**（真实 ws 客户端，随机端口）：
+- [ ] **Step 1: 失败测试**（真实 ws 客户端，随机端口。**测试 helper 必须为每连接实现"类型过滤的缓冲队列"**：`nextMessage(type)` 从队列取匹配的最早消息，不匹配的入队等待——否则广播时序必 flake）：
 
 ```ts
 it('two clients create/join/start/play one action', async () => {
   const { port } = await startTestServer();
   const a = await client(port), b = await client(port);
-  const roomA = await a.send({ type: 'create_room', protocolVersion: 1, nickname: 'A', config: { playerCount: 2, seed: 7 } });
+  const credA = await a.send({ type: 'create_room', protocolVersion: 1, nickname: 'A', config: { playerCount: 2, seed: 7 } }, 'credentials');
+  const roomA = await a.nextMessage('room_state');
   const code = roomA.room.code;
-  await b.send({ type: 'join_room', protocolVersion: 1, code, nickname: 'B' });
-  await a.send({ type: 'start_game', protocolVersion: 1, token: roomA.yourToken });
+  await b.send({ type: 'join_room', protocolVersion: 1, code, nickname: 'B' }, 'credentials');
+  await a.send({ type: 'start_game', protocolVersion: 1, token: credA.token });
   const snap = await a.nextMessage('snapshot');
   expect(snap.legalActions.length).toBeGreaterThan(0);
-  await a.send({ type: 'submit_action', protocolVersion: 1, token: roomA.yourToken, action: snap.legalActions[0] });
+  await a.send({ type: 'submit_action', protocolVersion: 1, token: credA.token, action: snap.legalActions[0] });
   const applied = await b.nextMessage('action_applied');
   expect(applied.seq).toBe(0);
+});
+it('room_state never carries tokens (broadcast safety)', async () => {
+  // 收 b 的 room_state 序列化后不含 'token' 字段名
 });
 it('resume returns seat and snapshot after disconnect', async () => { /* 断线重连 */ });
 it('protocolVersion mismatch gets error', async () => { ... });
@@ -267,7 +274,7 @@ it('protocolVersion mismatch gets error', async () => { ... });
 ### Task 8: web 脚手架（Vite + React）+ 服务器静态托管
 
 **Files:**
-- Create: `packages/web/`（Vite React-TS 模板精简版：index.html、vite.config.ts、src/main.tsx、src/App.tsx）
+- Create: `packages/web/`（Vite React-TS 模板精简版：index.html、vite.config.ts、vitest.config.ts、src/main.tsx、src/App.tsx）
 - Modify: `packages/server/src/main.ts`（生产模式托管 web/dist 静态文件；dev 由 vite proxy 转发 /ws）
 - Test: `packages/web/src/smoke.test.tsx`（App 渲染冒烟，vitest + jsdom）
 
@@ -301,7 +308,7 @@ stafford (85,205)        cannock (150,245)    tamworth (310,265)
 wolverhampton (95,320)   walsall (195,300)    nuneaton (395,285)
 coalbrookdale (30,290)   dudley (95,395)      birmingham (215,390)  coventry (380,380)
 kidderminster (60,480)   worcester (105,580)  redditch (215,505)
-farm-north (105,215)     farm-south (55,530)
+farm-north (95,150)      farm-south (55,530)
 merchant: warrington (95,5) shrewsbury (5,240) nottingham (395,85) gloucester (60,690) oxford (330,640)
 ```
 
@@ -339,6 +346,8 @@ merchant: warrington (95,5) shrewsbury (5,240) nottingham (395,85) gloucester (6
 - Create: `packages/web/src/game/ActionBar.tsx`（行动类型选择 → 参数收集 → submit）
 - Test: `packages/web/src/game/interactions.test.ts`
 
+**核心规则（违反会被 engine 判 illegal-action）：ActionBar 提交的必须是在 `legalActions` 中匹配到的条目本身，绝不新构造 Action 对象**——engine 对 scout cardIds 做有序逐元素比较（枚举按 i<j<k 产组合）、sell 只枚举"单块/全集"（设计 §3 规范化）。参数收集 = 逐步缩小 legalActions 子集，最后取唯一匹配项。
+
 **Interfaces:**
 - Produces:
   - `targetsFor(selectedCard, legalActions): { locations: Set<string>; links: Set<number>; industries: Map<string, IndustryType[]> }`——选中手牌后算出棋盘上可点目标
@@ -369,6 +378,7 @@ merchant: warrington (95,5) shrewsbury (5,240) nottingham (395,85) gloucester (6
 **Files:**
 - Modify: `README.md`（M2 状态、dev 启动指南：`npm run dev -w @brass/server` + `npm run dev -w @brass/web`，或 build 后单端口）
 - Modify: `packages/web/vitest.config.ts`（coverage 配置与 engine 一致风格）
+- 声明：设计 §4 的"真人回合提醒按钮"推迟到 M5（M2 仅"等待 X 行动"只读提示）
 
 - [ ] **Step 1: 手动验收脚本（报告里逐项打勾）**：两个浏览器窗口（或两机器局域网）建房 → 加入 → 开始 → 各行动类型至少一次 → 打完一局 → 终局画面 → 刷新重连 → 历史对局落库（sqlite 查表）
 - [ ] **Step 2: README + CI 核对（三个新包都在 typecheck+test 聚合里）**
