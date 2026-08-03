@@ -62,11 +62,44 @@ class FakeWebSocket implements WebSocketLike {
   }
 }
 
-function setup(reconnectDelayMs = 0): { store: GameStore } {
+/** 内存版 SessionStorageLike：模拟 localStorage（key 枚举按插入序）。 */
+class FakeStorage {
+  private readonly map = new Map<string, string>();
+
+  get length(): number {
+    return this.map.size;
+  }
+
+  getItem(key: string): string | null {
+    return this.map.get(key) ?? null;
+  }
+
+  setItem(key: string, value: string): void {
+    this.map.set(key, value);
+  }
+
+  removeItem(key: string): void {
+    this.map.delete(key);
+  }
+
+  key(index: number): string | null {
+    return [...this.map.keys()][index] ?? null;
+  }
+}
+
+function setup(
+  reconnectDelayMs = 0,
+  opts: { storage?: FakeStorage; tabId?: string } = {},
+): { store: GameStore; storage: FakeStorage } {
   FakeWebSocket.instances = [];
+  const storage = opts.storage ?? new FakeStorage();
   const client = new GameClient('ws://test/ws', (url) => new FakeWebSocket(url));
-  const store = new GameStore(client, { reconnectDelayMs });
-  return { store };
+  const store = new GameStore(client, {
+    reconnectDelayMs,
+    storage,
+    tabId: opts.tabId ?? 'tab-A',
+  });
+  return { store, storage };
 }
 
 function lastWs(): FakeWebSocket {
@@ -109,6 +142,7 @@ describe('GameStore 状态迁移', () => {
     expect(s.log).toEqual([]);
     expect(s.gameOver).toBeNull();
     expect(s.selectedCard).toBeNull();
+    expect(s.takenOver).toBe(false);
   });
 
   it('connect → connecting；ws open → connected', () => {
@@ -373,5 +407,175 @@ describe('useGameStore', () => {
       store.connect();
     });
     expect(result.current.connection).toBe('disconnected');
+  });
+});
+
+/** 开房并入座：connect → open → credentials + room_state。 */
+function enterRoom(store: GameStore, code = 'ABCD'): FakeWebSocket {
+  store.connect();
+  const ws = lastWs();
+  ws.open();
+  ws.emit({ type: 'credentials', protocolVersion: PROTOCOL_VERSION, seat: 0, token: 'tok-A' });
+  ws.emit({
+    type: 'room_state',
+    protocolVersion: PROTOCOL_VERSION,
+    room: { ...roomFixture(), code },
+    yourSeat: 0,
+  });
+  return ws;
+}
+
+describe('GameStore token 持久化与恢复', () => {
+  it('credentials + room_state 后 token 按房间号持久化到 storage', () => {
+    const { store, storage } = setup();
+    enterRoom(store);
+    expect(storage.getItem('brass:token:ABCD')).toBe('tok-A');
+  });
+
+  it('restoreSession 读到已存 token：connect 后自动 resume 抢回座位', () => {
+    const storage = new FakeStorage();
+    storage.setItem('brass:token:WXYZ23', 'tok-old');
+    const { store } = setup(0, { storage });
+    expect(store.restoreSession()).toBe(true);
+    expect(store.getState().token).toBe('tok-old');
+    store.connect();
+    const ws = lastWs();
+    ws.open();
+    expect(ws.lastSent()).toEqual({
+      type: 'resume',
+      protocolVersion: PROTOCOL_VERSION,
+      token: 'tok-old',
+    });
+  });
+
+  it('无已存 token 时 restoreSession 返回 false，connect 后不自动发 resume', () => {
+    const { store } = setup();
+    expect(store.restoreSession()).toBe(false);
+    store.connect();
+    const ws = lastWs();
+    ws.open();
+    expect(ws.sent).toHaveLength(0);
+  });
+
+  it('resume 失败（invalid-token / session-lost）→ 清 token 与持久化、回大厅态', () => {
+    const storage = new FakeStorage();
+    storage.setItem('brass:token:WXYZ23', 'tok-dead');
+    const { store } = setup(0, { storage });
+    store.restoreSession();
+    store.connect();
+    const ws = lastWs();
+    ws.open();
+    ws.emit({
+      type: 'error',
+      protocolVersion: PROTOCOL_VERSION,
+      code: 'session-lost',
+      message: '对局已随服务器重启丢失（M2 不恢复进行中对局）',
+    });
+    const s = store.getState();
+    expect(s.token).toBeNull();
+    expect(s.room).toBeNull();
+    expect(s.seat).toBeNull();
+    expect(s.lastError?.code).toBe('session-lost');
+    expect(storage.getItem('brass:token:WXYZ23')).toBeNull();
+  });
+});
+
+describe('GameStore 双标签页接管', () => {
+  it('本 tab 发 resume 时写 owner 标记（tabId + 时间戳）', () => {
+    const storage = new FakeStorage();
+    storage.setItem('brass:token:WXYZ23', 'tok-A');
+    const { store } = setup(0, { storage, tabId: 'tab-A' });
+    store.restoreSession();
+    store.connect();
+    lastWs().open();
+    const marker = JSON.parse(storage.getItem('brass:owner:WXYZ23') ?? 'null') as {
+      tabId: string;
+      at: number;
+    } | null;
+    expect(marker?.tabId).toBe('tab-A');
+    expect(typeof marker?.at).toBe('number');
+  });
+
+  it('被动 close 且 owner 标记为他 tab 新鲜值 → takenOver，停止自动重连', async () => {
+    const storage = new FakeStorage();
+    const { store } = setup(0, { storage, tabId: 'tab-A' });
+    const ws = enterRoom(store);
+    // 另一标签页用同 token resume：先写自己的 owner 标记，服务器随后踢掉本连接
+    storage.setItem(
+      'brass:owner:ABCD',
+      JSON.stringify({ tabId: 'tab-B', at: Date.now() }),
+    );
+    ws.serverClose();
+    await tick();
+    const s = store.getState();
+    expect(s.takenOver).toBe(true);
+    expect(s.connection).toBe('disconnected');
+    expect(FakeWebSocket.instances).toHaveLength(1); // 没有自动重连
+  });
+
+  it('reclaim 重新接管：重连并自动 resume，takenOver 解除', async () => {
+    const storage = new FakeStorage();
+    const { store } = setup(0, { storage, tabId: 'tab-A' });
+    const ws = enterRoom(store);
+    storage.setItem(
+      'brass:owner:ABCD',
+      JSON.stringify({ tabId: 'tab-B', at: Date.now() }),
+    );
+    ws.serverClose();
+    await tick();
+    expect(store.getState().takenOver).toBe(true);
+    store.reclaim();
+    const ws2 = lastWs();
+    expect(ws2).not.toBe(ws);
+    ws2.open();
+    expect(ws2.lastSent()).toEqual({
+      type: 'resume',
+      protocolVersion: PROTOCOL_VERSION,
+      token: 'tok-A',
+    });
+    expect(store.getState().takenOver).toBe(false);
+    // 重新接管后 owner 标记回到本 tab
+    const marker = JSON.parse(storage.getItem('brass:owner:ABCD') ?? 'null') as {
+      tabId: string;
+    } | null;
+    expect(marker?.tabId).toBe('tab-A');
+  });
+
+  it('owner 标记过期（他 tab 早已关闭）→ 视为普通断线，照常自动重连', async () => {
+    const storage = new FakeStorage();
+    const { store } = setup(0, { storage, tabId: 'tab-A' });
+    const ws = enterRoom(store);
+    storage.setItem(
+      'brass:owner:ABCD',
+      JSON.stringify({ tabId: 'tab-B', at: Date.now() - 60_000 }),
+    );
+    ws.serverClose();
+    await tick();
+    expect(store.getState().takenOver).toBe(false);
+    expect(FakeWebSocket.instances).toHaveLength(2); // 已自动重连
+  });
+});
+
+describe('GameStore leaveRoom（返回大厅）', () => {
+  it('清空持久化 token/owner、重置状态、并以干净身份重连', () => {
+    const storage = new FakeStorage();
+    const { store } = setup(0, { storage, tabId: 'tab-A' });
+    enterRoom(store);
+    expect(storage.getItem('brass:token:ABCD')).toBe('tok-A');
+    store.leaveRoom();
+    expect(storage.getItem('brass:token:ABCD')).toBeNull();
+    expect(storage.getItem('brass:owner:ABCD')).toBeNull();
+    const s = store.getState();
+    expect(s.token).toBeNull();
+    expect(s.room).toBeNull();
+    expect(s.seat).toBeNull();
+    expect(s.snapshot).toBeNull();
+    expect(s.gameOver).toBeNull();
+    expect(s.takenOver).toBe(false);
+    // 干净身份重连：新 ws，open 后不发 resume
+    const ws = lastWs();
+    ws.open();
+    expect(ws.sent).toHaveLength(0);
+    expect(store.getState().connection).toBe('connected');
   });
 });
