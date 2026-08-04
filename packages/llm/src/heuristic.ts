@@ -31,6 +31,7 @@ import {
   type Action,
   type GameState,
   type IndustryType,
+  type MerchantId,
   type PlayerAgent,
   type PlayerIndex,
   type TileDef,
@@ -135,7 +136,7 @@ function scoreNetwork(
       if (net.has(e) || counted.has(e)) continue;
       counted.add(e);
       if (Object.prototype.hasOwnProperty.call(MERCHANTS, e)) {
-        if (!merchants.has(e)) score += w.networkMerchant;
+        if (!merchants.has(e as MerchantId)) score += w.networkMerchant;
       } else {
         score += w.networkNewLocation;
       }
