@@ -1,0 +1,168 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: #1a1d23;
+  color: #e6e6e6;
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.app h1 {
+  font-size: 2rem;
+  letter-spacing: 0.04em;
+}
+
+.subtitle {
+  color: #9aa4b2;
+}
+
+.status {
+  margin-top: 32px;
+  color: #c9a86a;
+}
+
+/* ---- M2 Task 10/11 对局画面 ---- */
+.game-screen {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.board-svg {
+  width: 100%;
+  height: auto;
+  background: #23262e;
+  border-radius: 8px;
+}
+
+.board-slot.highlighted {
+  cursor: pointer;
+}
+
+.board-link.highlighted {
+  cursor: pointer;
+}
+
+.hand-bar .own-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hand-card {
+  padding: 6px 10px;
+  border: 1px solid #4a5160;
+  border-radius: 6px;
+  background: #2a2e38;
+  color: #e6e6e6;
+  cursor: pointer;
+}
+
+.hand-card.selected {
+  border-color: #e91e63;
+  box-shadow: 0 0 0 1px #e91e63;
+}
+
+.hand-card .wild-badge {
+  margin-left: 4px;
+  font-size: 0.7em;
+  color: #c9a86a;
+}
+
+.action-bar {
+  border: 1px solid #4a5160;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.action-bar h3 {
+  margin: 0 0 8px;
+}
+
+.action-hint {
+  color: #9aa4b2;
+  margin: 4px 0;
+}
+
+.action-choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.action-choices button {
+  padding: 4px 10px;
+  border: 1px solid #4a5160;
+  border-radius: 6px;
+  background: #2a2e38;
+  color: #e6e6e6;
+  cursor: pointer;
+}
+
+.action-choices button.selected {
+  border-color: #e91e63;
+  box-shadow: 0 0 0 1px #e91e63;
+}
+
+.action-choices button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.action-confirm {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.action-confirm button[data-testid='confirm-action'] {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #c9a86a;
+  color: #1a1d23;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.action-confirm button[data-testid='confirm-action']:disabled {
+  background: #4a5160;
+  color: #9aa4b2;
+  cursor: default;
+}
+
+.action-confirm button[data-testid='cancel-draft'] {
+  padding: 6px 12px;
+  border: 1px solid #4a5160;
+  border-radius: 6px;
+  background: transparent;
+  color: #9aa4b2;
+  cursor: pointer;
+}
+
+.game-over {
+  color: #c9a86a;
+  font-weight: 600;
+}
+
+.error {
+  color: #e74c3c;
+}
