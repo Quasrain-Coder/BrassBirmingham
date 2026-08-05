@@ -86,6 +86,19 @@ export function CoalIronMarket({ state }: { state: FilteredState }): ReactElemen
   );
 }
 
+/** 座位 AI 徽章：房间信息标记 isAI 时渲染（无房间信息或对局外不渲染）。 */
+export function AIBadge({
+  room,
+  seat,
+}: {
+  room: RoomState | undefined;
+  seat: PlayerIndex;
+}): ReactElement | null {
+  const info = room?.seats.find((s) => s !== null && s.seat === seat);
+  if (info === undefined || info === null || !info.isAI) return null;
+  return <span className="ai-badge">AI</span>;
+}
+
 export function IncomeTrack({
   state,
   room,
@@ -100,6 +113,7 @@ export function IncomeTrack({
         {state.players.map((p, seat) => (
           <li key={seat} data-testid={`income-row-${seat}`}>
             <span className="player-name">{playerName(room, seat)}</span>{' '}
+            <AIBadge room={room} seat={seat} />{' '}
             <span>等级{incomeLevelAt(p.incomeSpace)}</span>{' '}
             <span>£{p.money}</span> <span>{p.vp}VP</span>
           </li>
@@ -112,9 +126,12 @@ export function IncomeTrack({
 export function TurnOrderBar({
   state,
   room,
+  thinkingSeats,
 }: {
   state: FilteredState;
   room?: RoomState | undefined;
+  /** ai_thinking 中的座位（M3）：高亮并显示"思考中…"。 */
+  thinkingSeats?: readonly PlayerIndex[] | undefined;
 }): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx];
   return (
@@ -123,14 +140,23 @@ export function TurnOrderBar({
       <ol data-testid="turn-order">
         {state.turnOrder.map((seat) => {
           const player = state.players[seat];
+          const thinking = thinkingSeats?.includes(seat) ?? false;
+          const classes = [
+            seat === current ? 'current' : '',
+            thinking ? 'thinking' : '',
+          ]
+            .filter((c) => c !== '')
+            .join(' ');
           return (
             <li
               key={seat}
               data-player={seat}
-              className={seat === current ? 'current' : undefined}
+              className={classes === '' ? undefined : classes}
             >
               <span className="player-name">{playerName(room, seat)}</span>{' '}
+              <AIBadge room={room} seat={seat} />{' '}
               <span>已花 £{player?.spentThisRound ?? 0}</span>
+              {thinking ? <span className="thinking-badge"> 思考中…</span> : null}
             </li>
           );
         })}
@@ -244,6 +270,12 @@ export function LogPanel({
           {log.map((entry) => (
             <li key={entry.seq} data-testid="log-entry">
               #{entry.seq} {playerName(room, entry.player)}：{actionSummary(entry.action)}
+              {entry.degraded === true ? (
+                <span className="degraded-badge">（已降级）</span>
+              ) : null}
+              {entry.reason !== undefined ? (
+                <blockquote className="log-reason">{entry.reason}</blockquote>
+              ) : null}
             </li>
           ))}
         </ol>

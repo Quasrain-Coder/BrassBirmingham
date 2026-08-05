@@ -295,8 +295,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     return new HeuristicAgent();
   }
 
-  /** AI 行动落库 + 广播（action_applied 带 reason；终局则补 game_over）。 */
-  function applyAIAction(entry: SessionEntry, seat: PlayerIndex, action: Action, reason: string): void {
+  /** AI 行动落库 + 广播（action_applied 带 reason/degraded；终局则补 game_over）。 */
+  function applyAIAction(entry: SessionEntry, seat: PlayerIndex, action: Action, reason: string, degraded: boolean): void {
     const { seq } = entry.session.submitAction(seat, action);
     broadcast(entry.room, {
       type: 'action_applied',
@@ -306,6 +306,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
       action,
       events: entry.session.state.lastEvents,
       reason,
+      ...(degraded ? { degraded: true } : {}),
     });
     broadcastSnapshots(entry);
     if (entry.session.finished) {
@@ -360,7 +361,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
           const state = entry.session.state;
           const legal = enumerateActions(state, seat);
           const decision = await agent.decide(state, seat, legal);
-          applyAIAction(entry, seat, decision.action, decision.reason);
+          applyAIAction(entry, seat, decision.action, decision.reason, decision.degraded);
           // usage 只在行动成功落库后计数（submit 抛错不虚增）
           entry.usage.decisions += 1;
           entry.usage.input += decision.usage.input;
@@ -378,7 +379,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
             const state = entry.session.state;
             const legal = enumerateActions(state, seat);
             const d = await lastResort.decide(state, seat, legal);
-            applyAIAction(entry, seat, d.action, `末级兜底（agent 异常）：${d.reason}`);
+            applyAIAction(entry, seat, d.action, `末级兜底（agent 异常）：${d.reason}`, true);
           } catch (fallbackErr) {
             console.error(
               `[ai] 末级兜底失败（game=${entry.session.gameId} seat=${seat}），放弃本次驱动`,

@@ -392,11 +392,14 @@ describe('WS 集成：AI 座位与驱动循环', () => {
         );
         expect(aiApplied.length).toBeGreaterThan(0);
         for (const m of aiApplied) expect(typeof m.reason).toBe('string');
+        // RecordingAgent 内嵌 HeuristicAgent：决策均为降级路径 → degraded 下发
+        for (const m of aiApplied) expect(m.degraded).toBe(true);
         const humanApplied = msgs.filter(
           (m) => m.type === 'action_applied' && (m.player === 0 || m.player === 1),
         );
         expect(humanApplied.length).toBeGreaterThan(0);
         for (const m of humanApplied) expect(m.reason).toBeUndefined();
+        for (const m of humanApplied) expect(m.degraded).toBeUndefined();
         // AI 行动走同一条落库/广播路径：seq 连续无重号
         const seqs = msgs.filter((m) => m.type === 'action_applied').map((m) => m.seq);
         expect(seqs).toEqual(Array.from({ length: seqs.length }, (_, i) => i));
@@ -434,6 +437,9 @@ describe('WS 集成：AI 座位与驱动循环', () => {
       );
       expect(aiApplied.length).toBeGreaterThan(0);
       expect(aiApplied.some((m) => String(m.reason).includes('heuristic'))).toBe(true);
+      // 末级兜底行动标记 degraded（前端据此渲染"（已降级）"）
+      const fallback = aiApplied.find((m) => String(m.reason).includes('末级兜底'));
+      expect(fallback?.degraded).toBe(true);
     },
   );
 

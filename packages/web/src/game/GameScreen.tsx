@@ -11,6 +11,7 @@ import type { Action, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { BoardSvg } from '../board/BoardSvg';
 import { ActionBar, useActionDraft } from './ActionBar';
+import { AIIndicator } from './AIIndicator';
 import { HandBar, LogPanel, TurnOrderBar, playerName } from './Panels';
 import type { GameStore, GameStoreState, LogEntry } from './store';
 import { useGameStore } from './store';
@@ -23,6 +24,7 @@ interface GameBoardProps {
   selectedCard: string | null;
   room: RoomState | null;
   log: LogEntry[];
+  thinkingSeats: PlayerIndex[];
   gameOver: GameStoreState['gameOver'];
 }
 
@@ -37,6 +39,7 @@ function GameBoard({
   selectedCard,
   room,
   log,
+  thinkingSeats,
   gameOver,
 }: GameBoardProps): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx] ?? seat;
@@ -58,7 +61,8 @@ function GameBoard({
           （{gameOver.finalScores.join(' / ')} 分）
         </p>
       ) : null}
-      <TurnOrderBar state={state} room={room ?? undefined} />
+      <TurnOrderBar state={state} room={room ?? undefined} thinkingSeats={thinkingSeats} />
+      <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
       <BoardSvg
         state={state}
         highlights={myTurn ? draft.highlights : undefined}
@@ -109,6 +113,7 @@ export function GameScreen({ store }: { store: GameStore }): ReactElement {
       selectedCard={s.selectedCard}
       room={s.room}
       log={s.log}
+      thinkingSeats={s.thinkingSeats}
       gameOver={s.gameOver}
     />
   );
