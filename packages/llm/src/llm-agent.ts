@@ -82,6 +82,11 @@ export function lookaheadSection(state: GameState): string {
 
 /** choiceIndex 无效时的人类可读原因（写入重试 prompt 与降级 reason）。 */
 function invalidReason(choiceIndex: number, candidates: number): string {
+  // -1 为"无 tool_use / 非整数"哨兵（见 client.ts parseChooseInput）——
+  // 区别于显式越界，措辞指明须调用 choose 工具。
+  if (choiceIndex === -1) {
+    return '未返回结构化选择（须调用 choose 工具提交 choice_index 与 reason）';
+  }
   return (
     `choiceIndex=${choiceIndex} 超出候选范围 ` +
     `[0, ${candidates - 1}]（共 ${candidates} 个候选）`

@@ -187,8 +187,9 @@ describe('buildDecisionPrompt', () => {
     for (const c of s.players[0]!.hand) {
       expect(system).not.toContain(c.id);
     }
-    // 输出格式说明在 system 里（稳定前缀的一部分）
-    expect(system).toContain('choiceIndex');
+    // 输出方式说明在 system 里（稳定前缀的一部分）：tool use 口径，不提 JSON 自由文本
+    expect(system).toContain('choose 工具');
+    expect(system).not.toContain('JSON');
   });
 
   it('user = 局势摘要 + 0-based 连续编号候选列表', () => {

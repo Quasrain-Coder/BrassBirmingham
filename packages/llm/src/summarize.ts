@@ -415,7 +415,7 @@ export const SYSTEM_PROMPT = [
   '- 翻面是核心：煤/铁/酿酒厂资源耗尽自动翻面；棉纺/制造/陶瓷靠 sell 翻面。翻面给 VP、收入前进与 Link 图标。',
   '- 连通：建造/卖货所需煤、啤酒沿已建 Link（任何玩家的）可达即免费取，不足按市场价买；从市场买煤必须连通商人位，买铁不需要连通。',
   '- 时代：运河时代后进入铁路时代（运河末清算）；1 级板块（除陶瓷）铁路时代不可建，且运河时代末移除。',
-  '输出格式：只回复一个 JSON 对象 {"choiceIndex": <候选编号，0 起>, "reason": "<一句话中文理由>"}，不要输出任何其他内容。',
+  '输出方式：调用 choose 工具提交你的选择——choice_index 参数填候选编号（0 起），reason 参数填一句话中文理由。不要输出任何其他内容。',
 ].join('\n');
 
 /**
@@ -430,10 +430,10 @@ export function buildDecisionPrompt(
   const user = [
     summarizeState(state, player),
     '',
-    '【候选行动】（编号 0 起，choiceIndex 与编号一致）',
+    '【候选行动】（编号 0 起，choose 工具的 choice_index 参数与编号一致）',
     ...candidates.map((c, i) => `${i}. ${c.description}`),
     '',
-    '请只回复一个 JSON 对象：{"choiceIndex": <编号>, "reason": "<一句话中文理由>"}',
+    '请调用 choose 工具提交选择：choice_index 填候选编号（0 起），reason 填一句话中文理由。',
   ].join('\n');
   return { system: SYSTEM_PROMPT, user };
 }

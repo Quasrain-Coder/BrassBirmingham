@@ -93,12 +93,15 @@ describe('LLMAgent 校验与重试', () => {
     expect(d.usage).toEqual({ input: 30, output: 11 });
   });
 
-  it('choiceIndex 为负数 → 重试', async () => {
+  it('choiceIndex 为 -1（含无 tool_use 哨兵）→ 重试，原因指明须调用 choose 工具', async () => {
     const { state, legal } = opening();
     const client = new FixtureClient(makeResponse(-1), makeResponse(0));
     const d = await new LLMAgent(client, 'normal').decide(state, 0, legal);
     expect(client.requests).toHaveLength(2);
-    expect(client.requests[1]!.user).toContain('上次回复无效');
+    const retryUser = client.requests[1]!.user;
+    expect(retryUser).toContain('上次回复无效');
+    expect(retryUser).toContain('未返回结构化选择');
+    expect(retryUser).toContain('choose 工具');
     expect(d.degraded).toBe(false);
   });
 

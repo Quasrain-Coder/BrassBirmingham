@@ -49,9 +49,11 @@ interface ChooseInput {
 
 function parseChooseInput(input: unknown): { choiceIndex: number; reason: string } {
   const raw: ChooseInput = typeof input === 'object' && input !== null ? input : {};
+  // 非整数（含小数，如 -0.5）视为无效：返回 -1 走 LLMAgent 重试通道，
+  // 不做 Math.trunc 静默截断（-0.5 截断成 -0 会误中候选 0）。
   const idx =
-    typeof raw.choice_index === 'number' && Number.isFinite(raw.choice_index)
-      ? Math.trunc(raw.choice_index)
+    typeof raw.choice_index === 'number' && Number.isInteger(raw.choice_index)
+      ? raw.choice_index
       : -1;
   const reason = typeof raw.reason === 'string' ? raw.reason : '';
   return { choiceIndex: idx, reason };
@@ -62,8 +64,11 @@ export class AnthropicClient implements ClaudeClient {
   private readonly anthropic: Anthropic;
 
   constructor(opts?: { apiKey?: string; baseURL?: string }) {
-    // apiKey 缺省时 SDK 读 ANTHROPIC_API_KEY 环境变量
+    // apiKey 缺省时 SDK 读 ANTHROPIC_API_KEY 环境变量；
+    // maxRetries: 0——SDK 默认对 429/5xx 内部重试 2 次会侵蚀 8s 超时预算，
+    // 失败直接抛给 LLMAgent 走降级（重试策略由决策层持有）。
     this.anthropic = new Anthropic({
+      maxRetries: 0,
       ...(opts?.apiKey !== undefined ? { apiKey: opts.apiKey } : {}),
       ...(opts?.baseURL !== undefined ? { baseURL: opts.baseURL } : {}),
     });
