@@ -4,10 +4,17 @@
  * 裁决（task-4 brief）：startGame 要求满员；任意座位成员可开始（AI 座位 M3 再加）。
  * 随机性一律用 node:crypto——server 不受引擎种子约束；engine 种子在 startGame 时落地
  * （config.seed 未给则 crypto 随机生成并保存，重放/复盘需要确定性种子）。
+ *
+ * M3（AI 座位）：RoomConfig.aiSeats = { count, difficulty }，createRoom 校验
+ * 1 <= count <= playerCount-1（非法 'invalid-config'）。startGame 条件放宽为：
+ * 真人数 >= 1 且（满员 或 真人 + count >= playerCount）；空位由 AI 填充，
+ * 填充数 = min(count, playerCount - 真人数)（clamp），昵称自动（"AI-1（普通）"）。
+ * AI 座位的 token 是伪造的 crypto token——只为满足 GameSession 构造/落库，
+ * **永不进 tokenIndex、永不下发**（resume/submit 均不可达）。
  */
 import { randomBytes } from 'node:crypto';
 import type { PlayerIndex } from '@brass/engine';
-import type { RoomConfig, RoomState } from '@brass/protocol';
+import type { AIDifficulty, RoomConfig, RoomState } from '@brass/protocol';
 
 export type RoomErrorCode =
   | 'room-full'
@@ -30,12 +37,13 @@ export class RoomError extends Error {
   }
 }
 
-/** 内部座位：含 token，绝不直接广播（广播用 toRoomState）。 */
+/** 内部座位：含 token，绝不直接广播（广播用 toRoomState）。AI 座位的 token 是伪造的。 */
 export interface Seat {
   seat: PlayerIndex;
   nickname: string;
   token: string;
   connected: boolean;
+  isAI: boolean;
 }
 
 export interface Room {
@@ -65,10 +73,17 @@ const NICKNAME_MAX = 16;
 export function toRoomState(room: Room): RoomState {
   return {
     code: room.code,
-    config: { playerCount: room.config.playerCount },
+    // config 显式重建：含 aiSeats（大厅展示 AI 配置），绝不含 seed 值
+    config:
+      room.config.aiSeats !== undefined
+        ? {
+            playerCount: room.config.playerCount,
+            aiSeats: { count: room.config.aiSeats.count, difficulty: room.config.aiSeats.difficulty },
+          }
+        : { playerCount: room.config.playerCount },
     customSeed: room.customSeed,
     seats: room.seats.map((s) =>
-      s === null ? null : { seat: s.seat, nickname: s.nickname, isAI: false, connected: s.connected },
+      s === null ? null : { seat: s.seat, nickname: s.nickname, isAI: s.isAI, connected: s.connected },
     ),
     started: room.started,
   };
@@ -83,12 +98,15 @@ export class RoomManager {
     if (config.playerCount !== 2 && config.playerCount !== 3 && config.playerCount !== 4) {
       throw new RoomError('invalid-config', `playerCount 须为 2/3/4，收到 ${config.playerCount}`);
     }
+    if (config.aiSeats !== undefined) {
+      validateAISeats(config.aiSeats, config.playerCount);
+    }
     const code = this.generateCode();
     const token = generateToken();
     // 浅拷贝 config，防调用方后续 mutate 影响房间
     const configCopy: RoomConfig = { ...config };
     const seats: (Seat | null)[] = Array.from({ length: config.playerCount }, () => null);
-    seats[0] = { seat: 0, nickname: name, token, connected: true };
+    seats[0] = { seat: 0, nickname: name, token, connected: true, isAI: false };
     const room: Room = {
       code,
       config: configCopy,
@@ -116,12 +134,19 @@ export class RoomManager {
       throw new RoomError('room-full', `房间 ${room.code} 已满员`);
     }
     const token = generateToken();
-    room.seats[seat] = { seat, nickname: name, token, connected: true };
+    room.seats[seat] = { seat, nickname: name, token, connected: true, isAI: false };
     this.tokenIndex.set(token, room);
     return { room, seat, token };
   }
 
-  /** 满员校验 + 种子落地；返回房间（GameSession 是 Task 5）。 */
+  /**
+   * 开局校验 + AI 填充 + 种子落地；返回房间（GameSession 由 WS 层建）。
+   *
+   * M3 条件：真人数 >= 1 且（满员 或 真人 + aiSeats.count >= playerCount）。
+   * AI 填充数 = min(count, playerCount - 真人数)（满员真人房填 0 个）。AI 座位
+   * token 为伪造 crypto token：满足 GameSession 构造/落库，但**不进 tokenIndex、
+   * 永不下发**（resume/submit 不可达）。connected 恒 true（AI 无连接概念）。
+   */
   startGame(token: string): Room {
     const room = this.tokenIndex.get(token);
     if (room === undefined) {
@@ -130,8 +155,32 @@ export class RoomManager {
     if (room.started) {
       throw new RoomError('already-started', `房间 ${room.code} 已开始`);
     }
-    if (room.seats.includes(null)) {
-      throw new RoomError('room-not-full', `房间 ${room.code} 未满员（M2 要求满员开始）`);
+    const humanCount = room.seats.filter((s) => s !== null).length;
+    const aiConfig = room.config.aiSeats;
+    const full = !room.seats.includes(null);
+    if (
+      humanCount < 1 ||
+      (!full && humanCount + (aiConfig?.count ?? 0) < room.config.playerCount)
+    ) {
+      throw new RoomError(
+        'room-not-full',
+        `房间 ${room.code} 人数不足：真人 ${humanCount} + AI ${aiConfig?.count ?? 0} < ${room.config.playerCount}`,
+      );
+    }
+    const fill = Math.min(aiConfig?.count ?? 0, room.config.playerCount - humanCount);
+    if (fill > 0 && aiConfig !== undefined) {
+      let n = 0;
+      for (let i = 0; i < room.seats.length && n < fill; i++) {
+        if (room.seats[i] !== null) continue;
+        n += 1;
+        room.seats[i] = {
+          seat: i as PlayerIndex,
+          nickname: `AI-${n}（${DIFFICULTY_LABEL[aiConfig.difficulty]}）`,
+          token: generateToken(), // 伪造 token：不进 tokenIndex
+          connected: true,
+          isAI: true,
+        };
+      }
     }
     room.started = true;
     room.seed = room.config.seed ?? randomSeed();
@@ -167,6 +216,32 @@ export class RoomManager {
 /** 24 字符 base64url（18 字节随机）。 */
 function generateToken(): string {
   return randomBytes(18).toString('base64url');
+}
+
+const DIFFICULTY_LABEL: Record<AIDifficulty, string> = {
+  easy: '简单',
+  normal: '普通',
+  hard: '困难',
+};
+
+const AI_DIFFICULTIES: ReadonlySet<string> = new Set(['easy', 'normal', 'hard']);
+
+function validateAISeats(
+  aiSeats: { count: number; difficulty: string },
+  playerCount: number,
+): void {
+  if (!Number.isInteger(aiSeats.count) || aiSeats.count < 1 || aiSeats.count > playerCount - 1) {
+    throw new RoomError(
+      'invalid-config',
+      `aiSeats.count 须为 1..${playerCount - 1} 的整数，收到 ${aiSeats.count}`,
+    );
+  }
+  if (!AI_DIFFICULTIES.has(aiSeats.difficulty)) {
+    throw new RoomError(
+      'invalid-config',
+      `aiSeats.difficulty 须为 easy/normal/hard，收到 ${String(aiSeats.difficulty)}`,
+    );
+  }
 }
 
 function randomSeed(): number {

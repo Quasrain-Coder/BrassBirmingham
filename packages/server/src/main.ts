@@ -1,9 +1,13 @@
 /**
  * 生产入口：PORT（默认 8420）、DB_PATH（默认 ./brass.db）、WEB_DIST（存在则同端口托管）。
  * dev 不设 WEB_DIST——vite dev server 起静态，proxy 转发 /ws 到本进程。
+ *
+ * AI 座位：ANTHROPIC_API_KEY 存在时经 AnthropicClient 构造 LLMAgent（按房难度）；
+ * 缺失 → aiAgentFactory 返回 HeuristicAgent（启动日志警告，对局可玩但无 LLM 决策）。
  */
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { AnthropicClient, HeuristicAgent, LLMAgent } from '@brass/llm';
 import { createGameServer, type GameServerOptions } from './ws.js';
 
 async function main(): Promise<void> {
@@ -18,6 +22,16 @@ async function main(): Promise<void> {
   const webDist = process.env['WEB_DIST'];
   if (webDist !== undefined && webDist !== '' && existsSync(webDist)) {
     options.staticDir = resolve(webDist);
+  }
+  const anthropicKey = process.env['ANTHROPIC_API_KEY'];
+  if (anthropicKey !== undefined && anthropicKey !== '') {
+    const client = new AnthropicClient({ apiKey: anthropicKey });
+    options.aiAgentFactory = (_seat, difficulty) => new LLMAgent(client, difficulty);
+  } else {
+    console.warn(
+      '[brass] ANTHROPIC_API_KEY 未设置：AI 座位降级为内置启发式（HeuristicAgent），不产生 LLM 调用',
+    );
+    options.aiAgentFactory = () => new HeuristicAgent();
   }
   const server = await createGameServer(options);
   console.log(
