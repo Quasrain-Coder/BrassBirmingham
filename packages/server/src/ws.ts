@@ -148,7 +148,13 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
 
   function send(conn: Conn, msg: ServerMessage): void {
     if (conn.ws.readyState !== WebSocket.OPEN) return;
-    conn.ws.send(JSON.stringify(msg));
+    try {
+      conn.ws.send(JSON.stringify(msg));
+    } catch {
+      // 连接过渡态（terminate 后 close 未处理完）send 可同步抛——单连接投递失败
+      // 不应炸掉广播方（尤其 driveAI 的 async 循环，抛出会变 unhandled rejection）。
+      // close 事件随后统一清理该连接。
+    }
   }
 
   function sendError(conn: Conn, code: string, message: string): void {
@@ -354,10 +360,11 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
           const state = entry.session.state;
           const legal = enumerateActions(state, seat);
           const decision = await agent.decide(state, seat, legal);
+          applyAIAction(entry, seat, decision.action, decision.reason);
+          // usage 只在行动成功落库后计数（submit 抛错不虚增）
           entry.usage.decisions += 1;
           entry.usage.input += decision.usage.input;
           entry.usage.output += decision.usage.output;
-          applyAIAction(entry, seat, decision.action, decision.reason);
         } catch (err) {
           console.error(
             `[ai] driveAI 未预期异常（game=${entry.session.gameId} seat=${seat}），走 Heuristic 末级兜底`,

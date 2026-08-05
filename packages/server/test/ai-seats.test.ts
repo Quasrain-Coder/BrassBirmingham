@@ -24,6 +24,7 @@
  * 的独立 RNG 模式）。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { WebSocket } from 'ws';
 import { createRng, type Rng } from '@brass/engine';
 import type { Action, GameState, PlayerIndex } from '@brass/engine';
 import { HeuristicAgent, type DecidingAgent, type Decision } from '@brass/llm';
@@ -509,6 +510,67 @@ describe('WS 集成：AI 座位与驱动循环', () => {
       );
       expect(aiApplied.length).toBeGreaterThan(0);
       for (const m of aiApplied) expect(typeof m.reason).toBe('string');
+    },
+  );
+
+  it(
+    '广播加固：send 在连接过渡态同步抛错时 driveAI 完整跑完（无 unhandled rejection）',
+    { timeout: 180_000 },
+    async () => {
+      // 模拟 terminate 未 close 处理窗口的症状：ws.send 同步抛（readyState 检查
+      // 与底层 socket 写之间状态已过渡）。只拦 ai_thinking 载荷，action_applied/
+      // snapshot 正常放行，人类驱动不受影响。
+      const originalSend = WebSocket.prototype.send;
+      let thrown = 0;
+      vi.spyOn(WebSocket.prototype, 'send').mockImplementation(function (
+        this: WebSocket,
+        data: unknown,
+        ...rest: unknown[]
+      ) {
+        if (typeof data === 'string' && data.includes('"ai_thinking"')) {
+          thrown += 1;
+          throw new Error('simulated transition-state send failure');
+        }
+        return Reflect.apply(originalSend, this, [data, ...rest]) as void;
+      });
+      const agent = new RecordingAgent();
+      const { players } = await setupGame({
+        playerCount: 2,
+        humans: 1,
+        aiCount: 1,
+        difficulty: 'normal',
+        seed: 3,
+        aiAgentFactory: () => agent,
+      });
+      await driveHumansUntilGameOver(players);
+      // 加固路径确实被走过，且 AI 走的是正常决策路径（非末级兜底）
+      expect(thrown).toBeGreaterThan(0);
+      expect(agent.calls).toBeGreaterThan(0);
+    },
+  );
+
+  it(
+    '真人连接被 terminate（未 close 处理）后对局继续：resume 接管座位并打完',
+    { timeout: 180_000 },
+    async () => {
+      const { server, players } = await setupGame({
+        playerCount: 3,
+        humans: 2,
+        aiCount: 1,
+        difficulty: 'easy',
+        seed: 21,
+        aiAgentFactory: () => new RecordingAgent(),
+      });
+      // 粗暴断开 seat 0（无 close 握手），随后用同 token resume 接管
+      players[0]!.client.ws.terminate();
+      const c = await harness.connect(server.port);
+      c.send({ type: 'resume', protocolVersion: PV, token: players[0]!.token });
+      const cred = await c.nextMessage('credentials');
+      expect(cred.seat).toBe(0);
+      await driveHumansUntilGameOver([
+        { client: c, token: players[0]!.token, rng: createRng(5_000) },
+        players[1]!,
+      ]);
     },
   );
 });

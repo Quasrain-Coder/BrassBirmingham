@@ -1,7 +1,8 @@
 /**
  * 房间管理器（内存态大厅）。Task 5 在其上挂 GameSession 与持久化。
  *
- * 裁决（task-4 brief）：startGame 要求满员；任意座位成员可开始（AI 座位 M3 再加）。
+ * 裁决（task-4 brief，M3 修订）：任意座位成员可开始（不限建房者）；startGame 条件
+ * 为"真人数 >= 1 且（满员 或 真人 + aiSeats.count >= playerCount）"（M2 曾要求满员）。
  * 随机性一律用 node:crypto——server 不受引擎种子约束；engine 种子在 startGame 时落地
  * （config.seed 未给则 crypto 随机生成并保存，重放/复盘需要确定性种子）。
  *
