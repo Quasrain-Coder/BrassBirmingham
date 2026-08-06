@@ -18,7 +18,7 @@ function parseSeed(raw: string): number | undefined {
   return Number.isInteger(n) ? n : undefined;
 }
 
-/** AI 难度中文标签（与 server rooms.ts DIFFICULTY_LABEL 口径一致）。 */
+/** AI 难度中文标签——与 packages/server/src/rooms.ts DIFFICULTY_LABEL 同步（双拷贝，改动需同步两侧）。 */
 const AI_DIFFICULTY_LABEL: Record<AIDifficulty, string> = {
   easy: '简单',
   normal: '普通',

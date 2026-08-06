@@ -219,6 +219,7 @@ function generateToken(): string {
   return randomBytes(18).toString('base64url');
 }
 
+// 与 packages/web/src/lobby/Lobby.tsx AI_DIFFICULTY_LABEL 同步（双拷贝，改动需同步两侧）
 const DIFFICULTY_LABEL: Record<AIDifficulty, string> = {
   easy: '简单',
   normal: '普通',

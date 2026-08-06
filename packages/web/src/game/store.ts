@@ -482,12 +482,15 @@ export class GameStore {
         break;
       }
       case 'ai_thinking': {
-        // true 加入（幂等）/ false 移除；新数组保证引用变化触发渲染
+        // true 加入（幂等）/ false 移除；两个分支都先 includes 判断——座位本就不在
+        // 列表时复用原数组，避免 filter 产出语义等价的新引用触发无谓 patch
         const next = msg.thinking
           ? this.state.thinkingSeats.includes(msg.seat)
             ? this.state.thinkingSeats
             : [...this.state.thinkingSeats, msg.seat]
-          : this.state.thinkingSeats.filter((s) => s !== msg.seat);
+          : this.state.thinkingSeats.includes(msg.seat)
+            ? this.state.thinkingSeats.filter((s) => s !== msg.seat)
+            : this.state.thinkingSeats;
         if (next !== this.state.thinkingSeats) this.patch({ thinkingSeats: next });
         break;
       }
