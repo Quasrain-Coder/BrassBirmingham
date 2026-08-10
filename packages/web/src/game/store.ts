@@ -18,6 +18,7 @@
  * - leaveRoom()（返回大厅）：清持久化、重置状态、以无 token 干净身份重连。
  *
  * 日志：action_applied 流环形缓冲，保留最新 LOG_CAPACITY 条。
+ * M3：ai_thinking 维护 thinkingSeats（AI 决策中指示）；AI 行动的 reason/degraded 进 LogEntry。
  */
 import { useSyncExternalStore } from 'react';
 import { PROTOCOL_VERSION } from '@brass/protocol';
@@ -165,6 +166,10 @@ export interface LogEntry {
   player: PlayerIndex;
   action: Action;
   events: unknown[];
+  /** AI 决策理由（真人行动无此字段）。 */
+  reason?: string;
+  /** true：该 AI 行动走了非 LLM 降级路径（启发式/兜底）。 */
+  degraded?: boolean;
 }
 
 export interface GameOverInfo {
@@ -184,6 +189,8 @@ export interface GameStoreState {
   /** 最近一次 snapshot 的 seq。 */
   seq: number;
   log: LogEntry[];
+  /** 正在决策中的 AI 座位（ai_thinking true 加入、false 移除）。 */
+  thinkingSeats: PlayerIndex[];
   gameOver: GameOverInfo | null;
   lastError: { code: string; message: string } | null;
   selectedCard: string | null;
@@ -202,6 +209,7 @@ const INITIAL_STATE: GameStoreState = {
   legalActions: [],
   seq: 0,
   log: [],
+  thinkingSeats: [],
   gameOver: null,
   lastError: null,
   selectedCard: null,
@@ -330,7 +338,7 @@ export class GameStore {
   leaveRoom(): void {
     this.disconnect();
     this.clearSession();
-    this.patch({ log: [], lastError: null, selectedCard: null });
+    this.patch({ log: [], thinkingSeats: [], lastError: null, selectedCard: null });
     this.connect();
   }
 
@@ -467,8 +475,23 @@ export class GameStore {
           player: msg.player,
           action: msg.action,
           events: msg.events,
+          ...(msg.reason !== undefined ? { reason: msg.reason } : {}),
+          ...(msg.degraded !== undefined ? { degraded: msg.degraded } : {}),
         };
         this.patch({ log: [...this.state.log, entry].slice(-LOG_CAPACITY) });
+        break;
+      }
+      case 'ai_thinking': {
+        // true 加入（幂等）/ false 移除；两个分支都先 includes 判断——座位本就不在
+        // 列表时复用原数组，避免 filter 产出语义等价的新引用触发无谓 patch
+        const next = msg.thinking
+          ? this.state.thinkingSeats.includes(msg.seat)
+            ? this.state.thinkingSeats
+            : [...this.state.thinkingSeats, msg.seat]
+          : this.state.thinkingSeats.includes(msg.seat)
+            ? this.state.thinkingSeats.filter((s) => s !== msg.seat)
+            : this.state.thinkingSeats;
+        if (next !== this.state.thinkingSeats) this.patch({ thinkingSeats: next });
         break;
       }
       case 'game_over':

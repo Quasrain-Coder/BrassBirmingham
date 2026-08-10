@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@brass/engine": "0.1.0",
+    "@brass/llm": "0.1.0",
     "@brass/protocol": "0.1.0",
     "better-sqlite3": "12.9.0",
     "drizzle-orm": "^0.44.4",

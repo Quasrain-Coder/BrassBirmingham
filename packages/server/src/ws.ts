@@ -15,6 +15,14 @@
  *
  * 断线：座位 connected=false 并广播 room_state；resume 成功 connected=true 再广播。
  * 同座位多连接：resume 先踢掉该座位旧连接（解绑 + terminate），其 close 不再触发断线广播。
+ *
+ * M3（AI 座位 + LLM 驱动循环）：options.aiAgentFactory 为注入缝——测试注入 fixture
+ * agent，main.ts 用 AnthropicClient 构造 LLMAgent；缺省（含 ANTHROPIC_API_KEY 缺失
+ * 的降级路径）用 HeuristicAgent。driveAI 在 startGame/submitAction/resume/心跳后触发
+ * （幂等）：同一 session 同时只有一个 driveAI（driving 守卫防重入）；**循环体整体
+ * try/catch**——任何未预期异常 → error 日志 + HeuristicAgent Top-1 直接 submitAction
+ * 末级兜底（再失败才放弃，等下次触发），对局永不卡死。AI 决策广播 ai_thinking
+ * （true→false 成对），AI 的 action_applied 带 reason；usage 记内存，终局打日志行。
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -22,8 +30,10 @@ import { extname, resolve, sep } from 'node:path';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import { PROTOCOL_VERSION } from '@brass/protocol';
 import type { ClientMessage, ServerMessage } from '@brass/protocol';
-import type { PlayerIndex } from '@brass/engine';
-import { RoomError, RoomManager, toRoomState, type Room } from './rooms.js';
+import { enumerateActions } from '@brass/engine';
+import type { Action, PlayerIndex } from '@brass/engine';
+import { HeuristicAgent, type DecidingAgent, type Difficulty } from '@brass/llm';
+import { RoomError, RoomManager, toRoomState, type Room, type Seat } from './rooms.js';
 import { GameSession, SessionError, type SessionSeat } from './session.js';
 import { findSeatByToken, openDb, type Db } from './db/repo.js';
 
@@ -36,6 +46,11 @@ export interface GameServerOptions {
   heartbeatIntervalMs?: number;
   /** 无 pong 断开阈值，默认 60_000ms。 */
   heartbeatTimeoutMs?: number;
+  /**
+   * AI agent 注入缝：按座位与难度构造决策 agent。缺省用 HeuristicAgent
+   * （ANTHROPIC_API_KEY 缺失时的降级路径同此）。每个 AI 座位开局时各构造一个。
+   */
+  aiAgentFactory?: (seat: PlayerIndex, difficulty: Difficulty) => DecidingAgent;
 }
 
 export interface GameServer {
@@ -66,7 +81,14 @@ interface Conn {
 interface SessionEntry {
   session: GameSession;
   room: Room;
+  /** 仅真人座位的 token（AI token 永不进任何索引）。 */
   tokenSeats: Map<string, PlayerIndex>;
+  /** AI 座位 → 决策 agent（开局时经 aiAgentFactory 各构造一个）。 */
+  agents: Map<PlayerIndex, DecidingAgent>;
+  /** driveAI 并发守卫：同一 session 同时只有一个驱动循环。 */
+  driving: boolean;
+  /** AI 决策 token 用量（M4 用；本任务记内存 + 终局日志行）。 */
+  usage: { decisions: number; input: number; output: number };
 }
 
 const MIME: Record<string, string> = {
@@ -97,6 +119,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30_000;
   const heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 60_000;
   const staticRoot = options.staticDir !== undefined ? resolve(options.staticDir) : null;
+  /** driveAI 末级兜底用的共享 HeuristicAgent（无状态，可复用）。 */
+  const lastResort = new HeuristicAgent();
 
   const httpServer: Server = createServer((req, res) => {
     void serveStatic(req, res, staticRoot);
@@ -124,7 +148,13 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
 
   function send(conn: Conn, msg: ServerMessage): void {
     if (conn.ws.readyState !== WebSocket.OPEN) return;
-    conn.ws.send(JSON.stringify(msg));
+    try {
+      conn.ws.send(JSON.stringify(msg));
+    } catch {
+      // 连接过渡态（terminate 后 close 未处理完）send 可同步抛——单连接投递失败
+      // 不应炸掉广播方（尤其 driveAI 的 async 循环，抛出会变 unhandled rejection）。
+      // close 事件随后统一清理该连接。
+    }
   }
 
   function sendError(conn: Conn, code: string, message: string): void {
@@ -229,9 +259,12 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     // RoomError：not-in-room / already-started / room-not-full
     const room = rooms.startGame(msg.token);
     const seats: SessionSeat[] = [];
+    const agents = new Map<PlayerIndex, DecidingAgent>();
+    const difficulty: Difficulty = room.config.aiSeats?.difficulty ?? 'normal';
     for (const s of room.seats) {
-      if (s === null) throw new Error('unreachable: startGame 满员校验后仍有空座位');
+      if (s === null) throw new Error('unreachable: startGame 校验后仍有空座位');
       seats.push({ seat: s.seat, nickname: s.nickname, token: s.token });
+      if (s.isAI) agents.set(s.seat, makeAgent(s.seat, difficulty));
     }
     if (room.seed === null) throw new Error('unreachable: startGame 后 seed 未落地');
     // seats（含 token）随开局落库；roomCode 传真实房间码
@@ -239,12 +272,137 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     const entry: SessionEntry = {
       session,
       room,
-      tokenSeats: new Map(seats.map((s) => [s.token, s.seat])),
+      // AI token 不进任何索引（伪造 token 永不可达：submit/resume 均 invalid-token）
+      tokenSeats: new Map(
+        room.seats
+          .filter((s): s is Seat => s !== null && !s.isAI)
+          .map((s) => [s.token, s.seat]),
+      ),
+      agents,
+      driving: false,
+      usage: { decisions: 0, input: 0, output: 0 },
     };
     sessionsByGameId.set(session.gameId, entry);
     for (const token of entry.tokenSeats.keys()) sessionByToken.set(token, entry);
     broadcastRoomState(room);
     broadcastSnapshots(entry);
+    void driveAI(entry);
+  }
+
+  /** AI agent 构造：注入缝优先，缺省 HeuristicAgent（key 缺失降级路径同此）。 */
+  function makeAgent(seat: PlayerIndex, difficulty: Difficulty): DecidingAgent {
+    if (options.aiAgentFactory !== undefined) return options.aiAgentFactory(seat, difficulty);
+    return new HeuristicAgent();
+  }
+
+  /** AI 行动落库 + 广播（action_applied 带 reason/degraded；终局则补 game_over）。 */
+  function applyAIAction(entry: SessionEntry, seat: PlayerIndex, action: Action, reason: string, degraded: boolean): void {
+    const { seq } = entry.session.submitAction(seat, action);
+    broadcast(entry.room, {
+      type: 'action_applied',
+      protocolVersion: PROTOCOL_VERSION,
+      seq,
+      player: seat,
+      action,
+      events: entry.session.state.lastEvents,
+      reason,
+      ...(degraded ? { degraded: true } : {}),
+    });
+    broadcastSnapshots(entry);
+    if (entry.session.finished) {
+      broadcastGameOver(entry);
+    }
+  }
+
+  function broadcastGameOver(entry: SessionEntry): void {
+    const st = entry.session.state;
+    broadcast(entry.room, {
+      type: 'game_over',
+      protocolVersion: PROTOCOL_VERSION,
+      winner: st.winner ?? [],
+      finalScores: st.players.map((p) => p.vp),
+    });
+    if (entry.usage.decisions > 0) {
+      console.log(
+        `[ai] game=${entry.session.gameId} 终局 usage：` +
+          `decisions=${entry.usage.decisions} input=${entry.usage.input} output=${entry.usage.output}`,
+      );
+    }
+  }
+
+  /**
+   * AI 驱动循环：startGame/submitAction/resume/心跳后触发（幂等）。
+   *
+   * - 守卫：entry.driving 保证同一 session 同时只有一个驱动循环（检查+置位之间
+   *   无 await，单线程下原子）；重入直接返回。
+   * - 循环体整体 try/catch：任何未预期异常（summarize/prescreen bug、submitAction
+   *   非预期抛出、API 层漏网异常）→ error 日志 + HeuristicAgent Top-1 末级兜底
+   *   直接 submitAction；兜底再失败才放弃本次驱动（ai_thinking(false) 照发，
+   *   等 resume/心跳再次触发），对局永不卡死。
+   * - ai_thinking(true) 按座位广播，循环结束（含异常路径）对所有广播过 true 的
+   *   座位补 false（成对）。
+   */
+  async function driveAI(entry: SessionEntry): Promise<void> {
+    if (entry.driving) return;
+    entry.driving = true;
+    const thinkingSeats = new Set<PlayerIndex>();
+    try {
+      while (!entry.session.finished && entry.agents.has(entry.session.currentSeat)) {
+        const seat = entry.session.currentSeat;
+        const agent = entry.agents.get(seat)!;
+        broadcast(entry.room, {
+          type: 'ai_thinking',
+          protocolVersion: PROTOCOL_VERSION,
+          seat,
+          thinking: true,
+        });
+        thinkingSeats.add(seat);
+        try {
+          const state = entry.session.state;
+          const legal = enumerateActions(state, seat);
+          const decision = await agent.decide(state, seat, legal);
+          applyAIAction(entry, seat, decision.action, decision.reason, decision.degraded);
+          // usage 只在行动成功落库后计数（submit 抛错不虚增）
+          entry.usage.decisions += 1;
+          entry.usage.input += decision.usage.input;
+          entry.usage.output += decision.usage.output;
+        } catch (err) {
+          console.error(
+            `[ai] driveAI 未预期异常（game=${entry.session.gameId} seat=${seat}），走 Heuristic 末级兜底`,
+            err,
+          );
+          try {
+            // submitAction 校验序抛错时对局状态未变（session.submitAction 先校验后
+            // 替换内存态），currentSeat 应仍等于 seat；不等则说明状态已被外力推进，
+            // 交回循环条件重估。
+            if (entry.session.finished || entry.session.currentSeat !== seat) continue;
+            const state = entry.session.state;
+            const legal = enumerateActions(state, seat);
+            const d = await lastResort.decide(state, seat, legal);
+            applyAIAction(entry, seat, d.action, `末级兜底（agent 异常）：${d.reason}`, true);
+          } catch (fallbackErr) {
+            console.error(
+              `[ai] 末级兜底失败（game=${entry.session.gameId} seat=${seat}），放弃本次驱动`,
+              fallbackErr,
+            );
+            break;
+          }
+        }
+      }
+    } catch (err) {
+      // 循环体已整体 try/catch，理论不可达；兜底防 unhandled rejection
+      console.error(`[ai] driveAI 外层异常（game=${entry.session.gameId}）`, err);
+    } finally {
+      entry.driving = false;
+      for (const seat of thinkingSeats) {
+        broadcast(entry.room, {
+          type: 'ai_thinking',
+          protocolVersion: PROTOCOL_VERSION,
+          seat,
+          thinking: false,
+        });
+      }
+    }
   }
 
   function handleSubmitAction(msg: { token: string; action: unknown }): void {
@@ -274,14 +432,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     });
     broadcastSnapshots(entry);
     if (entry.session.finished) {
-      const st = entry.session.state;
-      broadcast(entry.room, {
-        type: 'game_over',
-        protocolVersion: PROTOCOL_VERSION,
-        winner: st.winner ?? [],
-        finalScores: st.players.map((p) => p.vp),
-      });
+      broadcastGameOver(entry);
     }
+    void driveAI(entry);
   }
 
   function handleResume(conn: Conn, msg: { token: string }): void {
@@ -309,6 +462,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         legalActions: snap.legalActions,
       });
       broadcastRoomState(entry.room);
+      // resume 重触发 driveAI（幂等，守卫防重入）——对局若停在 AI 回合则被唤醒
+      void driveAI(entry);
       return;
     }
     // 开局前：RoomManager 内存索引
@@ -421,6 +576,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
       }
       conn.ws.ping();
     }
+    // 心跳重触发 driveAI（幂等，守卫防重入）：兜底放弃/异常中断的驱动借此复活
+    for (const entry of sessionsByGameId.values()) void driveAI(entry);
   }, heartbeatIntervalMs);
   heartbeat.unref();
 

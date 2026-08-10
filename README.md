@@ -4,10 +4,10 @@ A local, self-hostable digital implementation of the board game **Brass: Birming
 rules, playable in the browser with friends (LAN or internet) and/or LLM-driven AI
 players, with a post-game coaching review of your moves.
 
-**Status: M2 (online multiplayer) complete.** Rules engine (M1), authoritative
-WebSocket server with rooms/reconnect/SQLite history, and the browser client
-(lobby + SVG board + action interactions) are all done. Next: M3 (LLM AI seats).
-See `docs/superpowers/specs/` for the design doc.
+**Status: M3 (LLM AI seats) complete.** Rules engine (M1), authoritative
+WebSocket server with rooms/reconnect/SQLite history (M2), the browser client,
+and LLM-driven AI seats with heuristic fallback (M3) are all done. Next: M5
+(post-game coaching review). See `docs/superpowers/specs/` for the design doc.
 
 ## Quick start (dev)
 
@@ -31,7 +31,10 @@ WEB_DIST=$PWD/packages/web/dist npm run dev -w @brass/server
 ```
 
 Server env vars: `PORT` (default 8420), `DB_PATH` (default `./brass.db`),
-`WEB_DIST` (static root; unset in dev — vite serves the client).
+`WEB_DIST` (static root; unset in dev — vite serves the client),
+`ANTHROPIC_API_KEY` (enables LLM-driven AI seats; without it AI seats fall back
+to the built-in heuristic and no API calls are made), `BRASS_AI_MODEL` (override
+the per-difficulty default model). See `.env.example`.
 
 Checks:
 
@@ -62,13 +65,29 @@ npm test            # all workspaces (vitest + coverage)
   - `packages/web`: React client — lobby (create/join with optional public seed
     flag), room waiting view, SVG board with legal-target highlighting, action
     bar for all six action types, info panels, and auto-reconnect.
+- **M3: LLM AI seats (`packages/llm` + server/web integration)** — done.
+  Rooms can fill empty seats with AI players (up to playerCount − 1). Each AI
+  seat is driven by a decision chain: board-state summary → candidate prescreen
+  → LLM choice (Claude tool use, constrained to engine-enumerated legal actions)
+  → engine validation → fallback. Three difficulties: **easy** (claude-haiku-4-5,
+  top-8 candidates), **normal** (claude-sonnet-4-5, top-20), **hard**
+  (claude-sonnet-4-5, top-40 plus an era-progress/rounds-left lookahead section
+  in the prompt). Degradation chain, in order: LLM choice (one retry on an
+  invalid pick) → `HeuristicAgent` top-1 fallback (validation failure, API
+  error/timeout, or missing `ANTHROPIC_API_KEY` — flagged `degraded`, and the
+  game never stalls). The client shows "AI thinking" indicators and per-move
+  reasons.
+  - **Cost note:** with `ANTHROPIC_API_KEY` set, each AI decision costs roughly
+    **$0.005–0.01** (usage-priced), so a full game with AI seats lands around
+    **$0.3–0.8** depending on player count and game length. Without the key,
+    AI seats run purely on the local heuristic at zero cost.
 
 ## Features
 
 - [x] Full game rules: canal era + rail era, 2–4 players
 - [x] Browser multiplayer via an authoritative WebSocket server (rooms + short codes)
 - [x] Persistent game history (SQLite), replayable action logs, reconnect support
-- [ ] AI seats powered by an LLM (Claude API), constrained to engine-enumerated legal moves (M3)
+- [x] AI seats powered by an LLM (Claude API), constrained to engine-enumerated legal moves (M3)
 - [ ] Post-game review report: per-move analysis with concrete alternatives and reasoning (M5)
 
 ## Legal note

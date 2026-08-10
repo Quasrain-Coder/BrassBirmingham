@@ -7,7 +7,7 @@
  */
 import { useState } from 'react';
 import type { FormEvent, ReactElement } from 'react';
-import type { RoomConfig } from '@brass/protocol';
+import type { AIDifficulty, RoomConfig } from '@brass/protocol';
 import type { GameStore } from '../game/store';
 import { useGameStore } from '../game/store';
 
@@ -17,6 +17,14 @@ function parseSeed(raw: string): number | undefined {
   const n = Number(raw);
   return Number.isInteger(n) ? n : undefined;
 }
+
+/** AI 难度中文标签——与 packages/server/src/rooms.ts DIFFICULTY_LABEL 同步（双拷贝，改动需同步两侧）。 */
+const AI_DIFFICULTY_LABEL: Record<AIDifficulty, string> = {
+  easy: '简单',
+  normal: '普通',
+  hard: '困难',
+};
+const AI_DIFFICULTIES: readonly AIDifficulty[] = ['easy', 'normal', 'hard'];
 
 const CONNECTION_LABEL: Record<string, string> = {
   connected: '已连接',
@@ -30,6 +38,8 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
   const [createNick, setCreateNick] = useState('');
   const [playerCount, setPlayerCount] = useState('4');
   const [seed, setSeed] = useState('');
+  const [aiCount, setAiCount] = useState('0');
+  const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('normal');
   const [joinNick, setJoinNick] = useState('');
   const [joinCode, setJoinCode] = useState('');
 
@@ -41,7 +51,19 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
     const config: RoomConfig = { playerCount: count === 2 || count === 3 ? count : 4 };
     const parsed = parseSeed(seed);
     if (parsed !== undefined) config.seed = parsed;
+    const ai = Number(aiCount);
+    // 合法域 0..playerCount-1（选项已 clamp，这里再守一道）
+    if (Number.isInteger(ai) && ai >= 1 && ai <= config.playerCount - 1) {
+      config.aiSeats = { count: ai, difficulty: aiDifficulty };
+    }
     store.createRoom(nickname, config);
+  };
+
+  /** 人数变化：AI 数选项上界随之收紧，已选值 clamp 到 playerCount-1。 */
+  const onPlayerCountChange = (value: string): void => {
+    setPlayerCount(value);
+    const maxAI = Number(value) - 1;
+    if (Number(aiCount) > maxAI) setAiCount(String(maxAI));
   };
 
   const onJoin = (e: FormEvent): void => {
@@ -80,13 +102,43 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
           <select
             data-testid="create-player-count"
             value={playerCount}
-            onChange={(e) => setPlayerCount(e.target.value)}
+            onChange={(e) => onPlayerCountChange(e.target.value)}
           >
             <option value="2">2 人</option>
             <option value="3">3 人</option>
             <option value="4">4 人</option>
           </select>
         </label>
+        <label>
+          AI 座位
+          <select
+            data-testid="create-ai-count"
+            value={aiCount}
+            onChange={(e) => setAiCount(e.target.value)}
+          >
+            {Array.from({ length: Number(playerCount) }, (_, i) => (
+              <option key={i} value={String(i)}>
+                {i === 0 ? '无' : `${i} 个`}
+              </option>
+            ))}
+          </select>
+        </label>
+        {aiCount !== '0' ? (
+          <label>
+            AI 难度
+            <select
+              data-testid="create-ai-difficulty"
+              value={aiDifficulty}
+              onChange={(e) => setAiDifficulty(e.target.value as AIDifficulty)}
+            >
+              {AI_DIFFICULTIES.map((d) => (
+                <option key={d} value={d}>
+                  {AI_DIFFICULTY_LABEL[d]}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <label>
           种子（可选）
           <input
@@ -167,6 +219,16 @@ export function RoomView({ store }: { store: GameStore }): ReactElement {
           <li key={i} data-testid={`seat-${i}`}>
             {info === null ? (
               <span className="seat-empty">空位</span>
+            ) : info.isAI ? (
+              <>
+                <span className="seat-name">{info.nickname}</span>{' '}
+                <span className="seat-ai-badge" data-testid={`seat-${i}-ai-badge`}>
+                  AI
+                  {room.config.aiSeats !== undefined
+                    ? `·${AI_DIFFICULTY_LABEL[room.config.aiSeats.difficulty]}`
+                    : ''}
+                </span>
+              </>
             ) : (
               <>
                 <span className="seat-name">
