@@ -52,27 +52,37 @@ function Field({ label, children }: { label: string; children: ReactNode }): Rea
 }
 
 /**
- * 房间号复制按钮：clipboard 不可用（非 https / jsdom）时降级为选中房间号文本，
- * 复制后短暂显示"已复制"（1.5s 后还原）。
+ * 房间号复制按钮：clipboard 可用时写入剪贴板（显示"已复制"）；不可用或写入被拒时
+ * 降级为选中房间号文本（显示"已选中·请复制"），状态 1.8s 后还原。
  */
 function CopyCodeButton({ code }: { code: string }): ReactElement {
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState<'idle' | 'copied' | 'manual'>('idle');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (timer.current !== null) clearTimeout(timer.current);
   }, []);
+  /** 翻转按钮文案并定时还原（再次点击会重置计时）。 */
+  const flash = (next: 'copied' | 'manual'): void => {
+    setState(next);
+    timer.current = setTimeout(() => setState('idle'), 1800);
+  };
   const onCopy = (): void => {
-    if (navigator.clipboard !== undefined) {
-      navigator.clipboard.writeText(code).catch(() => selectRoomCode());
+    const write = navigator.clipboard?.writeText;
+    if (typeof write === 'function') {
+      write(code)
+        .then(() => flash('copied'))
+        .catch(() => {
+          selectRoomCode();
+          flash('manual');
+        });
     } else {
       selectRoomCode();
+      flash('manual');
     }
-    setCopied(true);
-    timer.current = setTimeout(() => setCopied(false), 1500);
   };
   return (
     <button type="button" className="copy-code" data-testid="copy-code" onClick={onCopy}>
-      {copied ? '已复制' : '复制'}
+      {state === 'copied' ? '已复制' : state === 'manual' ? '已选中·请复制' : '复制'}
     </button>
   );
 }
@@ -237,8 +247,8 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
               data-testid="join-code"
               value={joinCode}
               placeholder="例如 AB23CD"
-              maxLength={6}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/\s/g, ''))}
+              // 先清空格再截断：maxLength 截断先于变换执行会静默丢字符（粘贴 "AB2 3CD" → "AB23C"）
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/\s/g, '').slice(0, 6))}
             />
           </Field>
           <button
