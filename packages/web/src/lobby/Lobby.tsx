@@ -296,6 +296,11 @@ export function RoomView({ store }: { store: GameStore }): ReactElement {
             已就位 {seated}/{room.config.playerCount}
           </p>
         </header>
+        {room.config.aiSeats !== undefined ? (
+          <p className="ai-note" data-testid="ai-note">
+            AI 席位：{room.config.aiSeats.count} 个 · {AI_DIFFICULTY_LABEL[room.config.aiSeats.difficulty]}
+          </p>
+        ) : null}
         <div className="progress-track" aria-hidden="true">
           <div className="progress-fill" style={{ width: `${pct}%` }} />
         </div>

@@ -288,6 +288,7 @@ describe('<RoomView> 房间等待视图', () => {
     render(<RoomView store={store} />);
     expect(screen.getByTestId('seat-1-ai-badge')).toHaveTextContent('AI·困难');
     expect(screen.getByTestId('seat-2')).toHaveTextContent('空位');
+    expect(screen.getByTestId('ai-note')).toHaveTextContent('AI 席位：1 个 · 困难');
   });
 
   it('点击复制房间号：clipboard.writeText 收到房间号，按钮短暂显示"已复制"', () => {
