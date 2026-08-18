@@ -3,7 +3,7 @@
  * FakeWebSocket 注入驱动 store；表单提交 → 上行帧校验；房间视图 → 座位/开始按钮状态。
  */
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PROTOCOL_VERSION } from '@brass/protocol';
 import type { RoomState, ServerMessage } from '@brass/protocol';
 import { GameClient, GameStore } from '../game/store';
@@ -269,5 +269,37 @@ describe('<RoomView> 房间等待视图', () => {
     fireEvent.click(screen.getByTestId('leave-room'));
     expect(store.getState().room).toBeNull();
     expect(store.getState().token).toBeNull();
+  });
+
+  it('AI 座位显示 AI 徽章与难度（seat-N-ai-badge）', () => {
+    const { store, ws } = setup();
+    act(() => ws.open());
+    enterRoom(ws, {
+      code: 'ABCD23',
+      config: { playerCount: 3, aiSeats: { count: 1, difficulty: 'hard' } },
+      customSeed: false,
+      seats: [
+        { seat: 0, nickname: '甲', isAI: false, connected: true },
+        { seat: 1, nickname: 'AI 对手', isAI: true, connected: true },
+        null,
+      ],
+      started: false,
+    });
+    render(<RoomView store={store} />);
+    expect(screen.getByTestId('seat-1-ai-badge')).toHaveTextContent('AI·困难');
+    expect(screen.getByTestId('seat-2')).toHaveTextContent('空位');
+  });
+
+  it('点击复制房间号：clipboard.writeText 收到房间号，按钮短暂显示"已复制"', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const { store, ws } = setup();
+    act(() => ws.open());
+    enterRoom(ws, fullRoom());
+    render(<RoomView store={store} />);
+    fireEvent.click(screen.getByTestId('copy-code'));
+    expect(writeText).toHaveBeenCalledWith('ABCD23');
+    expect(screen.getByTestId('copy-code')).toHaveTextContent('已复制');
+    delete (navigator as { clipboard?: unknown }).clipboard;
   });
 });
