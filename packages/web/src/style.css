@@ -166,3 +166,637 @@ body {
 .error {
   color: #e74c3c;
 }
+
+/* ============================================================
+ * 等待大厅主题（Lobby / RoomView）——工业时代：深色暖调 + 黄铜色。
+ * 视觉语言与棋盘（parchment/brass，见 BoardSvg.tsx）保持一致。
+ * ============================================================ */
+
+.lobby,
+.room-view {
+  max-width: 880px;
+}
+
+/* 全屏背景层（fixed 铺满视口，.app 的 max-width 不影响它）：
+ * 顶部黄铜辉光 + 角落冷色余晖 + 极细横向纹理。 */
+.lobby::before,
+.room-view::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(1000px 480px at 50% -12%, rgba(201, 168, 106, 0.13), transparent 62%),
+    radial-gradient(760px 420px at 88% 112%, rgba(91, 141, 217, 0.07), transparent 60%),
+    radial-gradient(600px 360px at 6% 108%, rgba(155, 89, 182, 0.05), transparent 60%),
+    #14161c;
+}
+
+/* ---- 头部 ---- */
+.lobby-hero,
+.room-hero {
+  margin-bottom: 28px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-size: 0.72rem;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #8f7a4e;
+}
+
+.eyebrow::before,
+.eyebrow::after {
+  content: '';
+  width: 34px;
+  height: 1px;
+}
+
+.eyebrow::before {
+  background: linear-gradient(90deg, transparent, #8f7a4e);
+}
+
+.eyebrow::after {
+  background: linear-gradient(90deg, #8f7a4e, transparent);
+}
+
+.lobby h1,
+.room-view h1 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif SC', serif;
+  font-size: 3rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #f3ead4;
+  text-shadow: 0 2px 18px rgba(201, 168, 106, 0.25);
+}
+
+.lobby .subtitle {
+  margin: 10px 0 0;
+  color: #9aa4b2;
+  letter-spacing: 0.18em;
+}
+
+/* 连接状态胶囊 */
+.connection-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 22px 0 0;
+  padding: 6px 16px;
+  border: 1px solid #3a3226;
+  border-radius: 999px;
+  background: rgba(26, 29, 35, 0.7);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  color: #c9a86a;
+}
+
+.connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #7f8c8d;
+}
+
+.connection-pill.ok .connection-dot {
+  background: #58c47b;
+  box-shadow: 0 0 8px rgba(88, 196, 123, 0.8);
+}
+
+.connection-pill.pending .connection-dot {
+  background: #d4ac0d;
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+.connection-pill.bad .connection-dot {
+  background: #e74c3c;
+  box-shadow: 0 0 8px rgba(231, 76, 60, 0.6);
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* 服务器错误横幅 */
+.error-banner {
+  margin: 0 auto 20px;
+  max-width: 560px;
+  padding: 10px 16px;
+  border: 1px solid rgba(231, 76, 60, 0.45);
+  border-radius: 8px;
+  background: rgba(231, 76, 60, 0.08);
+  color: #f2a09a;
+  font-size: 0.9rem;
+}
+
+/* ---- 大厅面板（创建 / 加入） ---- */
+.lobby-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 10px;
+  text-align: left;
+}
+
+@media (max-width: 720px) {
+  .lobby-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 22px 24px;
+  border: 1px solid #3a3226;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(38, 34, 27, 0.85), rgba(26, 29, 35, 0.92));
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  animation: fade-up 0.5s ease both;
+}
+
+.lobby-panels .panel + .panel {
+  animation-delay: 0.08s;
+}
+
+.panel-title {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif SC', serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #e3d3a8;
+}
+
+.panel-title::after {
+  content: '';
+  display: block;
+  margin-top: 8px;
+  width: 44px;
+  height: 2px;
+  background: linear-gradient(90deg, #c9a86a, transparent);
+}
+
+.panel-desc {
+  margin: -8px 0 0;
+  color: #8a8068;
+  font-size: 0.85rem;
+}
+
+/* 表单字段 */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: #b3a888;
+}
+
+.field input,
+.field select {
+  padding: 9px 12px;
+  border: 1px solid #3f3a2e;
+  border-radius: 8px;
+  background: #171a1f;
+  color: #ece4d0;
+  font: inherit;
+  font-size: 0.95rem;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.field input::placeholder {
+  color: #5d5a50;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: #c9a86a;
+  box-shadow: 0 0 0 3px rgba(201, 168, 106, 0.18);
+}
+
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.field-row .field {
+  flex: 1 1 130px;
+}
+
+/* 按钮：黄铜渐变主按钮 / 描边幽灵按钮 */
+.btn-primary {
+  margin-top: 4px;
+  padding: 11px 18px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #e3c58f, #c9a86a 55%, #ab8a4e);
+  color: #241b0b;
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  box-shadow:
+    0 4px 14px rgba(201, 168, 106, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    filter 0.12s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 18px rgba(201, 168, 106, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  filter: grayscale(0.8) brightness(0.75);
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn-ghost {
+  padding: 9px 16px;
+  border: 1px solid #3f3a2e;
+  border-radius: 8px;
+  background: transparent;
+  color: #9aa4b2;
+  font: inherit;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.btn-ghost:hover {
+  border-color: #8a6d3b;
+  color: #e6e6e6;
+}
+
+/* ---- 房间等待（RoomView） ---- */
+.room-view {
+  max-width: 760px;
+}
+
+/* 房间号"车票"卡片：票面斜纹 + 两侧半圆缺口 */
+.code-ticket {
+  position: relative;
+  margin: 26px auto 22px;
+  padding: 18px 24px 16px;
+  max-width: 380px;
+  border: 1px solid #4a3f2c;
+  border-radius: 14px;
+  background:
+    repeating-linear-gradient(135deg, rgba(201, 168, 106, 0.05) 0 6px, transparent 6px 12px),
+    linear-gradient(180deg, #23262e, #1c1e24);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  animation: fade-up 0.5s ease 0.1s both;
+}
+
+.code-ticket::before,
+.code-ticket::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  background: #14161c;
+  border: 1px solid #4a3f2c;
+}
+
+.code-ticket::before {
+  left: -9px;
+}
+
+.code-ticket::after {
+  right: -9px;
+}
+
+.code-label {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: #8a8068;
+}
+
+.room-code {
+  margin: 8px 0 8px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 2.6rem;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  color: #f3ead4;
+  text-shadow: 0 0 22px rgba(201, 168, 106, 0.35);
+}
+
+.copy-code {
+  padding: 5px 14px;
+  border: 1px solid #8a6d3b;
+  border-radius: 999px;
+  background: transparent;
+  color: #c9a86a;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.copy-code:hover {
+  background: rgba(201, 168, 106, 0.12);
+}
+
+.seed-badge {
+  display: inline-block;
+  margin: 10px 0 0;
+  padding: 3px 10px;
+  border: 1px dashed #8a6d3b;
+  border-radius: 999px;
+  color: #b89a5f;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+}
+
+/* 席位面板 */
+.seat-panel {
+  padding: 20px 22px 22px;
+  border: 1px solid #3a3226;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(38, 34, 27, 0.8), rgba(26, 29, 35, 0.9));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.seat-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.seat-panel-head h2 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif SC', serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: #e3d3a8;
+}
+
+.seat-count {
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  color: #9aa4b2;
+}
+
+/* AI 配置提示（等待阶段服务器尚未填充 AI 座位，单独展示配置） */
+.ai-note {
+  display: inline-block;
+  margin: 10px 0 0;
+  padding: 2px 10px;
+  border: 1px solid rgba(155, 89, 182, 0.35);
+  border-radius: 999px;
+  background: rgba(155, 89, 182, 0.1);
+  color: #a98bc4;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+/* 就位进度条 */
+.progress-track {
+  margin: 14px 0 18px;
+  height: 6px;
+  border-radius: 999px;
+  background: #1e2127;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #8a6d3b, #e3c58f);
+  box-shadow: 0 0 10px rgba(201, 168, 106, 0.6);
+  transition: width 0.5s ease;
+}
+
+/* 座位卡片 */
+.seat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.seat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #3a3226;
+  border-radius: 10px;
+  background: rgba(23, 26, 31, 0.8);
+  animation: fade-up 0.4s ease both;
+}
+
+.seat-card:nth-child(2) {
+  animation-delay: 0.05s;
+}
+
+.seat-card:nth-child(3) {
+  animation-delay: 0.1s;
+}
+
+.seat-card:nth-child(4) {
+  animation-delay: 0.15s;
+}
+
+.seat-card.empty {
+  border-style: dashed;
+  background: rgba(23, 26, 31, 0.4);
+}
+
+/* 头像圆章：按座位取色（黄铜/钢蓝/紫晶/赤铜），与对局内玩家色呼应 */
+.seat-avatar {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #1a1d23;
+  color: #d8cdb4;
+  border: 2px solid #6b5b3e;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1rem;
+}
+
+.seat-card.hue-0 .seat-avatar {
+  border-color: #c9a86a;
+  color: #e3c58f;
+}
+
+.seat-card.hue-1 .seat-avatar {
+  border-color: #5b8dd9;
+  color: #8fb4e8;
+}
+
+.seat-card.hue-2 .seat-avatar {
+  border-color: #9b59b6;
+  color: #c58fe0;
+}
+
+.seat-card.hue-3 .seat-avatar {
+  border-color: #d4772f;
+  color: #e89a5c;
+}
+
+.seat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  text-align: left;
+}
+
+.seat-name {
+  color: #e6e6e6;
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me-chip {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(201, 168, 106, 0.18);
+  color: #e3c58f;
+  font-size: 0.72rem;
+}
+
+.seat-empty {
+  color: #5d5a50;
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+}
+
+.ai-badge {
+  align-self: flex-start;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(155, 89, 182, 0.5);
+  background: rgba(155, 89, 182, 0.2);
+  color: #c58fe0;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  color: #9aa4b2;
+}
+
+.status-chip .status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6b7280;
+}
+
+.status-chip.online {
+  color: #7fbf8f;
+}
+
+.status-chip.online .status-dot {
+  background: #58c47b;
+  box-shadow: 0 0 6px rgba(88, 196, 123, 0.7);
+}
+
+/* 底部操作区 */
+.room-actions {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-start {
+  min-width: 240px;
+}
+
+.hint {
+  margin: 0;
+  color: #8a8068;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+}
+
+/* ---- 入场动画（尊重系统减弱动态偏好） ---- */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .seat-card,
+  .code-ticket {
+    animation: none;
+  }
+
+  .connection-pill.pending .connection-dot {
+    animation: none;
+  }
+}

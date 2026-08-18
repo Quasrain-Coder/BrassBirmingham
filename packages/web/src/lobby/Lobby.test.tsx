@@ -3,7 +3,7 @@
  * FakeWebSocket 注入驱动 store；表单提交 → 上行帧校验；房间视图 → 座位/开始按钮状态。
  */
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PROTOCOL_VERSION } from '@brass/protocol';
 import type { RoomState, ServerMessage } from '@brass/protocol';
 import { GameClient, GameStore } from '../game/store';
@@ -156,6 +156,22 @@ describe('<Lobby> 创建/加入表单', () => {
     });
   });
 
+  it('加入房间：含内部空格的房间号先去空格再截断，不丢字符（粘贴 "AB2 3CD" → "AB23CD"）', () => {
+    const { store, ws } = setup();
+    act(() => ws.open());
+    render(<Lobby store={store} />);
+    fireEvent.change(screen.getByTestId('join-nickname'), { target: { value: '乙' } });
+    fireEvent.change(screen.getByTestId('join-code'), { target: { value: 'AB2 3CD' } });
+    expect((screen.getByTestId('join-code') as HTMLInputElement).value).toBe('AB23CD');
+    fireEvent.click(screen.getByTestId('join-submit'));
+    expect(ws.lastSent()).toEqual({
+      type: 'join_room',
+      protocolVersion: PROTOCOL_VERSION,
+      code: 'AB23CD',
+      nickname: '乙',
+    });
+  });
+
   it('昵称为空时创建/加入按钮不可用', () => {
     const { store, ws } = setup();
     act(() => ws.open());
@@ -269,5 +285,63 @@ describe('<RoomView> 房间等待视图', () => {
     fireEvent.click(screen.getByTestId('leave-room'));
     expect(store.getState().room).toBeNull();
     expect(store.getState().token).toBeNull();
+  });
+
+  it('AI 座位显示 AI 徽章与难度（seat-N-ai-badge）', () => {
+    const { store, ws } = setup();
+    act(() => ws.open());
+    enterRoom(ws, {
+      code: 'ABCD23',
+      config: { playerCount: 3, aiSeats: { count: 1, difficulty: 'hard' } },
+      customSeed: false,
+      seats: [
+        { seat: 0, nickname: '甲', isAI: false, connected: true },
+        { seat: 1, nickname: 'AI 对手', isAI: true, connected: true },
+        null,
+      ],
+      started: false,
+    });
+    render(<RoomView store={store} />);
+    expect(screen.getByTestId('seat-1-ai-badge')).toHaveTextContent('AI·困难');
+    expect(screen.getByTestId('seat-2')).toHaveTextContent('空位');
+    expect(screen.getByTestId('ai-note')).toHaveTextContent('AI 席位：1 个 · 困难');
+  });
+
+  it('点击复制房间号：clipboard.writeText 收到房间号，按钮短暂显示"已复制"', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const { store, ws } = setup();
+    act(() => ws.open());
+    enterRoom(ws, fullRoom());
+    render(<RoomView store={store} />);
+    fireEvent.click(screen.getByTestId('copy-code'));
+    expect(writeText).toHaveBeenCalledWith('ABCD23');
+    await act(async () => {}); // 冲刷 writeText.then 微任务，让"已复制"落地
+    expect(screen.getByTestId('copy-code')).toHaveTextContent('已复制');
+    delete (navigator as { clipboard?: unknown }).clipboard;
+  });
+
+  it('clipboard 写入被拒：降级为选中文本，按钮显示"已选中·请复制"而非谎报"已复制"', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const { store, ws } = setup();
+    act(() => ws.open());
+    enterRoom(ws, fullRoom());
+    render(<RoomView store={store} />);
+    fireEvent.click(screen.getByTestId('copy-code'));
+    expect(writeText).toHaveBeenCalledWith('ABCD23');
+    await act(async () => {}); // 冲刷 writeText.catch 微任务
+    expect(screen.getByTestId('copy-code')).toHaveTextContent('已选中·请复制');
+    delete (navigator as { clipboard?: unknown }).clipboard;
+  });
+
+  it('clipboard 不可用（非 https/jsdom）：选中降级路径同样如实提示', () => {
+    delete (navigator as { clipboard?: unknown }).clipboard;
+    const { store, ws } = setup();
+    act(() => ws.open());
+    enterRoom(ws, fullRoom());
+    render(<RoomView store={store} />);
+    fireEvent.click(screen.getByTestId('copy-code'));
+    expect(screen.getByTestId('copy-code')).toHaveTextContent('已选中·请复制');
   });
 });
