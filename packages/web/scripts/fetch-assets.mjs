@@ -135,12 +135,12 @@ job('players/*.png', async (sharp) => {
   }
 });
 
-// ---- 啤酒桶图标：从 Brewery I 板块圆形裁出 ----
+// ---- 啤酒桶图标：从 Brewery I 板块圆形裁出（紧圈木桶，少带底色）----
 job('beer.png', async (sharp) => {
   const url = manifest.tiles['brewery|1|purple'].front;
   const img = sharp(await download(url)).resize(128, 128);
   const circle = Buffer.from(
-    `<svg><circle cx="64" cy="64" r="64" fill="#fff"/></svg>`,
+    `<svg><circle cx="64" cy="64" r="46" fill="#fff"/></svg>`,
   );
   await img
     .composite([{ input: circle, blend: 'dest-in' }])

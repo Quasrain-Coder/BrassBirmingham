@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { LINKS, LINK_EXTRA_ENDPOINTS, LOCATIONS, MERCHANTS, newGame, tileDef } from '@brass/engine';
+import { LINKS, LINK_EXTRA_ENDPOINTS, LOCATIONS, newGame, tileDef } from '@brass/engine';
 import { filterStateFor } from '@brass/protocol';
 import { BoardSvg, PLAYER_COLORS } from './BoardSvg';
 
@@ -10,26 +10,29 @@ function freshState() {
 }
 
 describe('<BoardSvg>', () => {
-  it('渲染 22 个城市 group 与 39 条连接边', () => {
+  it('渲染官方版图底图与 22 个城市 group、39 条连接热区', () => {
     const { container } = render(<BoardSvg state={freshState()} />);
+    const img = container.querySelector('image.board-image');
+    expect(img?.getAttribute('href')).toBe('/assets/board.jpg');
     expect(container.querySelectorAll('g.board-location')).toHaveLength(
       Object.keys(LOCATIONS).length,
     );
-    expect(container.querySelectorAll('g.board-location')).toHaveLength(22);
     expect(container.querySelectorAll('line.board-link')).toHaveLength(LINKS.length);
-    expect(container.querySelectorAll('line.board-link')).toHaveLength(39);
   });
 
-  it('渲染 5 个商人位六边形与每个城市的产业槽位', () => {
+  it('viewBox 取官方版图有效区域', () => {
     const { container } = render(<BoardSvg state={freshState()} />);
-    expect(container.querySelectorAll('polygon.board-merchant')).toHaveLength(
-      Object.keys(MERCHANTS).length,
-    );
+    expect(container.querySelector('svg')?.getAttribute('viewBox')).toBe('990 990 4200 4200');
+  });
+
+  it('渲染 5 个商人位与每个城市的产业槽位热区', () => {
+    const { container } = render(<BoardSvg state={freshState()} />);
+    expect(container.querySelectorAll('g.board-merchant-group')).toHaveLength(5);
     const totalSlots = Object.values(LOCATIONS).reduce((n, loc) => n + loc.slots.length, 0);
     expect(container.querySelectorAll('rect.board-slot')).toHaveLength(totalSlots);
   });
 
-  it('城市 group 带 data-location，槽位/边回调带上 id 与下标', () => {
+  it('槽位/边回调带上 id 与下标', () => {
     const clicks: [string, number][] = [];
     const linkClicks: number[] = [];
     const { container } = render(
@@ -52,7 +55,7 @@ describe('<BoardSvg>', () => {
     expect(linkClicks).toEqual([0]);
   });
 
-  it('已建 Link 显示玩家色，highlights 加 highlighted 类', () => {
+  it('已建 Link 加 board-link-built 类并画玩家色路径，highlights 加 highlighted 类', () => {
     const state = freshState();
     state.board.links.push({ linkIndex: 0, player: 1 });
     const { container } = render(
@@ -63,6 +66,8 @@ describe('<BoardSvg>', () => {
     );
     const built = container.querySelector('line[data-link-index="0"]') as SVGLineElement;
     expect(built.classList.contains('board-link-built')).toBe(true);
+    const visual = container.querySelector('polyline.board-link-visual') as SVGPolylineElement;
+    expect(visual.getAttribute('stroke')).toBe(PLAYER_COLORS[1]);
     const hl = container.querySelector('line[data-link-index="3"]') as SVGLineElement;
     expect(hl.classList.contains('highlighted')).toBe(true);
     const slot = container.querySelectorAll(
@@ -71,19 +76,7 @@ describe('<BoardSvg>', () => {
     expect(slot.classList.contains('highlighted')).toBe(true);
   });
 
-  it('运河色 #5dade2，与 P1 玩家色 #3498db 可区分', () => {
-    const { container } = render(<BoardSvg state={freshState()} />);
-    const canalLink = container.querySelector('line.board-link') as SVGLineElement;
-    expect(canalLink.getAttribute('stroke')).toBe('#5dade2');
-    expect(PLAYER_COLORS[1]).toBe('#3498db');
-  });
-
-  it('viewBox 外扩到 "-15 -15 1030 790"（商人六边形不再贴边裁切）', () => {
-    const { container } = render(<BoardSvg state={freshState()} />);
-    expect(container.querySelector('svg')?.getAttribute('viewBox')).toBe('-15 -15 1030 790');
-  });
-
-  it('已建板块渲染资源数角标（煤/铁方块、啤酒桶；resources=0 不显）', () => {
+  it('已建板块渲染官方板块图（产业-等级-玩家色），资源数角标 resources>0 才显示', () => {
     const state = freshState();
     const coal = tileDef('coal', 1);
     if (coal === undefined) throw new Error('缺 coal level 1 TileDef');
@@ -96,15 +89,24 @@ describe('<BoardSvg>', () => {
     state.board.slots['birmingham']![1] = {
       tile: coal,
       player: 1,
-      flipped: false,
+      flipped: true,
       resources: 0,
     };
     const { container } = render(<BoardSvg state={state} />);
+    const tiles = container.querySelectorAll('g[data-location="birmingham"] image.board-tile');
+    expect(tiles).toHaveLength(2);
+    expect(tiles[0]?.getAttribute('href')).toBe('/assets/tiles/coal-1-purple.png');
+    expect(tiles[1]?.getAttribute('href')).toBe('/assets/tiles/coal-1-yellow-back.png');
     const badges = container.querySelectorAll(
       'g[data-location="birmingham"] .tile-resources',
     );
     expect(badges).toHaveLength(1);
     expect(badges[0]?.textContent).toContain('3');
+  });
+
+  it('煤/铁市场按 filled 渲染方块（初始煤 13 铁 8）', () => {
+    const { container } = render(<BoardSvg state={freshState()} />);
+    expect(container.querySelectorAll('.board-markets > g')).toHaveLength(13 + 8);
   });
 
   it('三端点边的 farm-south 分支线同样可点（行为同主干）', () => {
