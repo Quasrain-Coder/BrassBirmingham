@@ -17,9 +17,9 @@ npm install
 # terminal 1: game server (ws on :8420, SQLite at ./brass.db)
 npm run dev -w @brass/server
 
-# terminal 2: web client (vite on :5173, /ws proxied to :8420)
+# terminal 2: web client (vite on :5174, /ws proxied to :8420)
 npm run dev -w @brass/web
-# → open http://localhost:5173 in two browser windows to play
+# → open http://localhost:5174 in two browser windows to play
 ```
 
 Single-port production-style run (static files + `/ws` on the same port):
@@ -92,11 +92,12 @@ npm test            # all workspaces (vitest + coverage)
 
 ## Legal note
 
-This is an unofficial, non-commercial fan project. It contains **no original game
-artwork, card text, or other copyrighted assets** — the board is an original,
-simplified SVG rendering. Game mechanics themselves are not copyrightable.
-"Brass: Birmingham" is a trademark of its publisher; this project is not affiliated
-with or endorsed by them.
+This is an unofficial, **personal, non-commercial** fan project (for the
+owner's own play). It may use original game artwork and card text as
+personal-use materials; where no original asset is available it falls back to
+original, simplified SVG rendering. Game mechanics themselves are not
+copyrightable. "Brass: Birmingham" is a trademark of its publisher; this
+project is not affiliated with or endorsed by them.
 
 ## License
 
