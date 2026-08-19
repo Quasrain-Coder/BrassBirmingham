@@ -179,8 +179,10 @@ describe('RoomManager', () => {
     const { room } = rm.createRoom({ playerCount: 2, seed: 42 }, 'alice');
     const state = toRoomState(room);
     expect(state.config).toEqual({ playerCount: 2 });
-    expect(JSON.stringify(state)).not.toContain('42');
-    expect(JSON.stringify(state)).not.toContain('seed');
+    // 断 config 层面无 seed 字段/值（不做整串 JSON 断言——随机房间号可能含 '42'）
+    expect('seed' in state.config).toBe(false);
+    expect(Object.values(state.config)).not.toContain(42);
+    expect(JSON.stringify(state.config)).not.toContain('seed');
   });
 
   it('customSeed：client 供 seed 时公开标记 true（防作弊通道透明化），否则 false', () => {
