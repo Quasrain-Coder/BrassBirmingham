@@ -13,6 +13,8 @@
   "dependencies": {
     "@brass/engine": "0.1.0",
     "@brass/protocol": "0.1.0",
+    "@fontsource/special-elite": "^5.3.0",
+    "@fontsource/yeseva-one": "^5.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
