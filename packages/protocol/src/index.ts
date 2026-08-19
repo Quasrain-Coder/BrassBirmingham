@@ -41,4 +41,5 @@ export type ClientMessage =
   | { type: 'start_game'; protocolVersion: number; token: string }
   | { type: 'submit_action'; protocolVersion: number; token: string; action: Action }
   | { type: 'resume'; protocolVersion: number; token: string }
+  | { type: 'leave'; protocolVersion: number; token: string } // 主动退出：清座位索引 + 广播 + 断开本连接（对局继续）
   | { type: 'ping'; protocolVersion: number };

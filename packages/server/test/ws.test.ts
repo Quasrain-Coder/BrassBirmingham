@@ -286,6 +286,59 @@ describe('WebSocket 传输层', () => {
     }
   });
 
+  it('leave（开局前）：token 失效、座位广播断线、本连接被断开', async () => {
+    const server = await startTestServer();
+    const a = await connect(server.port);
+    const credA = await a.send(
+      { type: 'create_room', protocolVersion: 1, nickname: 'A', config: { playerCount: 2 } },
+      'credentials',
+    );
+    // credentials 无 roomCode：join 需要房间码——从 B 加入后的 room_state 拿
+    const roomCode = (await a.nextMessage('room_state')).room.code as string;
+    const b = await connect(server.port);
+    const rs = await b.send(
+      { type: 'join_room', protocolVersion: 1, code: roomCode, nickname: 'B' },
+      'room_state',
+    );
+    expect(rs.room.seats[0]?.connected).toBe(true);
+    // A leave：B 收到 seats[0] connected=false，A 连接被断开
+    const off = b.nextMessage('room_state', (m) => m.room.seats[0]?.connected === false);
+    a.send({ type: 'leave', protocolVersion: 1, token: credA.token });
+    await off;
+    await a.waitClose(3000);
+    expect(a.ws.readyState).toBe(WebSocket.CLOSED);
+    // token 已失效：resume 回 invalid-token
+    const a2 = await connect(server.port);
+    const err = await a2.send(
+      { type: 'resume', protocolVersion: 1, token: credA.token },
+      'error',
+    );
+    expect(err.code).toBe('invalid-token');
+  });
+
+  it('leave（开局后）：token 移出对局、座位广播断线、另一玩家仍可行动', async () => {
+    const server = await startTestServer();
+    const { a, b, credA, credB, snapA } = await setupTwoPlayerGame(server.port);
+    // 当前玩家若是 A，让 A leave 后 B 仍能拿到当前玩家行动推进（对局不卡）
+    const actorIsA = (snapA.legalActions as unknown[]).length > 0;
+    const leaveClient = actorIsA ? a : b;
+    const stayClient = actorIsA ? b : a;
+    const leaveToken = actorIsA ? (credA.token as string) : (credB.token as string);
+    const off = stayClient.nextMessage('room_state', (m) =>
+      (actorIsA ? m.room.seats[0] : m.room.seats[1])?.connected === false,
+    );
+    leaveClient.send({ type: 'leave', protocolVersion: 1, token: leaveToken });
+    await off;
+    await leaveClient.waitClose(3000);
+    // 留下的玩家仍能收到 snapshot（对局推进），且 leave 的 token 无法再 resume
+    const resumed = await connect(server.port);
+    const err = await resumed.send(
+      { type: 'resume', protocolVersion: 1, token: leaveToken },
+      'error',
+    );
+    expect(err.code).toBe('invalid-token');
+  });
+
   it('心跳：不回 pong 的连接被服务器断开', async () => {
     const server = await startTestServer({ heartbeatIntervalMs: 100, heartbeatTimeoutMs: 250 });
     const c = await connect(server.port, { autoPong: false });

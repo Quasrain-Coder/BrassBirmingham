@@ -334,8 +334,19 @@ export class GameStore {
     this.connect();
   }
 
-  /** 返回大厅：清持久化 token/owner、重置对局状态、以无 token 干净身份重连。 */
+  /**
+   * 返回大厅：主动离开。已入房/入对局时先发 leave（服务端清 token 索引、
+   * 座位标断线、广播、断开本连接），再清持久化会话、以无 token 干净身份重连。
+   * 未入房（token 为空）时直接走断开 + 重置。
+   */
   leaveRoom(): void {
+    if (this.state.token !== null && this.state.connection === 'connected') {
+      try {
+        this.send({ type: 'leave', protocolVersion: PROTOCOL_VERSION, token: this.state.token });
+      } catch {
+        // 连接已坏：直接本地清理即可（服务端断线处理等价）
+      }
+    }
     this.disconnect();
     this.clearSession();
     this.patch({ log: [], thinkingSeats: [], lastError: null, selectedCard: null });

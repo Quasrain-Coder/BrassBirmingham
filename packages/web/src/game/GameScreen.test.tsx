@@ -118,4 +118,19 @@ describe('<GameScreen>', () => {
     fireEvent.click(anyCard);
     expect(store.getState().selectedCard).toBeNull();
   });
+
+  it('离开对局：点按钮 → 发 leave 帧并回到大厅态', () => {
+    const { store, ws } = setup(true);
+    render(<GameScreen store={store} />);
+    const leave = screen.getByTestId('leave-game');
+    expect(leave).toBeInTheDocument();
+    fireEvent.click(leave);
+    const frame = JSON.parse(ws.sent[ws.sent.length - 1]!) as { type: string; token: string };
+    expect(frame.type).toBe('leave');
+    expect(frame.token).toBe('tok');
+    // 会话清空：回大厅（token 空、snapshot 空）
+    expect(store.getState().token).toBeNull();
+    expect(store.getState().snapshot).toBeNull();
+    expect(store.getState().room).toBeNull();
+  });
 });
