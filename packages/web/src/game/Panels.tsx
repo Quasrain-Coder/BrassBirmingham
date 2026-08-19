@@ -6,16 +6,18 @@
  * - HandBar：自己手牌（location 城市名 / industry 产业图标 / wild 角标），他人只显牌数
  * - LogPanel：action_applied 流
  */
+import { useState } from 'react';
 import type { ReactElement } from 'react';
 import {
   COAL_FALLBACK_PRICE,
   COAL_MARKET_PRICES,
+  INCOME_LEVEL_SPACES,
   IRON_FALLBACK_PRICE,
   IRON_MARKET_PRICES,
   LOCATIONS,
   incomeLevelAt,
 } from '@brass/engine';
-import type { Action, Card, PlayerIndex } from '@brass/engine';
+import type { Action, Card, IndustryType, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { INDUSTRY_STYLE } from '../board/BoardSvg';
 import type { LogEntry } from './store';
@@ -119,6 +121,134 @@ export function IncomeTrack({
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/** 产业中文标签（与 INDUSTRY_STYLE 字母互补，用于板块图可读性）。 */
+const INDUSTRY_LABEL: Record<IndustryType, string> = {
+  cotton: '棉纺',
+  manufacturer: '制造',
+  pottery: '陶器',
+  coal: '煤矿',
+  iron: '铁矿',
+  brewery: '酿酒',
+};
+
+/**
+ * 玩家板块图（修复：对局中查看自己与他人的收入等级、已建板块、面板堆叠升级状态）。
+ * - 标题行：昵称 + 收入等级徽章（含 incomeSpace 格位与等级区间）+ 现金 + VP
+ * - 已建板块：从 board.slots 聚合本人板块，按产业分组列出（等级 / 翻转 / 收入 / VP / 资源）
+ * - 面板堆叠：players[i].tiles 剩余未建板块按等级计数（升级状态）
+ * 默认展开本人、折叠他人（点击标题展开/收起）。全部纯渲染，只读 state。
+ */
+export function PlayerBoard({
+  state,
+  seat,
+  room,
+  defaultOpen = false,
+}: {
+  state: FilteredState;
+  seat: PlayerIndex;
+  room?: RoomState | undefined;
+  /** 初始展开（本人面板传 true，他人折叠）。 */
+  defaultOpen?: boolean;
+}): ReactElement {
+  const [open, setOpen] = useState<boolean>(defaultOpen);
+  const self = state.players[seat];
+  if (self === undefined) return <></>;
+  const level = incomeLevelAt(self.incomeSpace);
+  const [levelStart, levelEnd] = INCOME_LEVEL_SPACES(level);
+
+  // 聚合已建板块（board.slots 全部城市 × 槽位，挑出属于本座位的）
+  const builtByIndustry = new Map<
+    IndustryType,
+    { level: number; flipped: boolean; resources: number; incomeAdvance: number }[]
+  >();
+  for (const slots of Object.values(state.board.slots)) {
+    for (const tile of slots) {
+      if (tile === null || tile.player !== seat) continue;
+      const list = builtByIndustry.get(tile.tile.industry) ?? [];
+      list.push({
+        level: tile.tile.level,
+        flipped: tile.flipped,
+        resources: tile.resources,
+        incomeAdvance: tile.tile.incomeAdvance,
+      });
+      builtByIndustry.set(tile.tile.industry, list);
+    }
+  }
+  // 面板堆叠：剩余未建板块按等级计数
+  const stackByLevel = new Map<number, number>();
+  for (const def of self.tiles) {
+    stackByLevel.set(def.level, (stackByLevel.get(def.level) ?? 0) + 1);
+  }
+
+  return (
+    <section className="player-board" data-testid={`player-board-${seat}`}>
+      <button
+        type="button"
+        className="player-board-head"
+        data-testid={`player-board-toggle-${seat}`}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <span className="player-name">{playerName(room, seat)}</span>
+        <AIBadge room={room} seat={seat} />
+        <span className={`level-chip${seat === state.turnOrder[state.currentPlayerIdx] ? ' current' : ''}`}>
+          收入等级 {level}
+        </span>
+        <span className="board-summary">
+          {[...builtByIndustry.entries()].length} 类已建 · 面板剩 {self.tiles.length} 块
+        </span>
+        <span className="board-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
+      </button>
+      {open ? (
+        <div className="player-board-body">
+          <p className="board-meta" data-testid={`player-board-meta-${seat}`}>
+            收入格 {self.incomeSpace}（等级 {level} 区间 {levelStart}–{levelEnd}）· 现金 £{self.money} · {self.vp}VP
+          </p>
+          <div className="board-built" data-testid={`player-board-built-${seat}`}>
+            <h4>已建板块</h4>
+            {builtByIndustry.size === 0 ? (
+              <p className="board-empty">尚未建造</p>
+            ) : (
+              [...builtByIndustry.entries()].map(([ind, list]) => (
+                <div key={ind} className="board-ind">
+                  <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
+                    {INDUSTRY_LABEL[ind]}
+                  </span>
+                  <span className="board-ind-list">
+                    {list.map((t, i) => (
+                      <span
+                        key={i}
+                        className={`board-tile${t.flipped ? ' flipped' : ''}`}
+                        data-testid={`player-board-tile-${seat}-${ind}-${i}`}
+                      >
+                        Lv{t.level}
+                        {t.flipped ? '✓' : '·'}
+                        <span className="board-tile-sub">+{t.incomeAdvance}收</span>
+                      </span>
+                    ))}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
+            <h4>面板堆叠（未建）</h4>
+            {self.tiles.length === 0 ? (
+              <p className="board-empty">全部建完</p>
+            ) : (
+              <span className="board-stack-list">
+                {[...stackByLevel.entries()].sort((a, b) => a[0] - b[0]).map(([lv, n]) => (
+                  <span key={lv} className="board-stack-item">Lv{lv} ×{n}</span>
+                ))}
+              </span>
+            )}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

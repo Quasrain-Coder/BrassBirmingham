@@ -12,7 +12,7 @@ import type { FilteredState, RoomState } from '@brass/protocol';
 import { BoardSvg } from '../board/BoardSvg';
 import { ActionBar, useActionDraft } from './ActionBar';
 import { AIIndicator } from './AIIndicator';
-import { HandBar, LogPanel, TurnOrderBar, playerName } from './Panels';
+import { HandBar, LogPanel, PlayerBoard, TurnOrderBar, playerName } from './Panels';
 import type { GameStore, GameStoreState, LogEntry } from './store';
 import { useGameStore } from './store';
 
@@ -55,6 +55,21 @@ function GameBoard({
 
   return (
     <div className="game-screen">
+      <header className="game-screen-head">
+        {room !== null ? (
+          <span className="game-room-code" data-testid="game-room-code">
+            房间 {room.code}
+          </span>
+        ) : null}
+        <button
+          type="button"
+          className="btn-ghost"
+          data-testid="leave-game"
+          onClick={() => store.leaveRoom()}
+        >
+          离开对局
+        </button>
+      </header>
       {gameOver !== null ? (
         <p className="game-over" data-testid="game-over">
           对局结束——胜者：{gameOver.winner.map((w) => playerName(room ?? undefined, w)).join('、')}
@@ -62,6 +77,11 @@ function GameBoard({
         </p>
       ) : null}
       <TurnOrderBar state={state} room={room ?? undefined} thinkingSeats={thinkingSeats} />
+      <div className="player-boards">
+        {state.players.map((_p, i) => (
+          <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={i === seat} />
+        ))}
+      </div>
       <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
       <BoardSvg
         state={state}

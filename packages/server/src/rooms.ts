@@ -201,6 +201,11 @@ export class RoomManager {
     return { room, seat };
   }
 
+  /** 主动离开：从 token 索引移除（该 token 不再能 resume/create 相关操作）。 */
+  dropToken(token: string): void {
+    this.tokenIndex.delete(token);
+  }
+
   private generateCode(): string {
     for (let attempt = 0; attempt < MAX_CODE_RETRIES; attempt++) {
       let code = '';

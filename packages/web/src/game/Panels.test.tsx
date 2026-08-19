@@ -2,9 +2,9 @@
  * 信息面板渲染测试（M2 Task 10 Step 2）：给 FilteredState fixture 断言关键数字。
  * fixture 由 engine newGame + protocol filterStateFor 生成，不手搓状态。
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { newGame } from '@brass/engine';
+import { newGame, tileDef } from '@brass/engine';
 import { filterStateFor } from '@brass/protocol';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import type { Card } from '@brass/engine';
@@ -13,6 +13,7 @@ import {
   HandBar,
   IncomeTrack,
   LogPanel,
+  PlayerBoard,
   TurnOrderBar,
 } from './Panels';
 import type { LogEntry } from './store';
@@ -96,6 +97,64 @@ describe('<IncomeTrack>', () => {
     expect(row).toHaveTextContent('等级3');
     expect(row).toHaveTextContent('£30');
     expect(row).toHaveTextContent('12VP');
+  });
+});
+
+describe('<PlayerBoard>', () => {
+  it('显示收入等级/格位/现金/VP 与板块摘要；面板堆叠数量', () => {
+    const state = freshState();
+    const p0 = state.players[0];
+    if (p0 === undefined) throw new Error('fixture 缺玩家 0');
+    p0.incomeSpace = 15; // 等级 3（区间 13–14）
+    p0.money = 30;
+    p0.vp = 12;
+    render(<PlayerBoard state={state} seat={0} room={roomFixture()} defaultOpen />);
+    expect(screen.getByTestId('player-board-toggle-0')).toHaveTextContent('甲');
+    expect(screen.getByTestId('player-board-toggle-0')).toHaveTextContent('收入等级 3');
+    expect(screen.getByTestId('player-board-meta-0')).toHaveTextContent('收入格 15');
+    expect(screen.getByTestId('player-board-meta-0')).toHaveTextContent('£30');
+    expect(screen.getByTestId('player-board-meta-0')).toHaveTextContent('12VP');
+    // 初始无已建板块 → 占位；面板堆叠按等级列出（合计 45 块：9+10+10+9+3+1+1+2）
+    expect(screen.getByTestId('player-board-built-0')).toHaveTextContent('尚未建造');
+    expect(screen.getByTestId('player-board-stack-0')).toHaveTextContent('Lv1 ×9');
+    expect(screen.getByTestId('player-board-stack-0')).toHaveTextContent('Lv8 ×2');
+  });
+
+  it('已建板块按产业聚合显示等级/翻转/收入', () => {
+    const state = freshState();
+    // 给 0 号玩家造两个板块：birmingham 棉纺 Lv2（翻转），derby 煤矿 Lv1（未翻转）
+    const coal = tileDef('coal', 1);
+    const cotton = tileDef('cotton', 2);
+    if (coal === undefined || cotton === undefined) throw new Error('缺 TileDef');
+    state.board.slots['birmingham']![0] = {
+      tile: cotton,
+      player: 0,
+      flipped: true,
+      resources: 0,
+    };
+    state.board.slots['derby']![0] = {
+      tile: coal,
+      player: 0,
+      flipped: false,
+      resources: 2,
+    };
+    render(<PlayerBoard state={state} seat={0} defaultOpen />);
+    const built = screen.getByTestId('player-board-built-0');
+    expect(built).toHaveTextContent('棉纺');
+    expect(built).toHaveTextContent('煤矿');
+    expect(built).toHaveTextContent('Lv2');
+    expect(built).toHaveTextContent('Lv1');
+    // 棉纺板块是翻转态（✓），煤矿未翻转（·）
+    const tile = screen.getByTestId('player-board-tile-0-cotton-0');
+    expect(tile.classList.contains('flipped')).toBe(true);
+  });
+
+  it('默认折叠：不展开时无 meta；点击展开', () => {
+    const state = freshState();
+    render(<PlayerBoard state={state} seat={1} room={roomFixture()} defaultOpen={false} />);
+    expect(screen.queryByTestId('player-board-meta-1')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('player-board-toggle-1'));
+    expect(screen.getByTestId('player-board-meta-1')).toBeInTheDocument();
   });
 });
 

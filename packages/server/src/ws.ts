@@ -437,6 +437,41 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     void driveAI(entry);
   }
 
+  /**
+   * 主动退出对局/房间（leave 消息）：清 token 索引 → 处理座位 → 广播 →
+   * 解绑本连接并 terminate（close 时因已解绑不再重复广播）。
+   * - 对局进行中：座位标记断线（原对局继续，AI 座位由 driveAI 自动推进；
+   *   真人缺位暂不托管，属已知范围）。
+   * - 开局前：座位直接清空（置 null）——否则剩余玩家开局的"幽灵座位"是
+   *   非 AI 真人位，token 已失效、driveAI 不推进，轮到即对局永久卡死。
+   */
+  function handleLeave(conn: Conn, msg: { token: string }): void {
+    if (typeof msg.token !== 'string') throw new WsError('bad-message', 'leave 需要 token');
+    if (conn.roomCode === null || conn.seat === null) {
+      throw new WsError('not-in-room', '当前不在任何房间');
+    }
+    const room = rooms.getRoom(conn.roomCode);
+    if (room === null) throw new WsError('room-not-found', '房间不存在');
+    // 清 token 索引：被踢 token 不再能 resume/submit
+    const entry = sessionByToken.get(msg.token);
+    if (entry !== undefined) {
+      entry.tokenSeats.delete(msg.token);
+      sessionByToken.delete(msg.token);
+    } else {
+      rooms.dropToken(msg.token);
+      // 开局前：清空座位（避免幽灵座位卡死后续开局）
+      room.seats[conn.seat] = null;
+    }
+    if (entry !== undefined) {
+      setSeatConnected(room, conn.seat, false);
+    }
+    broadcastRoomState(room);
+    // 解绑后 terminate：close 事件里的 handleDisconnect 因 seat 已 null 不再广播
+    conn.roomCode = null;
+    conn.seat = null;
+    conn.ws.terminate();
+  }
+
   function handleResume(conn: Conn, msg: { token: string }): void {
     assertDetached(conn);
     if (typeof msg.token !== 'string') throw new WsError('bad-message', 'resume 需要 token');
@@ -497,6 +532,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         break;
       case 'resume':
         handleResume(conn, msg);
+        break;
+      case 'leave':
+        handleLeave(conn, msg);
         break;
       case 'ping':
         send(conn, { type: 'pong', protocolVersion: PROTOCOL_VERSION });
