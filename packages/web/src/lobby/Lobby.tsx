@@ -282,7 +282,7 @@ export function RoomView({ store }: { store: GameStore }): ReactElement {
   return (
     <main className="app room-view">
       <header className="room-hero">
-        <p className="eyebrow">ROOM · 整装待发</p>
+        <p className="eyebrow">集结 · 整装待发</p>
         <h1>等待大厅</h1>
       </header>
 
