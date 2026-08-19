@@ -438,9 +438,12 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
   }
 
   /**
-   * 主动退出对局/房间（leave 消息）：清 token 索引 → 座位标记断线 → 广播 →
-   * 解绑本连接并 terminate（close 时因已解绑不再重复广播）。对局继续：
-   * 其他真人照常行动，AI 座位由 driveAI 自动推进。
+   * 主动退出对局/房间（leave 消息）：清 token 索引 → 处理座位 → 广播 →
+   * 解绑本连接并 terminate（close 时因已解绑不再重复广播）。
+   * - 对局进行中：座位标记断线（原对局继续，AI 座位由 driveAI 自动推进；
+   *   真人缺位暂不托管，属已知范围）。
+   * - 开局前：座位直接清空（置 null）——否则剩余玩家开局的"幽灵座位"是
+   *   非 AI 真人位，token 已失效、driveAI 不推进，轮到即对局永久卡死。
    */
   function handleLeave(conn: Conn, msg: { token: string }): void {
     if (typeof msg.token !== 'string') throw new WsError('bad-message', 'leave 需要 token');
@@ -456,8 +459,12 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
       sessionByToken.delete(msg.token);
     } else {
       rooms.dropToken(msg.token);
+      // 开局前：清空座位（避免幽灵座位卡死后续开局）
+      room.seats[conn.seat] = null;
     }
-    setSeatConnected(room, conn.seat, false);
+    if (entry !== undefined) {
+      setSeatConnected(room, conn.seat, false);
+    }
     broadcastRoomState(room);
     // 解绑后 terminate：close 事件里的 handleDisconnect 因 seat 已 null 不再广播
     conn.roomCode = null;

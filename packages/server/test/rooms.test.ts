@@ -174,6 +174,23 @@ describe('RoomManager', () => {
     expect(JSON.stringify(state)).not.toContain('token');
   });
 
+  it('开局前离开（座位清空）：剩余玩家不能开一个含幽灵座位的局', () => {
+    const rm = new RoomManager();
+    const { room, seat: aSeat, token: aToken } = rm.createRoom({ playerCount: 2 }, 'A');
+    const { seat: bSeat, token: bToken } = rm.joinRoom(room.code, 'B');
+    expect(bSeat).toBe(1);
+    // 模拟 handleLeave 的开局前分支：dropToken + 座位清空
+    rm.dropToken(bToken);
+    room.seats[bSeat] = null;
+    const rs = toRoomState(room);
+    expect(rs.seats[1]).toBeNull();
+    // 满员判定只看 null：座位已空 → room-not-full，不允许开幽灵局
+    expect(() => rm.startGame(aToken)).toThrowError(
+      expect.objectContaining({ code: 'room-not-full' }) as RoomError,
+    );
+    expect(aSeat).toBe(0);
+  });
+
   it('toRoomState：config 显式重建，不含 seed（防泄露洗牌种子）', () => {
     const rm = new RoomManager();
     const { room } = rm.createRoom({ playerCount: 2, seed: 42 }, 'alice');

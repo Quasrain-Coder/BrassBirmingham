@@ -286,7 +286,7 @@ describe('WebSocket 传输层', () => {
     }
   });
 
-  it('leave（开局前）：token 失效、座位广播断线、本连接被断开', async () => {
+  it('leave（开局前）：token 失效、座位清空、本连接被断开', async () => {
     const server = await startTestServer();
     const a = await connect(server.port);
     const credA = await a.send(
@@ -301,8 +301,8 @@ describe('WebSocket 传输层', () => {
       'room_state',
     );
     expect(rs.room.seats[0]?.connected).toBe(true);
-    // A leave：B 收到 seats[0] connected=false，A 连接被断开
-    const off = b.nextMessage('room_state', (m) => m.room.seats[0]?.connected === false);
+    // A leave：B 收到 seats[0] 清空为 null（避免幽灵座位卡死后续开局），A 连接被断开
+    const off = b.nextMessage('room_state', (m) => m.room.seats[0] === null);
     a.send({ type: 'leave', protocolVersion: 1, token: credA.token });
     await off;
     await a.waitClose(3000);
