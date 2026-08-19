@@ -17,7 +17,12 @@ import { LINKS, LOCATIONS } from '@brass/engine';
 import type { Action, Card, IndustryType, LocationId } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { SlotRef } from '../board/BoardSvg';
-import { INDUSTRY_STYLE } from '../board/BoardSvg';
+import {
+  industryName,
+  locationName as displayLocationName,
+  merchantName,
+  nodeName,
+} from './display';
 
 export type BuildAction = Extract<Action, { type: 'build' }>;
 export type NetworkAction = Extract<Action, { type: 'network' }>;
@@ -277,40 +282,36 @@ export function matchScout(
 
 /** 城市显示名（未知 id 原样）。 */
 function locationName(location: string): string {
-  return LOCATIONS[location]?.name ?? location;
+  return displayLocationName(location);
 }
 
-/** 连接边一句话：两端点名（商人位无 name 字段，用 id）。 */
+/** 连接边一句话：两端点名（含商人位中文名）。 */
 function linkName(linkIndex: number): string {
   const l = LINKS[linkIndex];
   if (!l) return `#${linkIndex}`;
-  return `${locationName(l.a)}—${locationName(l.b)}`;
-}
-
-function industryLabel(ind: IndustryType): string {
-  return INDUSTRY_STYLE[ind].label;
+  return `${nodeName(l.a)}—${nodeName(l.b)}`;
 }
 
 /** 行动一句话描述（ActionBar 确认区 / 待选列表）。 */
 export function describeAction(action: Action): string {
   switch (action.type) {
     case 'build':
-      return `建造 ${industryLabel(action.industry)} @ ${locationName(action.location)}`;
+      return `建造 ${industryName(action.industry)} @ ${locationName(action.location)}`;
     case 'network':
       return `连接 ${action.links.map(linkName).join(' + ')}`;
     case 'develop':
-      return `研发移除 ${action.removals.map(industryLabel).join(' + ')}`;
+      return `研发移除 ${action.removals.map(industryName).join(' + ')}`;
     case 'sell':
       return `出售 ×${action.sales.length}：${action.sales
         .map(
           (s) =>
-            `${locationName(s.location)}→${s.merchant}${s.useMerchantBeer ? '（用商人啤酒）' : ''}`,
+            `${locationName(s.location)}→${merchantName(s.merchant)}${s.useMerchantBeer ? '（用商人啤酒）' : ''}`,
         )
         .join('，')}`;
     case 'loan':
       return '贷款 £30（收入 −3 级）';
     case 'scout':
-      return '侦察：弃 3 张换 Wild 城市 + Wild 产业';
+      return '侦察：弃 3 张换百搭·城市 + 百搭·产业';
     case 'pass':
       return '过';
   }

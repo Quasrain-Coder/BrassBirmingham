@@ -1,6 +1,7 @@
 /**
- * 信息面板渲染测试（M2 Task 10 Step 2）：给 FilteredState fixture 断言关键数字。
+ * 信息面板渲染测试：给 FilteredState fixture 断言关键数字与素材路径。
  * fixture 由 engine newGame + protocol filterStateFor 生成，不手搓状态。
+ * （煤/铁市场格与收入轨已移至 BoardSvg，见其测试。）
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
@@ -8,14 +9,7 @@ import { newGame, tileDef } from '@brass/engine';
 import { filterStateFor } from '@brass/protocol';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import type { Card } from '@brass/engine';
-import {
-  CoalIronMarket,
-  HandBar,
-  IncomeTrack,
-  LogPanel,
-  PlayerBoard,
-  TurnOrderBar,
-} from './Panels';
+import { HandBar, LogPanel, PlayerBoard, TurnOrderBar, cardImageSrc } from './Panels';
 import type { LogEntry } from './store';
 
 function freshState(): FilteredState {
@@ -37,71 +31,8 @@ function roomFixture(): RoomState {
   };
 }
 
-describe('<CoalIronMarket>', () => {
-  it('渲染煤 14 格 / 铁 10 格需求轨，初始填充 13 煤 8 铁', () => {
-    const { container } = render(<CoalIronMarket state={freshState()} />);
-    const coalCells = container.querySelectorAll('[data-testid="coal-track"] .market-cell');
-    const ironCells = container.querySelectorAll('[data-testid="iron-track"] .market-cell');
-    expect(coalCells).toHaveLength(14);
-    expect(ironCells).toHaveLength(10);
-    expect(
-      container.querySelectorAll('[data-testid="coal-track"] .market-cell.filled'),
-    ).toHaveLength(13);
-    expect(
-      container.querySelectorAll('[data-testid="iron-track"] .market-cell.filled'),
-    ).toHaveLength(8);
-  });
-
-  it('显示下一块买价（最便宜填充格）；空格在低价端', () => {
-    const state = freshState();
-    const { container } = render(<CoalIronMarket state={state} />);
-    expect(screen.getByTestId('coal-next-price')).toHaveTextContent('£1');
-    expect(screen.getByTestId('iron-next-price')).toHaveTextContent('£2');
-    // 煤初始留 1 个 £1 空格：第一格空、第二格填
-    const coalCells = container.querySelectorAll('[data-testid="coal-track"] .market-cell');
-    expect(coalCells[0]?.classList.contains('filled')).toBe(false);
-    expect(coalCells[1]?.classList.contains('filled')).toBe(true);
-  });
-
-  it('市场买空后显示兜底价（煤 £8 / 铁 £6）', () => {
-    const state = freshState();
-    state.coalMarket = 0;
-    state.ironMarket = 0;
-    render(<CoalIronMarket state={state} />);
-    expect(screen.getByTestId('coal-next-price')).toHaveTextContent('£8');
-    expect(screen.getByTestId('iron-next-price')).toHaveTextContent('£6');
-  });
-});
-
-describe('<IncomeTrack>', () => {
-  it('渲染各人收入等级 / 现金 / VP（初始：等级0、£17、0VP）', () => {
-    render(<IncomeTrack state={freshState()} />);
-    for (let i = 0; i < 4; i++) {
-      const row = screen.getByTestId(`income-row-${i}`);
-      expect(row).toHaveTextContent('等级0');
-      expect(row).toHaveTextContent('£17');
-      expect(row).toHaveTextContent('0VP');
-    }
-  });
-
-  it('incomeSpace 换算为等级（space 15 → 等级 3）并显示昵称', () => {
-    const state = freshState();
-    const p1 = state.players[1];
-    if (p1 === undefined) throw new Error('fixture 缺玩家 1');
-    p1.incomeSpace = 15;
-    p1.money = 30;
-    p1.vp = 12;
-    render(<IncomeTrack state={state} room={roomFixture()} />);
-    const row = screen.getByTestId('income-row-1');
-    expect(row).toHaveTextContent('乙');
-    expect(row).toHaveTextContent('等级3');
-    expect(row).toHaveTextContent('£30');
-    expect(row).toHaveTextContent('12VP');
-  });
-});
-
 describe('<PlayerBoard>', () => {
-  it('显示收入等级/格位/现金/VP 与板块摘要；面板堆叠数量', () => {
+  it('显示收入等级/格位/现金/VP 与面板堆叠（按产业分组）', () => {
     const state = freshState();
     const p0 = state.players[0];
     if (p0 === undefined) throw new Error('fixture 缺玩家 0');
@@ -113,16 +44,19 @@ describe('<PlayerBoard>', () => {
     expect(screen.getByTestId('player-board-toggle-0')).toHaveTextContent('收入等级 3');
     expect(screen.getByTestId('player-board-meta-0')).toHaveTextContent('收入格 15');
     expect(screen.getByTestId('player-board-meta-0')).toHaveTextContent('£30');
-    expect(screen.getByTestId('player-board-meta-0')).toHaveTextContent('12VP');
-    // 初始无已建板块 → 占位；面板堆叠按等级列出（合计 45 块：9+10+10+9+3+1+1+2）
+    expect(screen.getByTestId('player-board-meta-0')).toHaveTextContent('12 分');
     expect(screen.getByTestId('player-board-built-0')).toHaveTextContent('尚未建造');
-    expect(screen.getByTestId('player-board-stack-0')).toHaveTextContent('Lv1 ×9');
-    expect(screen.getByTestId('player-board-stack-0')).toHaveTextContent('Lv8 ×2');
+    // 堆叠按产业分组：棉纺 Lv1-3、制造 Lv1-8 等
+    const stack = screen.getByTestId('player-board-stack-0');
+    expect(stack).toHaveTextContent('棉纺厂');
+    expect(stack).toHaveTextContent('制造厂');
+    expect(stack).toHaveTextContent('陶器厂');
+    expect(stack).toHaveTextContent('Lv5 ×1');
+    expect(stack).toHaveTextContent('Lv8 ×2');
   });
 
-  it('已建板块按产业聚合显示等级/翻转/收入', () => {
+  it('已建板块渲染官方板块缩略图（含翻面态）', () => {
     const state = freshState();
-    // 给 0 号玩家造两个板块：birmingham 棉纺 Lv2（翻转），derby 煤矿 Lv1（未翻转）
     const coal = tileDef('coal', 1);
     const cotton = tileDef('cotton', 2);
     if (coal === undefined || cotton === undefined) throw new Error('缺 TileDef');
@@ -139,14 +73,15 @@ describe('<PlayerBoard>', () => {
       resources: 2,
     };
     render(<PlayerBoard state={state} seat={0} defaultOpen />);
-    const built = screen.getByTestId('player-board-built-0');
-    expect(built).toHaveTextContent('棉纺');
-    expect(built).toHaveTextContent('煤矿');
-    expect(built).toHaveTextContent('Lv2');
-    expect(built).toHaveTextContent('Lv1');
-    // 棉纺板块是翻转态（✓），煤矿未翻转（·）
-    const tile = screen.getByTestId('player-board-tile-0-cotton-0');
-    expect(tile.classList.contains('flipped')).toBe(true);
+    const cottonThumb = screen.getByTestId('player-board-tile-0-cotton-0');
+    expect(cottonThumb.classList.contains('flipped')).toBe(true);
+    expect(cottonThumb.querySelector('img')?.getAttribute('src')).toBe(
+      '/assets/tiles/cotton-2-purple-back.png',
+    );
+    const coalThumb = screen.getByTestId('player-board-tile-0-coal-0');
+    expect(coalThumb.querySelector('img')?.getAttribute('src')).toBe(
+      '/assets/tiles/coal-1-purple.png',
+    );
   });
 
   it('默认折叠：不展开时无 meta；点击展开', () => {
@@ -172,17 +107,16 @@ describe('<TurnOrderBar>', () => {
     });
   });
 
-  it('显示各人本轮已花金额与昵称', () => {
+  it('显示各人本轮已花金额、现金与昵称', () => {
     const state = freshState();
     const p0 = state.players[0];
     if (p0 === undefined) throw new Error('fixture 缺玩家 0');
     p0.spentThisRound = 5;
     render(<TurnOrderBar state={state} room={roomFixture()} />);
-    const item = screen
-      .getByTestId('turn-order')
-      .querySelector('[data-player="0"]');
+    const item = screen.getByTestId('turn-order').querySelector('[data-player="0"]');
     expect(item).toHaveTextContent('甲');
-    expect(item).toHaveTextContent('£5');
+    expect(item).toHaveTextContent('已花 £5');
+    expect(item).toHaveTextContent('£17');
   });
 });
 
@@ -195,28 +129,44 @@ describe('<HandBar>', () => {
     return state;
   }
 
-  it('自己手牌：location 卡显示城市名，industry 卡显示产业图标', () => {
+  it('自己手牌：官方卡面图 + 中文名（地点卡=城市，产业卡=产业）', () => {
     const state = handState([
       { id: 'l0', kind: 'location', location: 'birmingham' },
       { id: 'i0', kind: 'industry', industries: ['cotton', 'manufacturer'] },
     ]);
     render(<HandBar state={state} seat={0} />);
     const cardL = screen.getByTestId('hand-card-l0');
-    expect(cardL).toHaveTextContent('Birmingham');
+    expect(cardL).toHaveTextContent('伯明翰');
+    expect(cardL.querySelector('img')?.getAttribute('src')).toBe('/assets/cards/loc-birmingham.png');
     const cardI = screen.getByTestId('hand-card-i0');
-    expect(cardI).toHaveTextContent('C');
-    expect(cardI).toHaveTextContent('M');
+    expect(cardI).toHaveTextContent('棉纺厂/制造厂');
     expect(cardI.classList.contains('wild')).toBe(false);
   });
 
-  it('wild 卡带角标', () => {
+  it('多美术牌面按副本序号轮转（ind-brewery 3 张）', () => {
+    expect(cardImageSrc({ id: 'ind-brewery-0', kind: 'industry', industries: ['brewery'] })).toBe(
+      '/assets/cards/ind-brewery.png',
+    );
+    expect(cardImageSrc({ id: 'ind-brewery-1', kind: 'industry', industries: ['brewery'] })).toBe(
+      '/assets/cards/ind-brewery@2.png',
+    );
+    expect(cardImageSrc({ id: 'ind-brewery-2', kind: 'industry', industries: ['brewery'] })).toBe(
+      '/assets/cards/ind-brewery@3.png',
+    );
+    expect(cardImageSrc({ id: 'ind-brewery-3', kind: 'industry', industries: ['brewery'] })).toBe(
+      '/assets/cards/ind-brewery.png',
+    );
+  });
+
+  it('wild 卡带百搭角标与中文名', () => {
     const state = handState([
       { id: 'w0', kind: 'wild-location' },
       { id: 'w1', kind: 'wild-industry' },
     ]);
     render(<HandBar state={state} seat={0} />);
     expect(screen.getByTestId('hand-card-w0').classList.contains('wild')).toBe(true);
-    expect(screen.getByTestId('hand-card-w1').classList.contains('wild')).toBe(true);
+    expect(screen.getByTestId('hand-card-w0')).toHaveTextContent('百搭·城市');
+    expect(screen.getByTestId('hand-card-w1')).toHaveTextContent('百搭·产业');
   });
 
   it('他人只显示牌数；点击自己手牌触发 onSelect', () => {
@@ -238,7 +188,7 @@ describe('<HandBar>', () => {
 });
 
 describe('<LogPanel>', () => {
-  it('渲染 action_applied 流：seq、玩家、行动摘要', () => {
+  it('渲染 action_applied 流：seq、玩家、中文行动摘要', () => {
     const log: LogEntry[] = [
       { seq: 0, player: 1, action: { type: 'build', cardId: 'c', industry: 'coal', location: 'birmingham' }, events: [] },
       { seq: 1, player: 2, action: { type: 'loan', cardId: 'c2' }, events: [] },
@@ -249,7 +199,7 @@ describe('<LogPanel>', () => {
     expect(entries).toHaveLength(3);
     expect(entries[0]).toHaveTextContent('#0');
     expect(entries[0]).toHaveTextContent('乙');
-    expect(entries[0]).toHaveTextContent('建造 coal @ Birmingham');
+    expect(entries[0]).toHaveTextContent('建造 煤矿（伯明翰）');
     expect(entries[1]).toHaveTextContent('贷款');
     expect(entries[2]).toHaveTextContent('侦察');
   });

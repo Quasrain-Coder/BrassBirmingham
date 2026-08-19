@@ -36,7 +36,7 @@ body {
 
 /* ---- M2 Task 10/11 对局画面 ---- */
 .game-screen {
-  max-width: 1080px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 12px 16px;
   display: flex;
@@ -44,87 +44,10 @@ body {
   gap: 12px;
 }
 
-.board-svg {
-  width: 100%;
-  height: auto;
-  background: #23262e;
-  border-radius: 8px;
-}
-
-.board-slot.highlighted {
-  cursor: pointer;
-}
-
-.board-link.highlighted {
-  cursor: pointer;
-}
-
 .hand-bar .own-hand {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.hand-card {
-  padding: 6px 10px;
-  border: 1px solid #4a5160;
-  border-radius: 6px;
-  background: #2a2e38;
-  color: #e6e6e6;
-  cursor: pointer;
-}
-
-.hand-card.selected {
-  border-color: #e91e63;
-  box-shadow: 0 0 0 1px #e91e63;
-}
-
-.hand-card .wild-badge {
-  margin-left: 4px;
-  font-size: 0.7em;
-  color: #c9a86a;
-}
-
-.action-bar {
-  border: 1px solid #4a5160;
-  border-radius: 8px;
-  padding: 10px 14px;
-}
-
-.action-bar h3 {
-  margin: 0 0 8px;
-}
-
-.action-hint {
-  color: #9aa4b2;
-  margin: 4px 0;
-}
-
-.action-choices {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin: 6px 0;
-}
-
-.action-choices button {
-  padding: 4px 10px;
-  border: 1px solid #4a5160;
-  border-radius: 6px;
-  background: #2a2e38;
-  color: #e6e6e6;
-  cursor: pointer;
-}
-
-.action-choices button.selected {
-  border-color: #e91e63;
-  box-shadow: 0 0 0 1px #e91e63;
-}
-
-.action-choices button:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 
 .action-confirm {
@@ -655,7 +578,7 @@ body {
   background: rgba(23, 26, 31, 0.4);
 }
 
-/* 头像圆章：按座位取色（黄铜/钢蓝/紫晶/赤铜），与对局内玩家色呼应 */
+/* 头像圆章：按座位取色，与对局内官方玩家色（紫/黄/橙/青）一致 */
 .seat-avatar {
   flex: none;
   width: 34px;
@@ -671,23 +594,23 @@ body {
 }
 
 .seat-card.hue-0 .seat-avatar {
-  border-color: #c9a86a;
-  color: #e3c58f;
+  border-color: #8e6bb0;
+  color: #b79bd4;
 }
 
 .seat-card.hue-1 .seat-avatar {
-  border-color: #5b8dd9;
-  color: #8fb4e8;
+  border-color: #d9a832;
+  color: #e8c96a;
 }
 
 .seat-card.hue-2 .seat-avatar {
-  border-color: #9b59b6;
-  color: #c58fe0;
+  border-color: #c05a30;
+  color: #e08a5c;
 }
 
 .seat-card.hue-3 .seat-avatar {
-  border-color: #d4772f;
-  color: #e89a5c;
+  border-color: #4fa3a5;
+  color: #7fc4c6;
 }
 
 .seat-body {
@@ -847,10 +770,8 @@ body {
   background: linear-gradient(90deg, #c9a86a, transparent);
 }
 
-/* 通用面板卡片（顺位/收入/市场/手牌/行动/日志共用） */
+/* 通用面板卡片（顺位/手牌/日志共用） */
 .turn-order-bar,
-.income-track,
-.coal-iron-market,
 .hand-bar,
 .log-panel {
   border: 1px solid #3a3226;
@@ -924,112 +845,48 @@ body {
   animation: breathe 1.2s ease-in-out infinite;
 }
 
-/* 收入轨：行 + 座位色点 */
-.income-track ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 8px;
-}
-
-.income-track li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid #2e2b23;
-  border-radius: 8px;
-  background: rgba(23, 26, 31, 0.6);
-  font-size: 0.85rem;
-  color: #b3a888;
-}
-
-.income-track li .player-name {
-  color: #f3ead4;
-  font-weight: 600;
-}
-
-.income-track .ai-badge {
-  margin-left: -4px;
-}
-
-/* 资源市场 */
-.market-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-  font-size: 0.85rem;
-}
-
-.market-label {
-  flex: none;
-  width: 2.2em;
-  color: #e3d3a8;
-  font-weight: 600;
-}
-
-.market-track {
-  display: flex;
-  gap: 3px;
-  flex-wrap: wrap;
-}
-
-.market-cell {
-  display: grid;
-  place-items: center;
-  min-width: 26px;
-  height: 24px;
-  padding: 0 4px;
-  border: 1px solid #4a4030;
-  border-radius: 4px;
-  background: #171a1f;
-  color: #5d5a50;
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.market-cell.filled {
-  background: linear-gradient(180deg, #3a2f1e, #2a2318);
-  border-color: #8a6d3b;
-  color: #e3c58f;
-}
-
-.market-row > span:last-child {
-  color: #b89a5f;
-  white-space: nowrap;
-}
-
-/* 手牌 */
+/* 手牌（官方卡面 + 中文名） */
 .own-hand {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
 .hand-card {
-  padding: 8px 12px;
-  border: 1px solid #8a7a56;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #f6eed8, #e2d3ae);
-  color: #4a3d28;
-  font-size: 0.9rem;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 5px 6px;
+  border: 1px solid #6b5b3e;
+  border-radius: 10px;
+  background: rgba(23, 26, 31, 0.75);
+  color: #e3d3a8;
+  font-size: 0.8rem;
   font-weight: 600;
-  letter-spacing: 0.03em;
   cursor: pointer;
-  box-shadow:
-    0 3px 10px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
   transition:
     transform 0.12s ease,
     box-shadow 0.12s ease,
     border-color 0.12s ease;
 }
 
+.hand-card-art {
+  width: 88px;
+  height: auto;
+  border-radius: 6px;
+  display: block;
+}
+
+.hand-card-name {
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+
 .hand-card:hover:not([disabled]) {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   border-color: #c9a86a;
 }
 
@@ -1038,7 +895,9 @@ body {
 }
 
 .hand-card .wild-badge {
-  margin-left: 6px;
+  position: absolute;
+  top: 2px;
+  right: 2px;
   padding: 1px 6px;
   border-radius: 999px;
   background: #d4ac0d;
@@ -1051,9 +910,8 @@ body {
   border-color: #e3c58f;
   box-shadow:
     0 0 0 2px rgba(201, 168, 106, 0.55),
-    0 6px 18px rgba(201, 168, 106, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  transform: translateY(-3px);
+    0 6px 18px rgba(201, 168, 106, 0.3);
+  transform: translateY(-4px);
 }
 
 .opponent-hands {
@@ -1192,15 +1050,7 @@ body {
     inset 0 0 60px rgba(58, 50, 38, 0.35);
 }
 
-/* 高亮态辉光（原为纯色描边，现叠加 CSS drop-shadow） */
-.board-slot.highlighted {
-  filter: drop-shadow(0 0 5px rgba(233, 30, 99, 0.8));
-}
-
-.board-link.highlighted {
-  filter: drop-shadow(0 0 4px rgba(233, 30, 99, 0.9));
-}
-
+/* 高亮态指针（辉光由 SVG feDropShadow 提供，见 BoardSvg hl-glow） */
 .board-slot.highlighted,
 .board-link.highlighted {
   cursor: pointer;
@@ -1208,7 +1058,76 @@ body {
 
 /* 棋盘内文本 */
 .board-svg text {
-  font-family: 'Special Elite', Georgia, 'Times New Roman', serif;
+  font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
+}
+
+/* 玩家色点 / 钱币图标 / 金钱行 */
+.color-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+  flex: none;
+}
+
+.coin-icon {
+  width: 16px;
+  height: 16px;
+  vertical-align: -3px;
+  margin-right: 2px;
+}
+
+.turn-money,
+.head-money {
+  color: #e3c58f;
+  white-space: nowrap;
+}
+
+.turn-vp,
+.head-vp {
+  color: #b3a888;
+  white-space: nowrap;
+}
+
+/* 已建板块缩略图（官方板块图） */
+.board-tile-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.board-tile-thumb {
+  position: relative;
+  display: inline-block;
+  border: 1px solid #6b5b3e;
+  border-radius: 6px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.board-tile-thumb img {
+  width: 44px;
+  height: 44px;
+  display: block;
+}
+
+.board-tile-thumb.flipped {
+  border-color: #c9a86a;
+  box-shadow: 0 0 6px rgba(201, 168, 106, 0.35);
+}
+
+.board-tile-thumb .board-tile-sub {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 0 4px;
+  border-radius: 4px 0 0 0;
+  background: rgba(20, 16, 10, 0.85);
+  color: #f3e9c8;
+  font-size: 0.62rem;
+  line-height: 1.4;
 }
 
 /* ============================================================
@@ -1330,34 +1249,6 @@ body {
 }
 
 .board-ind-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.board-tile {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid #6b5b3e;
-  border-radius: 6px;
-  background: rgba(23, 26, 31, 0.7);
-  color: #d8cdb4;
-  font-size: 0.78rem;
-}
-
-.board-tile.flipped {
-  border-color: #c9a86a;
-  color: #f3ead4;
-}
-
-.board-tile-sub {
-  color: #8a8068;
-  font-size: 0.7rem;
-}
-
-.board-stack-list {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
