@@ -1,0 +1,535 @@
+{
+ "source": "ikegami/tts_brass (Tabletop Simulator mod, official scans) — Steam UGC CDN",
+ "ttsSave": "https://raw.githubusercontent.com/ikegami/tts_brass/main/Brass%20--%20Birmingham%20--%20Kini.json",
+ "board": "https://steamusercontent-a.akamaihd.net/ugc/987863257460546163/0BFF1C2775DDD6B13BEB74E4E7A86F36A3269BAB/",
+ "cardSheet": {
+  "url": "https://steamusercontent-a.akamaihd.net/ugc/1011528195164195474/539B5E3D9B5821A8D085A66E492BDBA72FDE31AC/",
+  "back": "https://steamusercontent-a.akamaihd.net/ugc/987863257461228308/C0D0FF1693A1F219F9DC3A8DB86B77EAE81712C4/",
+  "cols": 7,
+  "rows": 5,
+  "cells": {
+   "0": "loc-derby",
+   "1": "wild-location",
+   "2": "wild-industry",
+   "3": "ind-cotton-manufacturer",
+   "4": "loc-birmingham",
+   "5": "ind-cotton-manufacturer",
+   "6": "ind-pottery",
+   "7": "loc-stone",
+   "8": "loc-walsall",
+   "9": "loc-burton-on-trent",
+   "10": "loc-wolverhampton",
+   "11": "ind-iron",
+   "12": "ind-brewery",
+   "13": "loc-stafford",
+   "14": "loc-cannock",
+   "15": "loc-tamworth",
+   "16": "loc-stoke-on-trent",
+   "17": "loc-coventry",
+   "18": "ind-coal",
+   "19": "loc-dudley",
+   "20": "ind-cotton-manufacturer",
+   "21": "ind-brewery",
+   "22": "ind-iron",
+   "23": "loc-uttoxeter",
+   "24": "loc-coalbrookdale",
+   "25": "loc-kidderminster",
+   "26": "loc-worcester",
+   "27": "loc-leek",
+   "28": "loc-belper",
+   "29": "ind-brewery",
+   "30": "ind-coal",
+   "31": "loc-redditch",
+   "32": "loc-nuneaton"
+  }
+ },
+ "merchantSheet": {
+  "url": "https://steamusercontent-a.akamaihd.net/ugc/987863257460839479/2CF61FBBB2A79F4A48861340C4A847FE9353250F/",
+  "cols": 3,
+  "rows": 2,
+  "cells": {
+   "0": "pottery",
+   "1": "manufacturer",
+   "2": "cotton",
+   "3": "any",
+   "4": "blank"
+  }
+ },
+ "tiles": {
+  "iron|1|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758678786/F114652F6A7AAB20116346411FBB57D6E83D9730/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758678892/E53FCBA4C1D64D4DF7E0F4B50EBCA5780018D42A/"
+  },
+  "iron|2|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758679004/407918FECB6427129CF0340809845A68D67BAE83/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758679112/ADAB95296B216A74850FF6BC962777BF526F50EF/"
+  },
+  "pottery|1|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758679233/24DED06DA680B593B460E1B21C416C3235A95CD2/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758679340/0DAAAF7E079BAABC9A80AD813DF6B276D7A947B2/"
+  },
+  "pottery|4|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758679464/1B78B0A4DCB0A84283346FF678EF7487B6FBD0F5/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758679570/ACAF63BB3EC971FFADD02F72F3975B441FF85056/"
+  },
+  "pottery|5|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758679676/862123E0C07E7E347D01F7B323D12FE6A6BB6D48/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758679784/D54D25A0B5AAE99ECBEFE297DA5EA102EB4A2935/"
+  },
+  "manufacturer|4|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758679900/A4C4BB20B2237DBE2D8384BAD97D3729DC90DAD0/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758680003/38A18ECCC5C7A38C274DAD0D2784435A4E10F082/"
+  },
+  "manufacturer|7|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758680105/F29557A02DC44C922374B395CEA24BAC4B45DA49/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758680216/4945EEC43F3098DE92DF282B5B08FC4DF70E8D9C/"
+  },
+  "coal|1|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758680329/59585A54FDC057B3271DF350BF20CE4D9F341F7A/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758680440/9CBDC578C7B323398CCFC23F96B6EF1E47CD0750/"
+  },
+  "manufacturer|3|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758680571/52D500CBD2E9F8126E6A4928DF7F8B9CB61285D6/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758680695/7B224E02E07B342DB62FF26541CD38DB75C822B8/"
+  },
+  "manufacturer|1|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758680807/F426F5C3A630749757A86018FD30E0B236164153/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758680915/8682EA8212506EBAC63088EB447C4350D1083724/"
+  },
+  "brewery|4|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758681037/8FB6959CD0818DB85DEA89EEE989B6148B804AA8/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758681152/9AA3820409ED4B3ECED0E3CB9C68CA182C03ADCD/"
+  },
+  "coal|1|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758681273/97223E66F128A4725C8307AC3FB97CEC95F25F6D/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758681379/6006D85BEC01D7F90AD583FAE913890FE91814F3/"
+  },
+  "brewery|4|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758681491/93C5923F60D665C9A4373CC34260A2EF3477B594/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758681596/6C435F6E75CEEF72C525427E0712336E2EAF52F6/"
+  },
+  "pottery|2|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758681701/3DFEE83BAF81047666BDA55735DBEA3AA069F3F0/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758681809/10E5E5889D8847AA0D37D2B99800411C5AE58E0C/"
+  },
+  "pottery|1|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758681922/9BF208E9F7F4EAF32B622C7B56C095859A96A817/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758682015/28BDC678D2C8F1982B4C1617EEE8D546ACF5C2AF/"
+  },
+  "pottery|3|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758682121/67069FC6DF36211A7EC829A05662B443A193A3F3/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758682219/A8BAAAB8ADD4217C32477F7DDB3CB6798F9A771D/"
+  },
+  "manufacturer|1|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758682337/719435CD00CA1875B9CF81AA4C4A5E5AF7F5FD95/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758682446/6352D5102BDDCBE8A5B5DA58E0E57FE128EF417A/"
+  },
+  "pottery|4|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758682545/A343BF0D91087FE7876E62646E60046D65388BDD/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758682646/04FDE8DB8ADDF8199B5FCA7F569FFF11C4DE70ED/"
+  },
+  "pottery|5|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758682753/EC1D8EE281682CB54F367B630A7C7B41CA1564BA/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758682863/2B5B0A3EF0EC382A8A1DE96EE9092A29571F8D29/"
+  },
+  "iron|1|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758682967/F3240CB8E5AB2D5D4283E804FC01289B5BDDE668/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758683075/1DFBF3CB51D9DE7FFEEF15FB2B3C589895FD9CDE/"
+  },
+  "manufacturer|4|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758683213/7DD9DF53C43064529299AA7F5D2A1B49727CD3FB/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758683324/105DB5793DC8094F4147F1794438A11B09EF8E0A/"
+  },
+  "manufacturer|6|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758683474/7444E504610213A2F8CFAC0111188D8510DE4F41/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758683586/7076DC29D193D385C8BF91A15A334B4C42D5A1E6/"
+  },
+  "manufacturer|7|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758683692/73A27D41821A2CD0EF89BCB507E5B09A935AD76B/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758683801/CC209F72CDFAAC5186789A93BAADF43ECE87197B/"
+  },
+  "manufacturer|3|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758683902/C85A268734895422DCCE27E52A621EC5EDF0AB68/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758684007/8F0D6AE1865A9EE4F300ACDD9AFEFA60F953964A/"
+  },
+  "iron|2|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758684110/1B9281CA998C1265A7990954A8DF77E27E48612B/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758684223/1C1905A6168B2A2ACBFDD05FEFA741DD31F4CB79/"
+  },
+  "brewery|4|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758684327/1EF968D881702EE0507B347847122CC2D12F045F/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758684414/B2383E7C5959E3C8DBE841B8F38C66C0B4F21962/"
+  },
+  "coal|1|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758684505/8EA76549BE9752E60130B2F7594C69374370F3D2/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758684623/290C565969F3F818531DF35827E87A69C9E82B30/"
+  },
+  "pottery|3|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758684729/2EE49D7DBA151EE2A01DF396E87957C08E6D4781/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758684829/A243F78E39542275385AF2ACCE6CA052EE8C4E65/"
+  },
+  "pottery|2|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758684937/7C36D23021CAB77A5E9EC61138151108F2F973EE/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758685025/B55BBA40292D102B3B63B6FBF19167DB02C59E84/"
+  },
+  "pottery|1|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758685113/0ECF917C0491CBC80F410266678E05AC6B0934A0/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758685202/51C70DB8DD8C5B0DC446298C57AE0E9CE8B80BDC/"
+  },
+  "manufacturer|1|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758685297/E87D0E942BCC2FF8C310E394E5B088535F42FE06/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758685400/239952C2C4F84211EA03FF55010D686EF32F589D/"
+  },
+  "pottery|4|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758685504/B902D2E254DD8A372018E696D675F3EA48B91A52/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758685593/6DF6B72018BB958CE76A26C349859F5AAEBC9ADB/"
+  },
+  "pottery|5|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758685700/EADE3E0181ACAE9B5568E519BAEB9F567524AD64/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758685797/0D7BF8ECED82BA2DB4F2C3E477CDEF0A5D311E4D/"
+  },
+  "iron|1|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758685898/2A5E95FA36408A6D255E2ED6FD3D72637CC91094/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758686021/DBA8306D112EC7719DA59029A33A43FA49D59BC7/"
+  },
+  "manufacturer|4|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758686120/D8AC483C0E651F4131F9BB29AA4DF1A2F17F47CC/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758686220/6A0FB781C6C3A8A98C45E71E59319723161E41E0/"
+  },
+  "manufacturer|6|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758686326/CCBEB063D7BA3922EEBB30A2AB1F12D5CC32ABD2/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758686414/AB60FCD48838DE6FC2A1E0F07B64923685B66231/"
+  },
+  "manufacturer|7|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758686510/42B650EF2D7FD050CF7B951601D1924B12EE2C4A/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758686609/4A15324D680E44D35651686C5244828E1BC32D5F/"
+  },
+  "manufacturer|3|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758686713/06E20AB3C26C6A815C6BD56AE8D01ECD788FE0F8/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758686805/6F661A2EA58CBE8E5214DD502116DF546B6B6DCF/"
+  },
+  "iron|4|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758686889/FF0271F4C545EDC1A46D3057126A0B452D037557/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758686989/ADAA2C1B8098E48E5BDCE71702EE4C01DFD17DE0/"
+  },
+  "iron|3|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758687096/E20DA230C682BAB2D0B3CA67CE27E6F282AC6587/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758687189/4AA2EE32A717C5478057A64835E443BBCA1E6F7E/"
+  },
+  "iron|2|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758687308/56D9FB8860CB06AE5D57E282B344D30B72DBDB50/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758687403/7577D5796CF9E7129B9A806880DDDEFC58D94D91/"
+  },
+  "iron|2|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758687731/0488DFA67FC11F1EB3546F3ABA7364FAF772A23F/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758687831/FAD82ECCA94CF2D57BF17894FECDC202636E9AC2/"
+  },
+  "pottery|2|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758687937/A30304ED53F0D01C5F07F002492D6DEDFD67FEEE/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758688037/780F653EA0CB633C57C4BAEA296EF3EF4BFB25BE/"
+  },
+  "iron|3|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758688142/8BC0C97D80670A327D793B738DAFCA26B63D2B2B/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758688250/3CAC2C1033B94F8AA5BB734E0B80E3C160121219/"
+  },
+  "pottery|1|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758688370/1DF12D24C237A0DC004E3B87EDE9CDDCDE9B4AB8/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758688467/C0495B2AE73902FE21CDB273D993679567557B41/"
+  },
+  "iron|4|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758688577/ABB602BAC4279B566107E0491DB37B89CDBDF28D/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758688685/F0312B43CDADC8BE16303C9CED3EF6E4D8BBE7DB/"
+  },
+  "pottery|3|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758688792/A3D1307B847BC2D814EFA8CD564D7B1F5364F931/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758688914/05BC5DE9886DC87E04B1D1C5697F30D4D9A67378/"
+  },
+  "coal|1|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758689009/A753D1B5B7440830A03367E41E94A453B4DC1AE5/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758689106/90EE2F918C42EAFC0E207AC116C8A6CFC0BD8246/"
+  },
+  "pottery|4|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758689212/415E573DB0AA07C832DF0E521B44B09428C85AE2/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758689307/A0B6CD86A3E6CDC892381BEC58B193C23309DC9F/"
+  },
+  "pottery|5|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758689413/2ACF50172E547A2A538768774ADF034A1761F929/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758689516/35C94E1BA18052D86D1A7393B5D5ECB20D7F63C5/"
+  },
+  "manufacturer|3|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758689621/738ACBCB8041399AAE6CFE77B3B4129CFDEB8A6B/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758689718/BE014EE76BC37DC798CF9EDBE8B7E791206B9BDF/"
+  },
+  "manufacturer|4|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758689810/0355722435C1620C6326D6F06CEF388B770AAFED/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758689904/E9D83C3FDDA1006304141975A13A72C2C7846934/"
+  },
+  "manufacturer|7|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758689997/FB9EDA942EC14B2CD976AEF05CA86B9A3C26C700/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758690089/750EFCB72AD963BCCB9CEB008ED5AB9589B7E223/"
+  },
+  "manufacturer|6|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758690182/C78D76548570C20C4BAC634B179632A5BB44B4F1/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758690277/2B1D65B350EBE7F9FEF87E66736FF692D4E967CC/"
+  },
+  "pottery|2|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758690376/0B6319A681D84AC113666F4B10720ED944861121/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758690464/A91B5549A76335BC0FC1897BACB341BAA079E50D/"
+  },
+  "pottery|3|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758690556/08D992857BD5C8A6290CCF8ECB22A17496877250/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758690644/1B5A81AE820BA0DC928E38DC3FEAE376E56C4E0E/"
+  },
+  "iron|3|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758690764/2D1AFCCDAA26C0C28A13DB9796F901F07905A189/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758690866/01C61F653C5483FA64BDEC5C9CA319B191DA4390/"
+  },
+  "iron|4|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758690974/6DBC0EC50594F3625FA15A6A65CA14380BDFF2DA/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758691080/B54871B6BF8481F1E66DCB1F94174F1ED007716A/"
+  },
+  "manufacturer|6|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758691187/5C74CAD3DD70F961AC36FF7B63A7D122B951AD83/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758691277/25FEFCC080FD53E8777CC5BE221398C2CFE989B5/"
+  },
+  "brewery|4|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758691404/B40335B0E24A6C5190159ABEEF34D1EB9040AD95/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758691505/16BEDDBA829B1A04AB5BFBC17B387F4B80381E60/"
+  },
+  "manufacturer|1|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758691602/A0C913CF13FE66C8ED1BC3AB71333F546E8AB302/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758691706/AA6D1D8683DC727EDB935F9BFA57B39C6D608757/"
+  },
+  "iron|3|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758691818/F7FE3FA4BCB33D2B9CF29091945D1D3FB2FC418F/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758691940/127F12BC8F7544B50C9C190959E6DE58642537BD/"
+  },
+  "iron|4|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758692122/809818B5D958A1A08ACBA4FC1D7A4478C847D593/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758692231/E63FA2D57F7BF528A1197596F10C74B1C2138D0B/"
+  },
+  "brewery|1|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758692422/F1E09BC7D7C4BF7C02815F115D6AD000DD7B2835/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758692526/8AD7604A6745F30CE3DF83A2DEBE7E973481C754/"
+  },
+  "brewery|2|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758692627/7E3DF6CD26E6916C1B87FDBC10FC78A1AEB0B263/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758692731/568CDB454F2FE93BFCDC1F6DBFF6B46FAA7C19A7/"
+  },
+  "brewery|3|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758692837/A7E3C67751914ACFA3017DD5005928E42AF79633/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758692936/E4BE2F7D819C4F09A2A3BE0580E2C876B8ECC36E/"
+  },
+  "coal|2|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758693047/1BA8702902C757E0BCE943EB47539704F03D6090/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758693147/3DBB8E77CD9BE9F398EA8E19E5D29FECB2331900/"
+  },
+  "coal|3|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758693251/7E168C9E891CA2A4F36642B598F38BF3103E868B/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758693350/C736BD20FBAFF7C351CFD0FAB053804B1A6153D1/"
+  },
+  "coal|4|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758693456/261CC8086A082B2875FAD7141F3EB22491BED3CB/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758693562/9AC3CAD0601FAA7EA95E5D7F27329C45CADC300F/"
+  },
+  "manufacturer|2|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758693678/559CFE5FC063AA17935EB58EC0CF7FD730ABF1D1/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758693786/B5B3DA5B02D0BCD0CD9A16A08FB0CDE3BEE3C525/"
+  },
+  "manufacturer|5|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758693893/D2497F576C80CF75CD5879524BE4ED35550BA6CF/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758693999/21C0DD76CEF4969D4A0BBAB2DF0FE07B8926A54A/"
+  },
+  "manufacturer|8|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758694108/86456A92AC095D90882A22B5F1CA0B54D0A6D196/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758694205/B24EB731B25FDB3F45AF959E28D54D6E3E15945E/"
+  },
+  "cotton|1|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758694323/E44D4D3FAEB4FCBDB05A912980C1B4D293E5A7A6/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758694426/9DA474788EFB8E014F46A4253380738D45EF1890/"
+  },
+  "cotton|2|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758694540/E07406D8AD3C2DDDD4BCDD24B663DB2B94E3F906/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758694640/02EBF3C69AED369725BCA0529E9807004E9F1FAA/"
+  },
+  "cotton|3|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758694741/9DFC596670B21BD5C254475BCB684F1FFC315D99/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758694843/0AAB1D7A1FECDA43CB967C6FA28AC2EA479684F5/"
+  },
+  "cotton|4|teal": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758694966/4AEFAB57CA93B65A6475DA37EB99361E3FB83861/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758695067/0634FE13DBF87FFB6376C4C01FD99AA086FB0D69/"
+  },
+  "cotton|4|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758695171/10145A7177FF854291DFB0A7182471A2A33F8EB7/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758695269/DA89CE61703CD1CCDAB0BB5F6370EAC0B8101B05/"
+  },
+  "cotton|3|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758695391/FC711770AB0009A18F17F7D8408A564B35FE466C/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758695490/EAED14E774BF9A65FF2D42B7A37E36FA913A5243/"
+  },
+  "cotton|1|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758695596/A21C15FDC138CF1A453DB18A60F935102F9D4763/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758695719/35D211A1FE57766A8C2B5DD6CA0B25F8FEC62340/"
+  },
+  "cotton|2|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758695840/E07CB69BCC585150028DAA54477323240A3B9A4C/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758695949/43ACD35AF6C7F52F98B4F468BFA1756189AB8F5C/"
+  },
+  "coal|3|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758696060/D6B0C91885B36C89BAA0606CFE4763F3CA42FA2F/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758696169/24EE16ADE745397DC9BDC0D172432748D6F5E7BF/"
+  },
+  "coal|2|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758696302/D133ED9506B5715346F080BDBC5BAC8C77A87AA8/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758696402/38148E0C878B747DE41EA6B3EBC555EF2FABC797/"
+  },
+  "coal|4|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758696504/8C7FDA8DCDB22D7FD13632780806142309C00EAA/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758696614/3240997FE780C58A1C03056D7EB9DEA849F4788B/"
+  },
+  "brewery|3|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758696720/1A93F3C672B47C310B3DF5DD3544F38C3F4E4A36/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758696830/4C2E420DF6C4D61945A8B8A76DAB60911A829604/"
+  },
+  "brewery|2|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758696941/3A22C9EDB643399CEAD3204A30DDC3654C4DC005/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758697042/F90E4CF840598B29F85A4B38D3C557CB3F432C88/"
+  },
+  "manufacturer|2|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758697358/3130126A0A70FA55955A8D903E369C8352712ED9/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758697462/5F16B9743F68145447615993EB312DECD5EB2792/"
+  },
+  "manufacturer|5|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758697575/81C0FF7A3D9D6CB39AC399ADD5037521232C6631/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758697680/3FCFD90DF4C8B8BDCA5721C0DF7A29541351917B/"
+  },
+  "manufacturer|8|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758697787/0C3F58EBBD5A827DA2720F853936DBBA3F5798BB/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758697906/8B323F203AC3B2A628933F33C989CBA2AFD70CEC/"
+  },
+  "cotton|4|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758698006/3CFF06E13E7149A2D27D31B2B0D21B84327E06CC/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758698102/0C76EEF153E9F3E5A1408F42F6E8D716B764FC0B/"
+  },
+  "cotton|3|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758698214/E1CDA9AFD8A85A7B09AF2D375EAB1780B51B346A/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758698354/B40310771726F23AFBA3EF61902E9C98BD1C8EE1/"
+  },
+  "cotton|1|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758698455/1D51D91E3A4506CC1A265CAA63D5A722B6396F52/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758698572/53D2998140CA9F9EED839CEEFD6EE77FD1D5B868/"
+  },
+  "cotton|2|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758698680/B555EE8CE58B34FB8ABFF138D3D585D8B40B40CE/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758698784/C87398D9996635E9C8E25DBE6E8B0F5F09AA2317/"
+  },
+  "coal|3|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758698892/6A2AD24D7027DDFBBE50A17F2E23443BDE16A819/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758699011/4DA14756BBB3D804F51BC72B52DE52750D4B4130/"
+  },
+  "coal|2|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758699181/F8E059A7B6437B73F3E699AE87DB4674377F6CEB/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758699361/A2887310773B0D5328CB50B31CCDD45ABCE2FFD7/"
+  },
+  "coal|4|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758699549/837F32B47E760A4DF1E808C5DF80F122D067C70B/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758699667/D78BCF234738009ED17B3F8AAE00FB0E86142053/"
+  },
+  "brewery|3|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758699869/9CF44CC9A2446FD8BC8E6039F5AACA15C922224F/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758699962/0A04FBB0D2DA2ABEEC45B42FD3AA71E54E0FAB32/"
+  },
+  "brewery|2|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758700067/6FF2C43D37FDA09D9789913A94034B06389B7C47/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758700237/4B6EE5C91F4FD116E2F9EF070863FA52D077554A/"
+  },
+  "brewery|1|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758700342/11D9F803E9C9880092543DB1755DD467254A81E8/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758700441/8EA97E807587492D5E2F7E055411C16DF2885F1A/"
+  },
+  "manufacturer|2|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758700543/41BB38483B18C60DF9431DD18DE0CB25F14D66F0/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758700635/1ABDB8EB29202DAFBD3EDDEB6D4E4B5B58B072FF/"
+  },
+  "manufacturer|5|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758700730/BA6F8F08856A729754C0EE65277CC2DFA49FB0DF/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758700884/1CD0E2FE80A188CAF78DCE89368A85B261DAB1BD/"
+  },
+  "cotton|1|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758701191/52B28F74D090F8E8740E5DCC61766C03FCED2AE8/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758701308/59E1B50461D9A69EA814FD78AA970CE5FF930144/"
+  },
+  "cotton|2|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758701409/13A0D7F2B9DD1F0A7B879C57C24EFB3B69E440A6/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758701514/B8DA6ED9528371FB2FFEC94F8B1E4D1927F0B7F2/"
+  },
+  "cotton|3|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758701649/2C7A47BB3818DB71114906582FD69B11626B0471/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758701776/E0C09E778759CF9396AD0B4CE686B0C36C67394D/"
+  },
+  "cotton|4|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758701894/373C43E9ED5AC6C17C093F0D39643E70B9F9CF4A/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758702008/2CBE0F3E50FC48F708BF415955D88E39EA681F66/"
+  },
+  "coal|3|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758702120/32C0399FA7741922071D58CD4F364D145E819DAD/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758702221/888F79AF02DD67D4A0E28FF33B8DAE6581C3D422/"
+  },
+  "coal|2|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758702339/F8B1F1C0AC45B34A59C2363E18616DE2ADFF39BD/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758702444/4EEE90B8586CCDDE92CD14914EEC1A6EE6EB8F26/"
+  },
+  "coal|4|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758702608/0976D32E629B3B0A1398CB48B4A647C71ED4341F/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758702718/BAE371F5B886DEBD29EF0CB1CD9FC6DC5F8206B9/"
+  },
+  "brewery|3|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758702875/8F5DF147E2719823860A8728A374B8E6119DEC97/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758703000/788E5BFCA534707E1F3D01BC2C231A8F07A30C85/"
+  },
+  "brewery|2|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758703104/AD90F7A7DBE055DB81A31E7C6672448D45DA8257/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758703202/931F1A96E22CBC87DAF51A7687EB81D6EA9A2F23/"
+  },
+  "brewery|1|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758703333/A53ED350E9488D0834903F742370EA0A76F57855/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758703446/B63DC19EA10A146C19C65C6D55766A347C9286F4/"
+  },
+  "manufacturer|2|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758703631/33F9B22D2A687970FAEE25109EE05CA50C00A19D/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758703767/E068728F203D00A67096048B40D6B564699A424B/"
+  },
+  "manufacturer|5|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758703912/ABD0E6178BA8D294663760FBBE04A469483A5D69/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758704039/99A17BF3C3467850B5B92D8E5D9F24C6F95198A7/"
+  },
+  "brewery|1|purple": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758697147/8A25681656D50A0003EB0D9BCEECA8E3F8B5E76B/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758697262/FC51F2EC3B74AC71DEAB128B8A7B44F8238880B8/"
+  },
+  "manufacturer|8|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758700991/364F40B7783995AA15E976ED352F48FC81FF922C/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758701092/6AD1170ED749EFC4E7BE074C051681D341C3235A/"
+  },
+  "manufacturer|8|orange": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758704216/01DFB5F26AD3413EC5172BC77367887B6A969CA4/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758704366/F2FE868A1628EC57B61293F1086841C771AAEF58/"
+  },
+  "iron|1|yellow": {
+   "front": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758687507/DB85189FF2DE96611EC0172AE7065956D994BED3/",
+   "back": "https://steamusercontent-a.akamaihd.net/ugc/1666860103758687616/F303758B86DE6A859446CFB6C169C824A90FEB70/"
+  }
+ },
+ "coins": {
+  "1": "https://steamusercontent-a.akamaihd.net/ugc/987863257460737160/53C065120E91FFE543D3898A71FBAC6932595593/",
+  "5": "https://steamusercontent-a.akamaihd.net/ugc/987863257460735461/EFEE1B42AD448F77EE91EA02154E6770B2CC10F6/",
+  "15": "https://steamusercontent-a.akamaihd.net/ugc/987863257460731955/529EF7E21EFF215D61709CE5000DD4717E68D5D7/"
+ },
+ "players": {
+  "purple": "https://steamusercontent-a.akamaihd.net/ugc/987863257461302479/F75C50E9152FFF90570CE13D35FE24A528816090/",
+  "yellow": "https://steamusercontent-a.akamaihd.net/ugc/987863257461302985/74A9F6BD01A15D75D209D7EFBB9FDFC850F0D13D/",
+  "orange": "https://steamusercontent-a.akamaihd.net/ugc/987863257461303431/E8B4FDEBB70E6FC0DECE01E57953063EF683D685/",
+  "teal": "https://steamusercontent-a.akamaihd.net/ugc/987863257461298671/90E652CD23FACB11A0AF1461B8EDB44A2696220E/"
+ }
+}
