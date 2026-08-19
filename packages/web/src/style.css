@@ -227,7 +227,7 @@ body {
 .lobby h1,
 .room-view h1 {
   margin: 0;
-  font-family: Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif SC', serif;
+  font-family: 'Yeseva One', Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif SC', serif;
   font-size: 3rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -336,7 +336,7 @@ body {
 
 .panel-title {
   margin: 0;
-  font-family: Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif SC', serif;
+  font-family: 'Yeseva One', Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif SC', serif;
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -519,7 +519,7 @@ body {
 
 .room-code {
   margin: 8px 0 8px;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: 'Yeseva One', Georgia, 'Times New Roman', serif;
   font-size: 2.6rem;
   font-weight: 600;
   letter-spacing: 0.3em;
@@ -573,7 +573,7 @@ body {
 
 .seat-panel-head h2 {
   margin: 0;
-  font-family: Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif SC', serif;
+  font-family: 'Yeseva One', Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif SC', serif;
   font-size: 1.1rem;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -666,7 +666,7 @@ body {
   background: #1a1d23;
   color: #d8cdb4;
   border: 2px solid #6b5b3e;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: 'Yeseva One', Georgia, 'Times New Roman', serif;
   font-size: 1rem;
 }
 
@@ -799,4 +799,414 @@ body {
   .connection-pill.pending .connection-dot {
     animation: none;
   }
+}
+/* ============================================================
+ * 对局画面主题（GameScreen）——与等待大厅同一工业时代视觉语言。
+ * 追加于 style.css 末尾；全部类名作用于 .game-screen 内既有元素，
+ * 不改任何 test-id/回调契约。
+ * ============================================================ */
+
+.game-screen {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 12px 16px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 全屏背景：顶部黄铜辉光 + 角落余晖 + 纹理（与大厅一致） */
+.game-screen::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(1000px 480px at 50% -12%, rgba(201, 168, 106, 0.12), transparent 62%),
+    radial-gradient(760px 420px at 88% 112%, rgba(91, 141, 217, 0.06), transparent 60%),
+    radial-gradient(600px 360px at 6% 108%, rgba(155, 89, 182, 0.05), transparent 60%),
+    #14161c;
+}
+
+/* 面板标题：衬线 + 黄铜下划饰线 */
+.game-screen h3 {
+  margin: 0 0 10px;
+  font-family: 'Yeseva One', Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif SC', serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: #e3d3a8;
+}
+
+.game-screen h3::after {
+  content: '';
+  display: block;
+  margin-top: 6px;
+  width: 40px;
+  height: 2px;
+  background: linear-gradient(90deg, #c9a86a, transparent);
+}
+
+/* 通用面板卡片（顺位/收入/市场/手牌/行动/日志共用） */
+.turn-order-bar,
+.income-track,
+.coal-iron-market,
+.hand-bar,
+.log-panel {
+  border: 1px solid #3a3226;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(38, 34, 27, 0.82), rgba(26, 29, 35, 0.9));
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 14px 18px;
+}
+
+/* 行动顺位：横向 chip 行 */
+.turn-order-bar ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.turn-order-bar li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid #3f3a2e;
+  border-radius: 999px;
+  background: rgba(23, 26, 31, 0.8);
+  font-size: 0.85rem;
+  color: #9aa4b2;
+}
+
+.turn-order-bar li.current {
+  border-color: #c9a86a;
+  color: #f3ead4;
+  box-shadow: 0 0 12px rgba(201, 168, 106, 0.25);
+}
+
+.turn-order-bar li.thinking .player-name {
+  color: #c58fe0;
+}
+
+.turn-order-bar .player-name {
+  color: #e6e6e6;
+  font-weight: 600;
+}
+
+.turn-order-bar .thinking-badge {
+  color: #c58fe0;
+  font-size: 0.78rem;
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+/* AI 思考中指示条 */
+.ai-thinking {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.ai-thinking-seat {
+  padding: 5px 14px;
+  border: 1px solid rgba(155, 89, 182, 0.5);
+  border-radius: 999px;
+  background: rgba(155, 89, 182, 0.12);
+  color: #c58fe0;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+/* 收入轨：行 + 座位色点 */
+.income-track ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.income-track li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #2e2b23;
+  border-radius: 8px;
+  background: rgba(23, 26, 31, 0.6);
+  font-size: 0.85rem;
+  color: #b3a888;
+}
+
+.income-track li .player-name {
+  color: #f3ead4;
+  font-weight: 600;
+}
+
+.income-track .ai-badge {
+  margin-left: -4px;
+}
+
+/* 资源市场 */
+.market-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+
+.market-label {
+  flex: none;
+  width: 2.2em;
+  color: #e3d3a8;
+  font-weight: 600;
+}
+
+.market-track {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.market-cell {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid #4a4030;
+  border-radius: 4px;
+  background: #171a1f;
+  color: #5d5a50;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.market-cell.filled {
+  background: linear-gradient(180deg, #3a2f1e, #2a2318);
+  border-color: #8a6d3b;
+  color: #e3c58f;
+}
+
+.market-row > span:last-child {
+  color: #b89a5f;
+  white-space: nowrap;
+}
+
+/* 手牌 */
+.own-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hand-card {
+  padding: 8px 12px;
+  border: 1px solid #8a7a56;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f6eed8, #e2d3ae);
+  color: #4a3d28;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  box-shadow:
+    0 3px 10px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.hand-card:hover:not([disabled]) {
+  transform: translateY(-2px);
+  border-color: #c9a86a;
+}
+
+.hand-card.wild {
+  border-style: dashed;
+}
+
+.hand-card .wild-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #d4ac0d;
+  color: #241b0b;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+}
+
+.hand-card.selected {
+  border-color: #e3c58f;
+  box-shadow:
+    0 0 0 2px rgba(201, 168, 106, 0.55),
+    0 6px 18px rgba(201, 168, 106, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transform: translateY(-3px);
+}
+
+.opponent-hands {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.opponent-hands > span {
+  padding: 3px 10px;
+  border: 1px solid #3f3a2e;
+  border-radius: 999px;
+  background: rgba(23, 26, 31, 0.7);
+  color: #9aa4b2;
+  font-size: 0.78rem;
+}
+
+/* 行动条 */
+.action-bar {
+  border: 1px solid #3a3226;
+  border-radius: 12px;
+  padding: 14px 18px;
+  background: linear-gradient(180deg, rgba(38, 34, 27, 0.82), rgba(26, 29, 35, 0.9));
+}
+
+.action-bar h3 {
+  margin: 0 0 8px;
+}
+
+.action-hint {
+  color: #b3a888;
+  margin: 4px 0;
+  font-size: 0.85rem;
+}
+
+.action-choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.action-choices button {
+  padding: 5px 12px;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: rgba(23, 26, 31, 0.7);
+  color: #d8cdb4;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.action-choices button:hover:not(:disabled) {
+  border-color: #c9a86a;
+  color: #f3ead4;
+}
+
+.action-choices button.selected {
+  border-color: #e3c58f;
+  background: rgba(201, 168, 106, 0.16);
+  color: #f3ead4;
+  box-shadow: 0 0 0 1px rgba(201, 168, 106, 0.4);
+}
+
+.action-choices button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.action-confirm {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* 行动日志：打字机字体 */
+.log-panel ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.log-panel li {
+  padding: 8px 12px;
+  border: 1px solid #2e2b23;
+  border-radius: 8px;
+  background: rgba(23, 26, 31, 0.6);
+  font-family: 'Special Elite', 'Courier New', monospace;
+  font-size: 0.82rem;
+  color: #c9bfa5;
+  text-align: left;
+}
+
+.log-panel li .degraded-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(212, 172, 13, 0.15);
+  border: 1px solid rgba(212, 172, 13, 0.4);
+  color: #d4ac0d;
+  font-size: 0.7rem;
+}
+
+.log-panel .log-reason {
+  margin: 6px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid #8a6d3b;
+  color: #8a8068;
+  font-family: Georgia, 'Songti SC', serif;
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+.log-panel [data-testid='log-empty'] {
+  color: #5d5a50;
+  font-size: 0.85rem;
+}
+
+/* 棋盘：羊皮纸边框 + 圆角 + 投影 */
+.board-svg {
+  width: 100%;
+  height: auto;
+  border: 1px solid #4a3f2c;
+  border-radius: 14px;
+  box-shadow:
+    0 14px 40px rgba(0, 0, 0, 0.45),
+    inset 0 0 60px rgba(58, 50, 38, 0.35);
+}
+
+/* 高亮态辉光（原为纯色描边，现叠加 CSS drop-shadow） */
+.board-slot.highlighted {
+  filter: drop-shadow(0 0 5px rgba(233, 30, 99, 0.8));
+}
+
+.board-link.highlighted {
+  filter: drop-shadow(0 0 4px rgba(233, 30, 99, 0.9));
+}
+
+.board-slot.highlighted,
+.board-link.highlighted {
+  cursor: pointer;
+}
+
+/* 棋盘内文本 */
+.board-svg text {
+  font-family: 'Special Elite', Georgia, 'Times New Roman', serif;
 }
