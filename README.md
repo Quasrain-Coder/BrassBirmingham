@@ -14,6 +14,10 @@ and LLM-driven AI seats with heuristic fallback (M3) are all done. Next: M5
 ```bash
 npm install
 
+# one-time: fetch official art assets (Steam UGC source, personal non-commercial use;
+# lands in packages/web/public/assets/, gitignored)
+npm run fetch-assets -w @brass/web
+
 # terminal 1: game server (ws on :8420, SQLite at ./brass.db)
 npm run dev -w @brass/server
 

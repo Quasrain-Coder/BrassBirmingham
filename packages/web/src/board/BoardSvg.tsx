@@ -1,42 +1,55 @@
 /**
- * SVG 棋盘组件（M2 Task 9；视觉翻新 2026-08）。
- * 风格：复古工程图纸（羊皮纸底 + 噪点颗粒 + 双线边框 + 角标装饰），
- * 城市=名称铭牌+节点圆；产业槽位=圆角瓷砖；连接边=带衬线的干线
- * （运河蓝/铁路棕，按当前时代过滤；已建=玩家色粗线+描边）；商人位=六边形。
+ * SVG 棋盘组件（官方版图版，2026-08 素材化重做）。
  *
- * 兼容性：所有既有 data-testid/class/回调契约不变（BoardSvg.test 全量守护）：
- * g.board-location[data-location]、line.board-link[data-link-index]、
- * polygon.board-merchant[data-merchant]、rect.board-slot[data-location][data-slot-index]、
- * .board-link-built/.highlighted、viewBox="-15 -15 1030 790"、运河色 #5dade2。
+ * 底图 = 官方版图扫描（/assets/board.jpg，6144 坐标系，几何见 board/geometry.ts）；
+ * 动态层全部叠加在印刷元素上：
+ * - 已建产业 = 官方板块图（产业-等级-玩家色，翻面用背面图），资源数叠图标角标；
+ * - 已建连接 = 沿印刷运河/铁路折线的玩家色描边；
+ * - 商人位 = 官方商人板块图 + 啤酒桶；煤/铁市场 = 印刷格上叠方块；
+ * - VP/收入 = 环轨上的玩家色标记；城市名 = 中文铭牌覆盖英文印刷名；
+ * - 可选中槽位/连线 = 黄铜色发光高亮（点击热区为透明 rect/line，契约见测试）。
+ *
+ * 交互契约（BoardSvg.test 守护）：
+ * g.board-location[data-location]、rect.board-slot[data-location][data-slot-index]、
+ * line.board-link[data-link-index]（含 .board-link-built/.highlighted）、
+ * g.board-merchant-group[data-merchant]、.tile-resources。
  */
 import type { ReactElement } from 'react';
-import type { IndustryType, LocationId, PlayerIndex } from '@brass/engine';
-import { LINKS, LINK_EXTRA_ENDPOINTS, LOCATIONS, MERCHANTS } from '@brass/engine';
+import type { IndustryType, LocationId, MerchantId, PlayerIndex } from '@brass/engine';
+import { LINKS, LINK_EXTRA_ENDPOINTS, LOCATIONS, MERCHANTS, incomeLevelAt } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
-import { LAYOUT } from './layout';
+import {
+  BOARD_SIZE,
+  CITY_LABEL,
+  COAL_MARKET_CELLS,
+  INCOME_TRACK,
+  IRON_MARKET_CELLS,
+  LINK_MIDPOINTS,
+  MARKET_CELL_SIZE,
+  MERCHANT_GEOM,
+  MERCHANT_TILE_H,
+  MERCHANT_TILE_W,
+  SLOT_CENTERS,
+  SLOT_SIZE,
+  VP_TRACK,
+  locationAnchor,
+  merchantAnchor,
+} from './geometry';
+import { LOCATION_ZH } from '../game/display';
 
-/** 玩家色板：P0 红 / P1 蓝 / P2 黄 / P3 绿。 */
-export const PLAYER_COLORS = ['#e74c3c', '#3498db', '#f1c40f', '#2ecc71'];
+/** 官方玩家色：P0 紫 / P1 黄 / P2 橙 / P3 青（与官方板块底色一致）。 */
+export const PLAYER_COLORS = ['#8e6bb0', '#d9a832', '#c05a30', '#4fa3a5'];
+/** 玩家色英文键（素材文件名用）。 */
+const PLAYER_COLOR_KEYS = ['purple', 'yellow', 'orange', 'teal'] as const;
 
-// 运河色与 P1 玩家色（#3498db）拉开区分度（Task 9 评审修复）。
-const CANAL_COLOR = '#5dade2';
-const RAIL_COLOR = '#8b5a2b';
-const INACTIVE_LINK_COLOR = '#d8d8d8';
-
-// 羊皮纸底与墨线色（视觉翻新）。
-const PARCHMENT_DARK = '#e2d3ae';
-const PARCHMENT_LIGHT = '#f6eed8';
-const INK = '#4a3d28';
-const INK_SOFT = '#8a7a56';
-
-/** 产业配色与字母标注，全局一致。 */
+/** 产业配色与中文标注（面板/行动描述共用）。 */
 export const INDUSTRY_STYLE: Record<IndustryType, { fill: string; label: string }> = {
-  cotton: { fill: '#5b8dd9', label: 'C' },
-  manufacturer: { fill: '#e67e22', label: 'M' },
-  pottery: { fill: '#9b59b6', label: 'P' },
-  coal: { fill: '#34495e', label: '煤' },
-  iron: { fill: '#b03a2e', label: '铁' },
-  brewery: { fill: '#d4ac0d', label: '酿' },
+  cotton: { fill: '#b8524a', label: '棉' },
+  manufacturer: { fill: '#c78a3b', label: '造' },
+  pottery: { fill: '#a0558f', label: '陶' },
+  coal: { fill: '#3a3f4a', label: '煤' },
+  iron: { fill: '#c76b2a', label: '铁' },
+  brewery: { fill: '#8f7a3a', label: '酿' },
 };
 
 export interface SlotRef {
@@ -44,7 +57,6 @@ export interface SlotRef {
   slotIndex: number;
 }
 
-/** 高亮集合（Task 11 消费；本任务提供类型与基础渲染支持）。 */
 export interface BoardHighlights {
   slots?: SlotRef[];
   links?: number[];
@@ -57,119 +69,114 @@ export interface BoardSvgProps {
   onLinkClick?: ((linkIndex: number) => void) | undefined;
 }
 
-const CITY_R = 7;
-const SLOT_W = 18;
-const SLOT_H = 16;
-const SLOT_GAP = 2;
-const MERCHANT_R = 13;
-
 function playerColor(player: PlayerIndex): string {
   return PLAYER_COLORS[player] ?? '#7f8c8d';
 }
 
-function hexPoints(cx: number, cy: number, r: number): string {
-  const pts: string[] = [];
-  for (let i = 0; i < 6; i++) {
-    const angle = (Math.PI / 3) * i - Math.PI / 6;
-    pts.push(`${(cx + r * Math.cos(angle)).toFixed(1)},${(cy + r * Math.sin(angle)).toFixed(1)}`);
-  }
-  return pts.join(' ');
+/** 版图有效区域（6144 扫描件四边有大片暗边，viewBox 只取版图本体）。 */
+const BOARD_VIEW = { x: 990, y: 990, size: 4200 };
+
+function tileImage(industry: IndustryType, level: number, player: PlayerIndex, flipped: boolean): string {
+  const color = PLAYER_COLOR_KEYS[player] ?? 'purple';
+  return `/assets/tiles/${industry}-${level}-${color}${flipped ? '-back' : ''}.png`;
 }
 
-/** 名称铭牌宽度：按字符数粗估（SVG 无文本测量，够用即可）。 */
-function namePlateWidth(name: string): number {
-  return Math.max(34, name.length * 5.6 + 10);
+/** 连线路径点：端点锚点 → 投影中点 → 端点锚点（沿印刷运河/铁路）。端点向中点回缩，避免压住槽位。 */
+function linkPath(a: { x: number; y: number }, b: { x: number; y: number }, mid: { x: number; y: number } | undefined): string {
+  const m = mid ?? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const trim = (p: { x: number; y: number }): { x: number; y: number } => {
+    const dx = m.x - p.x;
+    const dy = m.y - p.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const t = Math.min(150, len * 0.4) / len;
+    return { x: Math.round(p.x + dx * t), y: Math.round(p.y + dy * t) };
+  };
+  const ta = trim(a);
+  const tb = trim(b);
+  return `${ta.x},${ta.y} ${m.x},${m.y} ${tb.x},${tb.y}`;
+}
+
+/** 煤/铁方块（官方即纯色木方块，圆角+顶面高光）。 */
+function Cube({ x, y, size, fill }: { x: number; y: number; size: number; fill: string }): ReactElement {
+  return (
+    <g>
+      <rect x={x - size / 2} y={y - size / 2} width={size} height={size} rx={size * 0.12} fill={fill} stroke="#1a1208" strokeWidth={size * 0.06} />
+      <rect x={x - size / 2 + size * 0.12} y={y - size / 2 + size * 0.1} width={size * 0.76} height={size * 0.28} rx={size * 0.08} fill="#ffffff" opacity={0.3} />
+    </g>
+  );
 }
 
 export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
-  const highlightedSlots = new Set(
-    (highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`),
-  );
+  const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const builtByLink = new Map<number, PlayerIndex>();
   for (const l of state.board.links) builtByLink.set(l.linkIndex, l.player);
 
-  const linkStroke = (canal: boolean, rail: boolean): string => {
-    // 按时代过滤显示：当前时代不可建的边淡灰。
-    if (state.era === 'canal') return canal ? CANAL_COLOR : INACTIVE_LINK_COLOR;
-    return rail ? RAIL_COLOR : INACTIVE_LINK_COLOR;
-  };
+  const anchorOf = (id: LocationId | MerchantId): { x: number; y: number } =>
+    id in MERCHANT_GEOM ? merchantAnchor(id as MerchantId) : locationAnchor(id as LocationId);
+
+  // 市场已填格 = 最贵 filled 格（索引 length-filled .. length-1），见 engine/market.ts。
+  const coalFilledFrom = COAL_MARKET_CELLS.length - state.coalMarket;
+  const ironFilledFrom = IRON_MARKET_CELLS.length - state.ironMarket;
 
   return (
     <svg
       className="board-svg"
-      viewBox="-15 -15 1030 790"
+      viewBox={`${BOARD_VIEW.x} ${BOARD_VIEW.y} ${BOARD_VIEW.size} ${BOARD_VIEW.size}`}
       role="img"
       aria-label="Brass: Birmingham 棋盘"
     >
       <defs>
-        {/* 羊皮纸噪点颗粒（细密 fractalNoise，低透明度） */}
-        <filter id="paper-grain" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" />
-          <feColorMatrix
-            type="matrix"
-            values="0 0 0 0 0.18  0 0 0 0 0.15  0 0 0 0 0.1  0 0 0 0.05 0"
-          />
+        <filter id="hl-glow" x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx={0} dy={0} stdDeviation={18} floodColor="#f0c964" floodOpacity={0.95} />
         </filter>
-        {/* 节点投影 */}
-        <filter id="node-shadow" x="-60%" y="-60%" width="220%" height="220%">
-          <feDropShadow dx="0" dy="1.2" stdDeviation="1.2" floodColor="#3a3226" floodOpacity="0.4" />
-        </filter>
-        {/* 城市节点径向渐变（羊皮心 → 墨线边） */}
-        <radialGradient id="city-grad" cx="0.35" cy="0.3" r="0.85">
-          <stop offset="0%" stopColor={PARCHMENT_LIGHT} />
-          <stop offset="100%" stopColor={PARCHMENT_DARK} />
-        </radialGradient>
       </defs>
 
-      {/* 底图：羊皮纸渐变 + 噪点 + 双线边框 */}
-      <rect x={-15} y={-15} width={1030} height={790} fill="url(#city-grad)" />
-      <rect x={-15} y={-15} width={1030} height={790} filter="url(#paper-grain)" />
-      <rect x={-9} y={-9} width={1018} height={778} fill="none" stroke={INK_SOFT} strokeWidth={1.5} rx={6} />
-      <rect x={-5} y={-5} width={1010} height={770} fill="none" stroke={INK} strokeWidth={0.75} rx={4} />
-      {/* 四角装饰方块 */}
-      {[
-        [-15, -15],
-        [1015, -15],
-        [-15, 775],
-        [1015, 775],
-      ].map(([cx, cy], i) => (
-        <g key={`corner-${i}`} transform={`translate(${cx},${cy})`}>
-          <rect x={-7} y={-7} width={14} height={14} fill={PARCHMENT_LIGHT} stroke={INK} strokeWidth={1} />
-          <circle r={2.2} fill={INK} />
-        </g>
-      ))}
+      {/* 官方版图底图 */}
+      <image className="board-image" href="/assets/board.jpg" x={0} y={0} width={BOARD_SIZE} height={BOARD_SIZE} />
 
-      {/* 连接边（先画，垫在城市下面）：衬线 + 干线 + 铁路枕木刻度 */}
+      {/* 已建连接（玩家色描边，沿印刷路径）+ 连线点击热区 */}
       <g className="board-links">
         {LINKS.map((link, i) => {
-          const a = LAYOUT[link.a];
-          const b = LAYOUT[link.b];
-          if (!a || !b) return null;
+          const a = anchorOf(link.a);
+          const b = anchorOf(link.b);
+          const mid = LINK_MIDPOINTS[i];
           const builtBy = builtByLink.get(i);
           const built = builtBy !== undefined;
-          const stroke = built ? playerColor(builtBy) : linkStroke(link.canal, link.rail);
-          const cls = [
-            'board-link',
-            built ? 'board-link-built' : '',
-            highlightedLinks.has(i) ? 'highlighted' : '',
-          ]
-            .filter(Boolean)
-            .join(' ');
+          const hl = highlightedLinks.has(i);
+          const cls = ['board-link', built ? 'board-link-built' : '', hl ? 'highlighted' : ''].filter(Boolean).join(' ');
+          const pts = linkPath(a, b, mid);
           const extras = LINK_EXTRA_ENDPOINTS[i] ?? [];
           return (
             <g key={`link-${i}`}>
-              {/* 衬线：干线描边，定义感 */}
-              <line
-                className="board-link-casing"
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-                stroke={built ? '#2c2317' : '#efe6d2'}
-                strokeWidth={(built ? 5 : 2) + 3}
-                strokeLinecap="round"
-              />
+              {built ? (
+                <polyline
+                  className="board-link-visual"
+                  points={pts}
+                  fill="none"
+                  stroke={playerColor(builtBy)}
+                  strokeWidth={46}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity={0.92}
+                  pointerEvents="none"
+                />
+              ) : null}
+              {hl && !built ? (
+                <polyline
+                  className="board-link-hl"
+                  points={pts}
+                  fill="none"
+                  stroke="#f0c964"
+                  strokeWidth={40}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity={0.75}
+                  filter="url(#hl-glow)"
+                  pointerEvents="none"
+                />
+              ) : null}
+              {/* 透明粗热区（保留 data-link-index 契约） */}
               <line
                 className={cls}
                 data-link-index={i}
@@ -177,54 +184,37 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
                 y1={a.y}
                 x2={b.x}
                 y2={b.y}
-                stroke={stroke}
-                strokeWidth={built ? 5 : highlightedLinks.has(i) ? 4 : 2}
+                stroke="transparent"
+                strokeWidth={160}
                 strokeLinecap="round"
                 onClick={onLinkClick ? () => onLinkClick(i) : undefined}
               />
-              {/* 铁路枕木刻度（纯装饰，pointer-events 穿透） */}
-              {!built && link.rail && state.era === 'rail' ? (
-                <line
-                  className="board-link-railmarks"
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  stroke="#5d4522"
-                  strokeWidth={4.5}
-                  strokeDasharray="1 7"
-                  strokeLinecap="round"
-                  pointerEvents="none"
-                />
-              ) : null}
-              {/* 三端点边（#30 同时连接 farm-south）的分支线 */}
               {extras.map((extra) => {
-                const e = LAYOUT[extra];
-                if (!e) return null;
-                const midX = (a.x + b.x) / 2;
-                const midY = (a.y + b.y) / 2;
+                const e = anchorOf(extra);
+                const m = mid ?? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
                 return (
                   <g key={`link-${i}-${extra}`}>
-                    <line
-                      className="board-link-casing"
-                      x1={midX}
-                      y1={midY}
-                      x2={e.x}
-                      y2={e.y}
-                      stroke="#efe6d2"
-                      strokeWidth={(built ? 4 : 2) + 3}
-                      strokeLinecap="round"
-                    />
+                    {built ? (
+                      <polyline
+                        className="board-link-visual"
+                        points={`${m.x},${m.y} ${e.x},${e.y}`}
+                        fill="none"
+                        stroke={playerColor(builtBy)}
+                        strokeWidth={46}
+                        strokeLinecap="round"
+                        opacity={0.92}
+                        pointerEvents="none"
+                      />
+                    ) : null}
                     <line
                       className="board-link-branch"
                       data-link-index={i}
-                      x1={midX}
-                      y1={midY}
+                      x1={m.x}
+                      y1={m.y}
                       x2={e.x}
                       y2={e.y}
-                      stroke={stroke}
-                      strokeWidth={built ? 4 : 2}
-                      strokeDasharray={built ? undefined : '4 3'}
+                      stroke="transparent"
+                      strokeWidth={140}
                       strokeLinecap="round"
                       onClick={onLinkClick ? () => onLinkClick(i) : undefined}
                     />
@@ -236,221 +226,173 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
         })}
       </g>
 
-      {/* 城市：名称铭牌 + 节点圆 + 产业槽位行 */}
+      {/* 产业槽位：已建板块图 + 资源角标 + 高亮/点击热区 */}
       <g className="board-locations">
-        {Object.entries(LOCATIONS).map(([id, loc]) => {
-          const p = LAYOUT[id];
-          if (!p) return null;
-          const placed = state.board.slots[id] ?? [];
-          const n = loc.slots.length;
-          const rowW = n * SLOT_W + (n - 1) * SLOT_GAP;
-          const rowX = p.x - rowW / 2;
-          const rowY = p.y + CITY_R + 4;
-          const plateW = namePlateWidth(loc.name);
+        {Object.entries(LOCATIONS).map(([id]) => {
+          const centers = SLOT_CENTERS[id as LocationId] ?? [];
+          const placed = state.board.slots[id as LocationId] ?? [];
           return (
             <g className="board-location" data-location={id} key={id}>
-              {/* 名称铭牌 */}
-              <rect
-                x={p.x - plateW / 2}
-                y={p.y - CITY_R - 15}
-                width={plateW}
-                height={12}
-                rx={3}
-                fill={PARCHMENT_LIGHT}
-                stroke={INK_SOFT}
-                strokeWidth={0.75}
-              />
-              <text
-                x={p.x}
-                y={p.y - CITY_R - 6}
-                textAnchor="middle"
-                fontSize={8.5}
-                fontFamily="'Special Elite', Georgia, 'Times New Roman', serif"
-                fill={INK}
-              >
-                {loc.name}
-              </text>
-              {/* 节点圆：投影 + 径向渐变 */}
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r={CITY_R}
-                fill="url(#city-grad)"
-                stroke={INK}
-                strokeWidth={1.4}
-                filter="url(#node-shadow)"
-              />
-              <circle cx={p.x} cy={p.y} r={2} fill={INK} />
-              {loc.slots.map((slot, si) => {
-                const x = rowX + si * (SLOT_W + SLOT_GAP);
+              {centers.map((c, si) => {
                 const tile = placed[si] ?? null;
                 const hl = highlightedSlots.has(`${id}:${si}`);
                 return (
                   <g key={`${id}-slot-${si}`}>
-                    <rect
-                      className={`board-slot${hl ? ' highlighted' : ''}`}
-                      data-location={id}
-                      data-slot-index={si}
-                      x={x}
-                      y={rowY}
-                      width={SLOT_W}
-                      height={SLOT_H}
-                      rx={3}
-                      fill={tile ? playerColor(tile.player) : '#fffdf5'}
-                      stroke={hl ? '#e91e63' : '#6b5b3e'}
-                      strokeWidth={hl ? 2.5 : 1}
-                      opacity={tile?.flipped ? 0.55 : 1}
-                      onClick={onSlotClick ? () => onSlotClick(id, si) : undefined}
-                    />
                     {tile ? (
-                      <>
-                        <text
-                          x={x + SLOT_W / 2}
-                          y={rowY + SLOT_H / 2 + 3.5}
-                          textAnchor="middle"
-                          fontSize={9}
-                          fill="#ffffff"
-                          pointerEvents="none"
-                        >
-                          {INDUSTRY_STYLE[tile.tile.industry].label}
-                        </text>
-                        {/* 资源数角标：煤/铁方块、啤酒桶（sell/network 决策必需） */}
+                      <g pointerEvents="none">
+                        <image
+                          className="board-tile"
+                          href={tileImage(tile.tile.industry, tile.tile.level, tile.player, tile.flipped)}
+                          x={c.x - SLOT_SIZE / 2}
+                          y={c.y - SLOT_SIZE / 2}
+                          width={SLOT_SIZE}
+                          height={SLOT_SIZE}
+                        />
                         {tile.resources > 0 ? (
-                          <g className="tile-resources" pointerEvents="none">
-                            <circle
-                              cx={x + SLOT_W - 3}
-                              cy={rowY + SLOT_H - 3}
-                              r={4.5}
-                              fill="#fffdf5"
-                              stroke="#3a3226"
-                              strokeWidth={0.8}
-                            />
-                            <text
-                              x={x + SLOT_W - 3}
-                              y={rowY + SLOT_H - 0.5}
-                              textAnchor="middle"
-                              fontSize={7}
-                              fill="#3a3226"
-                            >
+                          <g className="tile-resources">
+                            <rect x={c.x + SLOT_SIZE / 2 - 62} y={c.y + SLOT_SIZE / 2 - 62} width={62} height={62} rx={12} fill="#14100a" opacity={0.85} />
+                            <text x={c.x + SLOT_SIZE / 2 - 31} y={c.y + SLOT_SIZE / 2 - 18} textAnchor="middle" fontSize={40} fill="#f3e9c8">
                               {tile.resources}
                             </text>
                           </g>
                         ) : null}
-                      </>
-                    ) : (
-                      slot.industries.map((ind, ii) => {
-                        // 空槽位：色块+字母；双产业槽左右各半。
-                        const half = slot.industries.length > 1;
-                        const cw = half ? (SLOT_W - 4) / 2 : SLOT_W - 4;
-                        const cx = x + 2 + ii * cw;
-                        const style = INDUSTRY_STYLE[ind];
-                        return (
-                          <g key={`${id}-slot-${si}-ind-${ii}`} pointerEvents="none">
-                            <rect x={cx} y={rowY + 2} width={cw} height={SLOT_H - 4} fill={style.fill} rx={1.5} />
-                            <text
-                              x={cx + cw / 2}
-                              y={rowY + SLOT_H / 2 + 3}
-                              textAnchor="middle"
-                              fontSize={half ? 7 : 9}
-                              fill="#ffffff"
-                            >
-                              {style.label}
-                            </text>
-                          </g>
-                        );
-                      })
-                    )}
+                      </g>
+                    ) : null}
+                    {hl && !tile ? (
+                      <rect
+                        className="board-slot-hl"
+                        x={c.x - SLOT_SIZE / 2}
+                        y={c.y - SLOT_SIZE / 2}
+                        width={SLOT_SIZE}
+                        height={SLOT_SIZE}
+                        rx={16}
+                        fill="#f0c964"
+                        opacity={0.4}
+                        stroke="#f0c964"
+                        strokeWidth={10}
+                        filter="url(#hl-glow)"
+                        pointerEvents="none"
+                      />
+                    ) : null}
+                    <rect
+                      className={`board-slot${hl ? ' highlighted' : ''}`}
+                      data-location={id}
+                      data-slot-index={si}
+                      x={c.x - SLOT_SIZE / 2}
+                      y={c.y - SLOT_SIZE / 2}
+                      width={SLOT_SIZE}
+                      height={SLOT_SIZE}
+                      fill="transparent"
+                      onClick={onSlotClick ? () => onSlotClick(id as LocationId, si) : undefined}
+                    />
                   </g>
                 );
               })}
-            </g>
-          );
-        })}
-      </g>
-
-      {/* 商人位：六边形 + 内圈 + 啤酒数 */}
-      <g className="board-merchants">
-        {Object.keys(MERCHANTS).map((id) => {
-          const p = LAYOUT[id];
-          if (!p) return null;
-          const m = state.merchants[id as keyof typeof state.merchants];
-          return (
-            <g className="board-merchant-group" data-merchant={id} key={id}>
-              <polygon
-                className="board-merchant"
-                points={hexPoints(p.x, p.y, MERCHANT_R)}
-                fill="#efe1c0"
-                stroke="#8a6d3b"
-                strokeWidth={1.5}
-                filter="url(#node-shadow)"
-              />
-              <polygon
-                points={hexPoints(p.x, p.y, MERCHANT_R - 4)}
-                fill="none"
-                stroke="#8a6d3b"
-                strokeWidth={0.75}
-                opacity={0.55}
-                pointerEvents="none"
-              />
-              {m && m.beer > 0 ? (
-                <text x={p.x} y={p.y + 3.5} textAnchor="middle" fontSize={9} fill="#8a6d3b">
-                  {`酿×${m.beer}`}
-                </text>
+              {/* 城市中文铭牌（盖住英文印刷名） */}
+              {CITY_LABEL[id as LocationId] ? (
+                <g className="city-label" pointerEvents="none">
+                  {(() => {
+                    const name = LOCATION_ZH[id] ?? LOCATIONS[id as LocationId]?.name ?? id;
+                    const lp = CITY_LABEL[id as LocationId]!;
+                    const w = name.length * 50 + 40;
+                    return (
+                      <>
+                        <rect
+                          x={lp.x - w / 2}
+                          y={lp.y - 34}
+                          width={w}
+                          height={68}
+                          rx={10}
+                          fill="#14100a"
+                          opacity={0.82}
+                          stroke="#8a6d3b"
+                          strokeWidth={2}
+                        />
+                        <text
+                          x={lp.x}
+                          y={lp.y + 16}
+                          textAnchor="middle"
+                          fontSize={44}
+                          fill="#f0d89a"
+                          fontFamily="'Songti SC', 'Noto Serif SC', serif"
+                        >
+                          {name}
+                        </text>
+                      </>
+                    );
+                  })()}
+                </g>
               ) : null}
             </g>
           );
         })}
       </g>
 
-      {/* 装饰角：指南针（右上）+ 图例（左下）+ 题铭（右下） */}
-      <g className="board-decor" pointerEvents="none">
-        {/* 指南针 */}
-        <g transform="translate(945,90)">
-          <circle r={30} fill={PARCHMENT_LIGHT} stroke={INK_SOFT} strokeWidth={1} />
-          <circle r={25} fill="none" stroke={INK_SOFT} strokeWidth={0.5} opacity={0.6} />
-          {[0, 45, 90, 135].map((a) => (
-            <line
-              key={`rose-${a}`}
-              x1={0}
-              y1={-24}
-              x2={0}
-              y2={24}
-              stroke={INK_SOFT}
-              strokeWidth={0.5}
-              transform={`rotate(${a})`}
-            />
-          ))}
-          <path d="M0,-20 L5,6 L0,0 L-5,6 Z" fill={INK} />
-          <path d="M0,20 L5,-6 L0,0 L-5,-6 Z" fill={INK_SOFT} />
-          <text y={42} textAnchor="middle" fontSize={8} fontFamily="'Special Elite', serif" fill={INK_SOFT} letterSpacing={1}>
-            N
-          </text>
-        </g>
-        {/* 图例 */}
-        <g transform="translate(28,712)">
-          <rect x={0} y={0} width={272} height={52} rx={4} fill={PARCHMENT_LIGHT} stroke={INK_SOFT} strokeWidth={1} />
-          <text x={10} y={14} fontSize={8.5} fontFamily="'Special Elite', serif" fill={INK} letterSpacing={1.5}>
-            图例
-          </text>
-          <line x1={12} y1={28} x2={52} y2={28} stroke={CANAL_COLOR} strokeWidth={2.5} strokeLinecap="round" />
-          <text x={58} y={31} fontSize={8} fill={INK_SOFT}>运河</text>
-          <line x1={92} y1={28} x2={132} y2={28} stroke={RAIL_COLOR} strokeWidth={2.5} strokeLinecap="round" />
-          <text x={138} y={31} fontSize={8} fill={INK_SOFT}>铁路</text>
-          <line x1={172} y1={28} x2={212} y2={28} stroke={PLAYER_COLORS[0]} strokeWidth={4} strokeLinecap="round" />
-          <text x={218} y={31} fontSize={8} fill={INK_SOFT}>已建</text>
-          <line x1={12} y1={44} x2={52} y2={44} stroke={INACTIVE_LINK_COLOR} strokeWidth={2.5} strokeLinecap="round" />
-          <text x={58} y={47} fontSize={8} fill={INK_SOFT}>本时代不可建</text>
-        </g>
-        {/* 题铭 */}
-        <g transform="translate(700,744)">
-          <text fontSize={12} fontFamily="'Special Elite', Georgia, serif" fill={INK} letterSpacing={4}>
-            BRASS · BIRMINGHAM
-          </text>
-          <text y={15} fontSize={7.5} fill={INK_SOFT} letterSpacing={2}>
-            运河与铁路时代 · 工业英格兰
-          </text>
-        </g>
+      {/* 商人位：官方商人板块 + 啤酒桶 */}
+      <g className="board-merchants">
+        {(Object.keys(MERCHANTS) as MerchantId[]).map((id) => {
+          const geom = MERCHANT_GEOM[id];
+          const m = state.merchants[id];
+          return (
+            <g className="board-merchant-group" data-merchant={id} key={id}>
+              {geom.tiles.map((p, ti) => {
+                const type = m?.tiles[ti];
+                if (type === undefined) return null;
+                return (
+                  <image
+                    key={`${id}-tile-${ti}`}
+                    className="board-merchant-tile"
+                    href={`/assets/merchants/${type}.png`}
+                    x={p.x - MERCHANT_TILE_W / 2}
+                    y={p.y - MERCHANT_TILE_H / 2}
+                    width={MERCHANT_TILE_W}
+                    height={MERCHANT_TILE_H}
+                  />
+                );
+              })}
+              {geom.beer.slice(0, m?.beer ?? 0).map((p, bi) => (
+                <image
+                  key={`${id}-beer-${bi}`}
+                  className="board-merchant-beer"
+                  href="/assets/beer.png"
+                  x={p.x - 55}
+                  y={p.y - 55}
+                  width={110}
+                  height={110}
+                />
+              ))}
+            </g>
+          );
+        })}
+      </g>
+
+      {/* 煤/铁市场：已填格叠方块 */}
+      <g className="board-markets" pointerEvents="none">
+        {COAL_MARKET_CELLS.map((p, i) =>
+          i >= coalFilledFrom ? <Cube key={`coal-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#454c58" /> : null,
+        )}
+        {IRON_MARKET_CELLS.map((p, i) =>
+          i >= ironFilledFrom ? <Cube key={`iron-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#c76b2a" /> : null,
+        )}
+      </g>
+
+      {/* VP / 收入轨玩家标记 */}
+      <g className="board-tracks" pointerEvents="none">
+        {state.players.map((p, i) => {
+          const vp = VP_TRACK[p.vp % 100]!;
+          const inc = INCOME_TRACK[Math.max(0, Math.min(99, p.incomeSpace))]!;
+          const dx = (i - 1.5) * 30;
+          return (
+            <g key={`track-${i}`}>
+              <circle cx={vp.x + dx} cy={vp.y} r={34} fill={playerColor(i)} stroke="#14100a" strokeWidth={6} />
+              <circle cx={inc.x + dx * 0.6} cy={inc.y} r={24} fill={playerColor(i)} stroke="#f3e9c8" strokeWidth={5} />
+            </g>
+          );
+        })}
       </g>
     </svg>
   );
 }
+
+/** 收入等级（供面板显示用，避免各处重复引入 engine helper）。 */
+export { incomeLevelAt };

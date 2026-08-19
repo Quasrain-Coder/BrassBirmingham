@@ -9,3 +9,6 @@ dist/
 .DS_Store
 coverage/
 tmp_rules/
+
+# 官方游戏素材（npm run fetch-assets 本地生成，不进 git）
+packages/web/public/assets/

@@ -32,7 +32,7 @@ import {
   targetsFor,
 } from './interactions';
 import type { BuildAction, SellAction } from './interactions';
-import { cardLabel } from './Panels';
+import { cardName, industryName } from './display';
 
 export interface UseActionDraftArgs {
   legalActions: Action[];
@@ -287,7 +287,7 @@ export function ActionBar({
                   className={draft.developPicks.includes(ind) ? 'selected' : undefined}
                   onClick={() => draft.toggleDevelop(ind)}
                 >
-                  {ind}
+                  {industryName(ind)}
                 </button>
               ))}
             </div>
@@ -330,7 +330,7 @@ export function ActionBar({
                   disabled={draft.scoutPicks.length >= 3 && !draft.scoutPicks.includes(c.id)}
                   onClick={() => draft.toggleScoutCard(c.id)}
                 >
-                  {cardLabel(c)}
+                  {cardName(c)}
                 </button>
               ))}
             </div>

@@ -293,6 +293,6 @@ describe('describeAction', () => {
     for (const a of cases) {
       expect(describeAction(a).length).toBeGreaterThan(0);
     }
-    expect(describeAction(cases[0]!)).toContain('Birmingham');
+    expect(describeAction(cases[0]!)).toContain('伯明翰');
   });
 });
