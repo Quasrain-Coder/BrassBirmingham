@@ -55,9 +55,9 @@ describe('<BoardSvg>', () => {
     expect(linkClicks).toEqual([0]);
   });
 
-  it('已建 Link 加 board-link-built 类并画玩家色路径，highlights 加 highlighted 类', () => {
+  it('已建 Link 加 board-link-built 类并画玩家色路径与时代 token，highlights 加 highlighted 类', () => {
     const state = freshState();
-    state.board.links.push({ linkIndex: 0, player: 1 });
+    state.board.links.push({ linkIndex: 0, player: 1, era: 'canal' });
     const { container } = render(
       <BoardSvg
         state={state}
@@ -68,6 +68,10 @@ describe('<BoardSvg>', () => {
     expect(built.classList.contains('board-link-built')).toBe(true);
     const visual = container.querySelector('polyline.board-link-visual') as SVGPolylineElement;
     expect(visual.getAttribute('stroke')).toBe(PLAYER_COLORS[1]);
+    // 运河时代建的 → 驳船 token；高亮连线中点出现 + 提示牌
+    const token = container.querySelector('.link-token image');
+    expect(token?.getAttribute('href')).toBe('/assets/link-canal.png');
+    expect(container.querySelector('.link-hl-chip')).not.toBeNull();
     const hl = container.querySelector('line[data-link-index="3"]') as SVGLineElement;
     expect(hl.classList.contains('highlighted')).toBe(true);
     const slot = container.querySelectorAll(

@@ -57,7 +57,7 @@ function withTile(
 
 /** 手工铺一条 Link（linkIndex 0 基）。 */
 function withLink(s: GameState, linkIndex: number, player: PlayerIndex): void {
-  s.board.links.push({ linkIndex, player });
+  s.board.links.push({ linkIndex, player, era: 'canal' });
 }
 
 const builds = (acts: Action[]): Extract<Action, { type: 'build' }>[] =>
