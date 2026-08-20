@@ -16,8 +16,8 @@ describe('newGame', () => {
     }
     expect(s.coalMarket).toBe(13);
     expect(s.ironMarket).toBe(8);
-    expect(s.deck.length).toBe(64 - 4 * 8 - 1); // 发牌 + 弃牌堆底
-    expect(s.discard).toHaveLength(1);
+    expect(s.deck.length).toBe(64 - 4 * 8 - 4); // 发牌 + 每位玩家 1 张弃牌堆底
+    expect(s.discard).toHaveLength(4);
     expect(s.round).toBe(1);
     expect(s.era).toBe('canal');
   });

@@ -2,7 +2,9 @@
  * GameState 核心类型与对局初始化（rules-reference §4 初始设置 + §8 人数变体）。
  *
  * 初始化顺序（确定性，同一 seed 逐字节一致）：
- * 1. 建牌堆并洗牌，发 8 张/人，再抽 1 张作弃牌堆底；
+ * 1. 建牌堆并洗牌，发 8 张/人，再每位玩家各抽 1 张面朝下作弃牌堆底
+ *    （规则书 p.5 玩家区设置步骤 9 为逐玩家执行；弃牌堆在引擎中是单一共享堆，
+ *    时代末合洗不受影响，但堆底数量 = playerCount 张，否则时代长度出错）；
  * 2. 按人数取商人板块洗混，铺到可用商人位（MERCHANTS 键序），每非 blank 板块 beer=1；
  * 3. 角色块洗混定首轮顺位。
  */
@@ -123,7 +125,7 @@ function playerTileStacks(): TileDef[] {
 export function newGame(playerCount: 2 | 3 | 4, seed: number): GameState {
   const rng = createRng(seed);
 
-  // 1. 牌堆：洗牌 → 发 8 张/人 → 1 张弃牌堆底
+  // 1. 牌堆：洗牌 → 发 8 张/人 → 每位玩家各 1 张弃牌堆底（规则书 p.5 步骤 9）
   const shuffled = rng.shuffle(buildDeck(playerCount));
   let cursor = 0;
   const hands: Card[][] = [];
@@ -131,8 +133,8 @@ export function newGame(playerCount: 2 | 3 | 4, seed: number): GameState {
     hands.push(shuffled.slice(cursor, cursor + HAND_SIZE));
     cursor += HAND_SIZE;
   }
-  const discard = shuffled.slice(cursor, cursor + 1);
-  cursor += 1;
+  const discard = shuffled.slice(cursor, cursor + playerCount);
+  cursor += playerCount;
   const deck = shuffled.slice(cursor);
 
   // 2. 商人板块：洗混后按 MERCHANTS 键序铺位；每非 blank 板块 beer=1

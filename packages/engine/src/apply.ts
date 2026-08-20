@@ -9,7 +9,9 @@
  * 3. 弃牌分派：build/scout 的弃牌已由各自 apply 处理（scout 弃 3 张），这里**不重复**；
  * network/develop/loan/sell/pass 在此统一弃 action.cardId 那 1 张——Wild 卡回 Wild
  * 供应堆，普通卡进弃牌堆（§9.14）。
- * 4. 补牌：行动后手牌从 deck 补回 8 张（deck 空则不补，§4）。
+ * 4. 补牌：该玩家**本轮全部行动完成后**手牌才从 deck 补回 8 张（规则书 p.6
+ *    "After all of your actions have been completed"；2 行动回合的第 1 个行动后
+ *    不补——第 2 个行动只能用剩余的 7 张）；deck 空则不补（§4）。
  * 5. 行动计数 actionsThisTurn++；spentThisRound 各模块已累加（含市场买卖现金）。
  * 6. lastEvents 统一写 GameState.lastEvents：返回 GameState 的模块自己已写；
  * 返回 {state, events} 的模块（build/sell）在此转写。
@@ -27,7 +29,7 @@ import { applySell, enumerateSells } from './actions/sell.js';
 import { IllegalActionError } from './errors.js';
 import { stableStringify } from './serialize.js';
 import type { GameState, PlayerState } from './state.js';
-import { endTurnIfNeeded } from './turn.js';
+import { actionsPerRound, endTurnIfNeeded } from './turn.js';
 import type { Action, PlayerIndex } from './types.js';
 
 const HAND_SIZE = 8;
@@ -127,7 +129,8 @@ function refillHand(state: GameState, player: PlayerIndex): GameState {
 }
 
 /**
- * 统一行动入口：校验 → 分派 → 弃牌（按行动类型分派）→ 补牌 → 行动计数 → 回合推进。
+ * 统一行动入口：校验 → 分派 → 弃牌（按行动类型分派）→ 行动计数 →
+ * （本轮最后一次行动时）补牌 → 回合推进。
  * 不在枚举集内抛 IllegalActionError('illegal-action')。
  */
 export function applyAction(state: GameState, action: Action): GameState {
@@ -170,7 +173,11 @@ export function applyAction(state: GameState, action: Action): GameState {
       break;
   }
 
-  next = refillHand(next, player);
+  // 补牌时机（规则书 p.6 "After all of your actions have been completed"）：
+  // 仅本轮最后一次行动后补回 8 张；2 行动回合的第 1 个行动后手牌保持 7 张。
+  if (next.actionsThisTurn + 1 >= actionsPerRound(next)) {
+    next = refillHand(next, player);
+  }
   next = { ...next, actionsThisTurn: next.actionsThisTurn + 1 };
   return endTurnIfNeeded(next);
 }
