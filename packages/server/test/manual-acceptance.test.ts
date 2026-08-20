@@ -41,8 +41,20 @@ const PER_STEP_TIMEOUT_MS = 30_000;
  * 驱动，测试确定性。
  */
 function pickAction(legal: Record<string, unknown>[], rng: Rng): Record<string, unknown> {
-  const sellIdx = legal.findIndex((a) => a.type === 'sell');
-  if (sellIdx !== -1 && rng.next() < 0.5) return legal[sellIdx]!;
+  // sell 的前置链很长(建可卖产业 → 连通匹配商人 → 有啤酒),纯均匀随机的对局
+  // 几乎走不到;按"sell 优先、build 偏向可卖产业与酒厂"加权,使七类覆盖稳定
+  // 可复现(固定种子 + 固定 RNG)。
+  const ofType = (t: string): Record<string, unknown>[] => legal.filter((a) => a.type === t);
+  const sells = ofType('sell');
+  if (sells.length > 0 && rng.next() < 0.7) return sells[rng.nextInt(sells.length)]!;
+  const builds = ofType('build');
+  if (builds.length > 0 && rng.next() < 0.6) {
+    const sellable = builds.filter((a) =>
+      ['cotton', 'manufacturer', 'pottery', 'brewery'].includes(String(a.industry)),
+    );
+    const pool = sellable.length > 0 ? sellable : builds;
+    return pool[rng.nextInt(pool.length)]!;
+  }
   return legal[rng.nextInt(legal.length)]!;
 }
 

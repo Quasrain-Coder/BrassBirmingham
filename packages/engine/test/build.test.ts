@@ -109,15 +109,22 @@ describe('enumerateBuilds: card rules', () => {
     expect(after.has('cannock')).toBe(false);
   });
 
-  it('industry card only reaches locations connected to own network via built links', () => {
+  it('industry card only reaches locations in own network (opponent links do not extend it)', () => {
     const s = newGame(4, 5);
     withTile(s, 0, 'dudley', 'coal');
-    withLink(s, 3, 1); // #4 birmingham-dudley（对手铺的也算连通）
+    withLink(s, 3, 1); // #4 birmingham-dudley（对手铺的 Link 不算己方 network）
     setHand(s, 0, [indCard(['cotton'], 'ind-cotton-0')]);
     const locations = new Set(builds(enumerateBuilds(s, 0)).map((a) => a.location));
-    expect(locations.has('birmingham')).toBe(true); // 沿已建边可达
+    expect(locations.has('birmingham')).toBe(false); // 仅经对手 Link 可达，非己方 network
     expect(locations.has('worcester')).toBe(false); // 无可达路径（dudley 无棉槽且未连通）
     expect(locations.has('wolverhampton')).toBe(false); // 相邻但边未建
+    // 同一条边换成自己铺的 → birmingham 进入己方 network
+    const s2 = newGame(4, 5);
+    withTile(s2, 0, 'dudley', 'coal');
+    withLink(s2, 3, 0);
+    setHand(s2, 0, [indCard(['cotton'], 'ind-cotton-0')]);
+    const locations2 = new Set(builds(enumerateBuilds(s2, 0)).map((a) => a.location));
+    expect(locations2.has('birmingham')).toBe(true);
   });
 
   it('dual-icon industry card offers both industries', () => {
