@@ -106,6 +106,28 @@ function Cube({ x, y, size, fill }: { x: number; y: number; size: number; fill: 
   );
 }
 
+/** 已建板块上的资源 token 布局：板块底部两行（最多 6 个），啤酒桶用官方图标。 */
+function ResourceTokens({ cx, cy, industry, count }: { cx: number; cy: number; industry: IndustryType; count: number }): ReactElement {
+  const perRow = 3;
+  const gap = 52;
+  const tokens = [];
+  for (let i = 0; i < count; i++) {
+    const row = Math.floor(i / perRow);
+    const col = i % perRow;
+    const rowCount = Math.min(count - row * perRow, perRow);
+    const x = cx + (col - (rowCount - 1) / 2) * gap;
+    const y = cy + SLOT_SIZE / 2 - 66 + row * 46;
+    tokens.push(
+      industry === 'brewery' ? (
+        <image key={i} href="/assets/beer.png" x={x - 26} y={y - 26} width={52} height={52} />
+      ) : (
+        <Cube key={i} x={x} y={y} size={44} fill={industry === 'coal' ? '#454c58' : '#c76b2a'} />
+      ),
+    );
+  }
+  return <g className="tile-resource-tokens">{tokens}</g>;
+}
+
 export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
@@ -248,13 +270,16 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
                           width={SLOT_SIZE}
                           height={SLOT_SIZE}
                         />
-                        {tile.resources > 0 ? (
-                          <g className="tile-resources">
-                            <rect x={c.x + SLOT_SIZE / 2 - 62} y={c.y + SLOT_SIZE / 2 - 62} width={62} height={62} rx={12} fill="#14100a" opacity={0.85} />
-                            <text x={c.x + SLOT_SIZE / 2 - 31} y={c.y + SLOT_SIZE / 2 - 18} textAnchor="middle" fontSize={40} fill="#f3e9c8">
-                              {tile.resources}
-                            </text>
-                          </g>
+                        {tile.resources > 0 && !tile.flipped ? (
+                          <>
+                            <ResourceTokens cx={c.x} cy={c.y} industry={tile.tile.industry} count={tile.resources} />
+                            <g className="tile-resources">
+                              <rect x={c.x + SLOT_SIZE / 2 - 62} y={c.y - SLOT_SIZE / 2} width={62} height={62} rx={12} fill="#14100a" opacity={0.85} />
+                              <text x={c.x + SLOT_SIZE / 2 - 31} y={c.y - SLOT_SIZE / 2 + 44} textAnchor="middle" fontSize={40} fill="#f3e9c8">
+                                {tile.resources}
+                              </text>
+                            </g>
+                          </>
                         ) : null}
                       </g>
                     ) : null}
