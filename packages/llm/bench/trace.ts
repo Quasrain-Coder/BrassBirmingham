@@ -1,0 +1,82 @@
+/**
+ * bench 落盘：decisions.jsonl（每步决策一条）+ games.jsonl（每局一条）。
+ *
+ * 输出目录 bench/out/<runId>/（runId 由 CLI 给，默认时间戳）。纯 append
+ * JSONL——中断也不丢已完成的局；log 重放走 newGame(seed) + applyAction
+ * （action log 存在 DrivenGame.log，games.jsonl 里不重复存，重放需决策序列
+ * 时由 analyze 从 decisions.jsonl 的 chosen 重建或直接重跑 driveGame）。
+ */
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import type { DrivenGame, DecisionTrace } from './drive-game.js';
+
+/** 一局的结果记录（games.jsonl 一行）。 */
+export interface GameRecord {
+  /** 本局种子（镜像局同种子、seatLabels 互换）。 */
+  seed: number;
+  /** 是否镜像换边局。 */
+  mirrored: boolean;
+  /** 座位 → agent 标签（如 ["llm:normal", "heuristic"]）。 */
+  seatLabels: string[];
+  /** 座位 → 终局 VP。 */
+  vps: number[];
+  /** 胜者优先级最高座位；平局为 null。 */
+  winner: number | null;
+  /** 总步数（= 决策数）。 */
+  steps: number;
+  /** 座位 → degraded 决策数。 */
+  degraded: number[];
+  /** 座位 → token 用量合计。 */
+  usage: { input: number; output: number }[];
+  durationMs: number;
+}
+
+/** 由 DrivenGame 汇总 GameRecord（VP 最高者胜，并列 null）。 */
+export function gameRecord(
+  game: DrivenGame,
+  seatLabels: string[],
+  mirrored: boolean,
+  durationMs: number,
+): GameRecord {
+  const vps = game.state.players.map((p) => p.vp);
+  const best = Math.max(...vps);
+  const winners = vps.flatMap((vp, i) => (vp === best ? [i] : []));
+  const degraded = seatLabels.map(() => 0);
+  const usage = seatLabels.map(() => ({ input: 0, output: 0 }));
+  for (const d of game.decisions) {
+    if (d.degraded) degraded[d.seat]!++;
+    usage[d.seat]!.input += d.usage.input;
+    usage[d.seat]!.output += d.usage.output;
+  }
+  return {
+    seed: game.seed,
+    mirrored,
+    seatLabels,
+    vps,
+    winner: winners.length === 1 ? winners[0]! : null,
+    steps: game.decisions.length,
+    degraded,
+    usage,
+    durationMs,
+  };
+}
+
+/** 追加写 JSONL 的落盘器；构造即建目录。 */
+export class TraceWriter {
+  private readonly decisionsPath: string;
+  private readonly gamesPath: string;
+
+  constructor(outDir: string) {
+    mkdirSync(outDir, { recursive: true });
+    this.decisionsPath = join(outDir, 'decisions.jsonl');
+    this.gamesPath = join(outDir, 'games.jsonl');
+  }
+
+  decision(trace: DecisionTrace & { seed: number; mirrored: boolean }): void {
+    appendFileSync(this.decisionsPath, JSON.stringify(trace) + '\n');
+  }
+
+  game(record: GameRecord): void {
+    appendFileSync(this.gamesPath, JSON.stringify(record) + '\n');
+  }
+}
