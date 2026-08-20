@@ -404,7 +404,7 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
                         </g>
                         {tile.resources > 0 && !tile.flipped ? (
                           <>
-                            <ResourceTokens cx={c.x} cy={c.y} industry={tile.tile.industry} count={tile.resources} />
+                            <ResourceTokens cx={r.x + r.w / 2} cy={r.y + r.h / 2} industry={tile.tile.industry} count={tile.resources} />
                             <g className="tile-resources">
                               <rect x={r.x + r.w - 62} y={r.y + r.h - 62} width={62} height={62} rx={12} fill="#14100a" opacity={0.85} />
                               <text x={r.x + r.w - 31} y={r.y + r.h - 18} textAnchor="middle" fontSize={40} fill="#f3e9c8">
