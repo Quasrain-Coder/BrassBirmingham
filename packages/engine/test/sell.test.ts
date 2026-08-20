@@ -44,7 +44,7 @@ function setMerchant(
 
 /** 辅助：已建 Link（0 基下标；连通判定不看属主）。 */
 function withLink(state: GameState, linkIndex: number, player: PlayerIndex = 0): void {
-  state.board.links.push({ linkIndex, player });
+  state.board.links.push({ linkIndex, player, era: 'canal' });
 }
 
 /** 辅助：单手牌，枚举计数可控。 */
