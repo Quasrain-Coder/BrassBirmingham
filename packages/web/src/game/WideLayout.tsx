@@ -49,10 +49,10 @@ export function RoundInfo({
       <span className="round-info-rank" style={{ borderColor: PLAYER_COLORS[seat] }}>
         {rank === -1 ? '—' : `#${rank}`}
       </span>
+      <span className="round-info-spent">开销 £{p.spentThisRound}</span>
       <span className="round-info-acts">
         {acts.length > 0 ? acts.map((a) => describeAction(a.action)).join('；') : '本回合未行动'}
       </span>
-      <span className="round-info-spent">开销 £{p.spentThisRound}</span>
     </div>
   );
 }

@@ -886,15 +886,17 @@ body {
 /* 面板下方本回合信息行 */
 .round-info {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 4px 10px;
   border: 1px solid #3a3226;
   border-radius: 8px;
   background: rgba(23, 26, 31, 0.7);
   font-size: 0.78rem;
   color: #9aa4b2;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .round-info-rank {
@@ -910,12 +912,13 @@ body {
 
 .round-info-spent {
   color: #c9b98a;
-  margin-left: auto;
+  flex: none;
 }
 
 .round-info-acts {
-  flex-basis: 100%;
   color: #8f96a3;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 
