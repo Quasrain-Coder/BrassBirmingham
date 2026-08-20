@@ -7,12 +7,17 @@
  * - 非本人回合：棋盘只读（不传点击回调、高亮为空），ActionBar 显示"等待 X 行动"。
  */
 import type { ReactElement } from 'react';
+import { useEffect, useState } from 'react';
 import type { Action, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { BoardSvg } from '../board/BoardSvg';
+import { PLAYER_COLORS } from '../board/BoardSvg';
+import type { ActionSpotlight } from '../board/BoardSvg';
 import { ActionBar, useActionDraft } from './ActionBar';
 import { AIIndicator } from './AIIndicator';
 import { HandBar, LogPanel, PlayerBoard, TurnOrderBar, playerName } from './Panels';
+import { describeAction } from './display';
+import { SPOTLIGHT_DURATION_MS, spotlightOf } from './spotlight';
 import type { GameStore, GameStoreState, LogEntry } from './store';
 import { useGameStore } from './store';
 
@@ -53,6 +58,19 @@ function GameBoard({
     seat,
   });
 
+  // 行动聚光灯：最新一条 action_applied → 棋盘高亮 + 横幅，约 5 秒后自动清除；
+  // 新行动到达即替换并重置计时（以 seq 为触发键，lastEntry 由 seq 唯一确定）。
+  const lastEntry = log[log.length - 1];
+  const lastSeq = lastEntry?.seq;
+  const [spotlight, setSpotlight] = useState<(ActionSpotlight & { text: string }) | null>(null);
+  useEffect(() => {
+    if (lastEntry === undefined) return;
+    setSpotlight({ ...spotlightOf(lastEntry.player, lastEntry.action), text: describeAction(lastEntry.action) });
+    const t = setTimeout(() => setSpotlight(null), SPOTLIGHT_DURATION_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSeq]);
+
   return (
     <div className="game-screen">
       <header className="game-screen-head">
@@ -86,9 +104,19 @@ function GameBoard({
         <BoardSvg
           state={state}
           highlights={myTurn ? draft.highlights : undefined}
+          spotlight={spotlight}
           onSlotClick={myTurn ? draft.clickSlot : undefined}
           onLinkClick={myTurn ? draft.clickLink : undefined}
         />
+        {spotlight !== null ? (
+          <div className="action-spotlight-banner" data-testid="action-spotlight">
+            <span
+              className="spotlight-dot"
+              style={{ background: PLAYER_COLORS[spotlight.player] ?? '#7f8c8d' }}
+            />
+            {playerName(room ?? undefined, spotlight.player)}：{spotlight.text}
+          </div>
+        ) : null}
         {/* 行动顺位叠在版图左下角（1-4 名原始轮次 + 本轮花费） */}
         <TurnOrderBar state={state} room={room ?? undefined} thinkingSeats={thinkingSeats} overlay />
       </div>

@@ -62,9 +62,17 @@ export interface BoardHighlights {
   links?: number[];
 }
 
+/** 行动聚光灯：某玩家刚执行的行动在棋盘上的高亮目标（约 5 秒，GameScreen 驱动）。 */
+export interface ActionSpotlight {
+  player: PlayerIndex;
+  locations: LocationId[];
+  links: number[];
+}
+
 export interface BoardSvgProps {
   state: FilteredState;
   highlights?: BoardHighlights | undefined;
+  spotlight?: ActionSpotlight | null | undefined;
   onSlotClick?: ((location: LocationId, slotIndex: number) => void) | undefined;
   onLinkClick?: ((linkIndex: number) => void) | undefined;
 }
@@ -158,7 +166,7 @@ function BuiltLinkToken({ mid, player, era }: { mid: { x: number; y: number }; p
   );
 }
 
-export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
+export function BoardSvg({ state, highlights, spotlight, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const builtByLink = new Map<number, { player: PlayerIndex; era: 'canal' | 'rail' }>();
@@ -464,6 +472,54 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
 
       {/* 连线 token 顶层渲染（不被板块图遮挡） */}
       <g className="board-link-tokens">{linkTokens}</g>
+
+      {/* 行动聚光灯：刚执行的行动目标高亮（玩家色脉冲，GameScreen 约 5 秒后清除） */}
+      {spotlight ? (
+        <g className="board-spotlight" pointerEvents="none">
+          {spotlight.links.map((i) => {
+            const link = LINKS[i];
+            if (!link) return null;
+            const pts = linkPath(anchorOf(link.a), anchorOf(link.b), LINK_MIDPOINTS[i]);
+            return (
+              <polyline
+                key={`sp-link-${i}`}
+                className="board-spotlight-pulse"
+                points={pts}
+                fill="none"
+                stroke={playerColor(spotlight.player)}
+                strokeWidth={56}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            );
+          })}
+          {spotlight.locations.map((loc) => {
+            const pts = SLOT_CENTERS[loc] ?? [];
+            if (pts.length === 0) return null;
+            const pad = 130;
+            const xs = pts.map((p) => p.x);
+            const ys = pts.map((p) => p.y);
+            const x = Math.min(...xs) - pad;
+            const y = Math.min(...ys) - pad;
+            const w = Math.max(...xs) - Math.min(...xs) + pad * 2;
+            const h = Math.max(...ys) - Math.min(...ys) + pad * 2;
+            return (
+              <rect
+                key={`sp-loc-${loc}`}
+                className="board-spotlight-pulse"
+                x={x}
+                y={y}
+                width={w}
+                height={h}
+                rx={36}
+                fill="none"
+                stroke={playerColor(spotlight.player)}
+                strokeWidth={12}
+              />
+            );
+          })}
+        </g>
+      ) : null}
 
       {/* VP / 收入轨玩家标记 */}
       <g className="board-tracks" pointerEvents="none">

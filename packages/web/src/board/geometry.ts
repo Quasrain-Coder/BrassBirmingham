@@ -259,7 +259,7 @@ export const LINK_MIDPOINTS: Record<number, Point> = {
   26: { x: 2433, y: 3577 }, // dudley-wolverhampton
   27: { x: 2930, y: 4588 }, // gloucester-redditch
   28: { x: 2641, y: 4892 }, // gloucester-worcester
-  29: { x: 2271, y: 4549 }, // kidderminster-worcester（含 farm-south 分支）
+  29: { x: 2460, y: 4445 }, // kidderminster-worcester（含 farm-south 分支；贴印刷走廊与农场岔道交汇点）
   30: { x: 2857, y: 1271 }, // leek-stoke-on-trent
   31: { x: 4095, y: 3048 }, // nuneaton-tamworth
   32: { x: 3566, y: 4427 }, // redditch-oxford

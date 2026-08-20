@@ -798,6 +798,58 @@ body {
   position: relative;
 }
 
+/* 行动聚光灯：顶部横幅（约 5 秒淡出）+ 棋盘玩家色脉冲高亮 */
+.action-spotlight-banner {
+  position: absolute;
+  top: 1.2%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  border: 1px solid #6b5b3e;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(20, 16, 10, 0.92), rgba(20, 16, 10, 0.82));
+  color: #f3ead4;
+  font-size: 1rem;
+  white-space: nowrap;
+  animation: spotlight-banner-fade 5s ease-in forwards;
+  pointer-events: none;
+}
+
+.action-spotlight-banner .spotlight-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #14100a;
+  flex: none;
+}
+
+@keyframes spotlight-banner-fade {
+  0%,
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.board-spotlight-pulse {
+  animation: board-spotlight-pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes board-spotlight-pulse {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 0.9;
+  }
+}
+
 .turn-order-bar.overlay {
   position: absolute;
   left: 0.6%;
