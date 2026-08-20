@@ -210,7 +210,7 @@ describe('sell', () => {
     ]);
   });
 
-  it('intermediate subsets are not enumerated (v1 normalization): only singles and the full set', () => {
+  it('intermediate subsets: max set minus one tile each is enumerated (sell exactly 2 of 3)', () => {
     const s = newGame(4, 9);
     oneCard(s);
     withTile(s, 0, 'birmingham', 'cotton');
@@ -225,9 +225,10 @@ describe('sell', () => {
     setMerchant(s, 'oxford', ['any'], 0);
 
     const sells = sellActions(s);
-    // 3 块可卖：单块 ×3 + 全集 ×1；没有两块组合
-    expect(sells).toHaveLength(4);
+    // 3 块可卖：单块 ×3 + 最大集 ×1 + 减一子集 ×3（规则书 p.10 step 5：每块可选）
+    expect(sells).toHaveLength(7);
     expect(sells.filter((a) => a.sales.length === 3)).toHaveLength(1);
+    expect(sells.filter((a) => a.sales.length === 2)).toHaveLength(3);
   });
 
   it('gloucester merchant bonus settles a free develop (no iron, lightbulb pottery exempt)', () => {

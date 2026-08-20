@@ -19,14 +19,14 @@
  *   规范化目标：产业序（cotton/manufacturer/pottery/coal/iron/brewery）首个
  *   可研发的产业栈顶；面板无可移除板块时奖励落空（官方为可选奖励）。
  *
- * 枚举规范化（task-10-brief）：
+ * 枚举规范化（task-10-brief，2026-08-20 修订）：
  * - 单块销售全枚举：板块 × 可达匹配商人位 × useMerchantBeer∈{true,false}
  *   （true 分支仅当该商人位有桶且板块 beerToFlip>0 时存在）。
- * - 多块只枚举"可卖全集"一个行动：按规范化顺序（location 字典序 + 槽位序）
- *   贪心模拟——每块取首个可行（MERCHANTS 插入序；有桶则先用商人桶）的（商人位,
- *   useMerchantBeer），在模拟态上实际消耗啤酒后再定下一块；某块无可行来源
- *   （啤酒被前序销售耗尽）则该块不进全集。**中间子集不枚举（v1 已知简化，
- *   LLM/前端可用连续两次 Sell 逼近）**；全集 <2 块时不重复枚举（单块已覆盖）。
+ * - 多块枚举"最大可卖集合"（回溯求一次行动可卖的最多块数——贪心取首项
+ *   会让前序板块抢走稀缺啤酒、后序板块无可行来源，漏掉合法组合）及其全部
+ *   "减一"子集（规则书 p.10 step 5：每追加一块都是可选的；可行集的保序子序列
+ *   必可行——啤酒消耗只会更少）。更小的中间子集不枚举（可用连续两次 Sell
+ *   逼近）；最大集 <2 块时不重复枚举（单块已覆盖）。
  * - 可行性判定直接调 consumeBeer 试跑（捕获 'insufficient-beer'），保证
  *   枚举出的行动 apply 必成功。
  *
@@ -139,26 +139,37 @@ function saleOptions(state: GameState, player: PlayerIndex, tile: SellableTile):
 }
 
 /**
- * "可卖全集"的贪心规范化：按板块规范化顺序，逐块取首个可行 sale 并在模拟态上
- * 实际消耗啤酒；无可行来源的板块不进全集（啤酒被前序销售耗尽）。
+ * "最大可卖集合"的回溯规范化：按板块规范化序 DFS，逐块尝试全部可行 sale
+ * （选项序确定性），在模拟态上实际消耗啤酒；返回一次行动可卖的**最多块数**
+ * 的可行组合（并列取 DFS 先序首个，确定性）。贪心取首项会让前序板块抢走
+ * 稀缺啤酒、后序板块无可行来源，漏掉合法组合，故回溯。
  */
-function fullSetSales(state: GameState, player: PlayerIndex, tiles: SellableTile[]): Sale[] {
-  const sales: Sale[] = [];
-  let sim = state;
-  for (const tile of tiles) {
-    const sale = saleOptions(sim, player, tile)[0];
-    if (!sale) continue;
-    sales.push(sale);
-    sim = consumeBeer(sim, player, tile.beerToFlip, {
-      at: sale.merchant,
-      useMerchantBeer: sale.useMerchantBeer,
-    }).state;
-  }
-  return sales;
+function maxSetSales(state: GameState, player: PlayerIndex, tiles: SellableTile[]): Sale[] {
+  let best: Sale[] = [];
+  const dfs = (i: number, sim: GameState, acc: Sale[]): void => {
+    // 剪枝：剩余板块全部可卖也无法超过 best
+    if (acc.length + (tiles.length - i) <= best.length) return;
+    if (i === tiles.length) {
+      best = acc.slice();
+      return;
+    }
+    const tile = tiles[i]!;
+    for (const sale of saleOptions(sim, player, tile)) {
+      const sim2 = consumeBeer(sim, player, tile.beerToFlip, {
+        at: sale.merchant,
+        useMerchantBeer: sale.useMerchantBeer,
+      }).state;
+      dfs(i + 1, sim2, [...acc, sale]);
+    }
+    dfs(i + 1, sim, acc);
+  };
+  dfs(0, state, []);
+  return best;
 }
 
 /**
- * 枚举完全合法的 Sell 行动：手牌每张卡 ×（每块单卖全组合 + 可卖全集一个）。
+ * 枚举完全合法的 Sell 行动：手牌每张卡 ×（每块单卖全组合 + 最大可卖集合
+ * + 最大集的全部"减一"子集）。
  * 顺序确定性：手牌序 → 板块规范化序 → MERCHANTS 插入序 → useMerchantBeer(true→false)。
  */
 export function enumerateSells(state: GameState, player: PlayerIndex): Action[] {
@@ -166,7 +177,7 @@ export function enumerateSells(state: GameState, player: PlayerIndex): Action[] 
   const tiles = sellableTiles(state, player);
   if (tiles.length === 0) return [];
   const singles = tiles.map((t) => saleOptions(state, player, t));
-  const full = fullSetSales(state, player, tiles);
+  const full = maxSetSales(state, player, tiles);
   const out: Action[] = [];
   for (const card of ps.hand) {
     for (const opts of singles) {
@@ -176,6 +187,16 @@ export function enumerateSells(state: GameState, player: PlayerIndex): Action[] 
     }
     if (full.length >= 2) {
       out.push({ type: 'sell', cardId: card.id, sales: full });
+      // 中间子集（规则书 p.10 step 5：每追加一块都是可选的）：最大集的全部
+      // "减一"保序子序列（可行集的子序列啤酒消耗只会更少，必可行）。
+      // full.length === 2 时减一即单块，已被上面的单卖枚举覆盖。
+      for (let k = full.length - 1; k >= 0 && full.length >= 3; k--) {
+        out.push({
+          type: 'sell',
+          cardId: card.id,
+          sales: [...full.slice(0, k), ...full.slice(k + 1)],
+        });
+      }
     }
   }
   return out;
