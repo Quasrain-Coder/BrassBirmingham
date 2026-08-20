@@ -119,6 +119,29 @@ describe('<GameScreen>', () => {
     expect(store.getState().selectedCard).toBeNull();
   });
 
+  it('宽屏布局:切换按钮 → 左右两列面板铺开 + 本回合信息行', () => {
+    const { store, game, ws } = setup(true);
+    const { container } = render(<GameScreen store={store} />);
+    expect(container.querySelector('.wide-grid')).toBeNull();
+    fireEvent.click(screen.getByTestId('toggle-layout'));
+    const grid = container.querySelector('.wide-grid');
+    expect(grid).not.toBeNull();
+    // 4p:左列 2 个席位、右列 2 个席位,面板全部铺开(defaultOpen)
+    expect(container.querySelectorAll('.wide-col-left .wide-seat')).toHaveLength(2);
+    expect(container.querySelectorAll('.wide-col-right .wide-seat')).toHaveLength(2);
+    // 本回合信息行:顺位徽标 + 金钱行(前/开销/后)
+    const info0 = screen.getByTestId(`round-info-${game.turnOrder[0]!}`);
+    expect(info0).toHaveTextContent('#1');
+    expect(info0).toHaveTextContent('前 £17');
+    expect(info0).toHaveTextContent('开销 £0');
+    expect(info0).toHaveTextContent('后 £17');
+    expect(info0).toHaveTextContent('本回合未行动');
+    // 再点一次回到经典布局
+    fireEvent.click(screen.getByTestId('toggle-layout'));
+    expect(container.querySelector('.wide-grid')).toBeNull();
+    void ws;
+  });
+
   it('离开对局：点按钮 → 发 leave 帧并回到大厅态', () => {
     const { store, ws } = setup(true);
     render(<GameScreen store={store} />);

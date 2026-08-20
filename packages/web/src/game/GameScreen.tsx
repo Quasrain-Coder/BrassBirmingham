@@ -18,6 +18,7 @@ import { AIIndicator } from './AIIndicator';
 import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
 import { describeAction } from './display';
 import { ScoreModal, useScoreHistory } from './ScoreTable';
+import { RoundInfo } from './WideLayout';
 import { SPOTLIGHT_DURATION_MS, spotlightOf } from './spotlight';
 import type { GameStore, GameStoreState, LogEntry } from './store';
 import { useGameStore } from './store';
@@ -33,6 +34,8 @@ interface GameBoardProps {
   thinkingSeats: PlayerIndex[];
   gameOver: GameStoreState['gameOver'];
   turnHold: PlayerIndex | null;
+  /** 当前快照 seq(宽屏布局的本回合信息行用)。 */
+  seq: number;
 }
 
 /** 非本人回合的固定空数组：避免每渲染新引用触发 useActionDraft 的重置 effect 死循环。 */
@@ -49,6 +52,7 @@ function GameBoard({
   thinkingSeats,
   gameOver,
   turnHold,
+  seq,
 }: GameBoardProps): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx] ?? seat;
   const myTurn = current === seat && gameOver === null;
@@ -99,14 +103,86 @@ function GameBoard({
     return () => clearTimeout(t);
   }, [state.era, state.round]);
 
+  // 布局模式:经典 / 宽屏(27 寸全屏,地图居中,左右两列面板全部铺开)
+  const storage = typeof localStorage === 'undefined' ? null : localStorage;
+  const [layoutWide, setLayoutWideState] = useState<boolean>(() => storage?.getItem('brass-layout') === 'wide');
+  const toggleLayout = (): void => {
+    const v = !layoutWide;
+    setLayoutWideState(v);
+    storage?.setItem('brass-layout', v ? 'wide' : 'classic');
+  };
+
+  const boardEl = (
+    <div className="board-wrap">
+      <BoardSvg
+        state={state}
+        highlights={myTurn ? draft.highlights : undefined}
+        spotlight={spotlight}
+        thinkingSeats={thinkingSeats}
+        buildPreview={myTurn && draft.buildPreview !== null ? { ...draft.buildPreview, player: seat } : null}
+        beerMatches={myTurn ? draft.beerMatches : undefined}
+        onSlotClick={myTurn ? draft.clickSlot : undefined}
+        onLinkClick={myTurn ? draft.clickLink : undefined}
+      />
+      {spotlight !== null ? (
+        <div className="action-spotlight-banner" data-testid="action-spotlight">
+          <span
+            className="spotlight-dot"
+            style={{ background: PLAYER_COLORS[spotlight.player] ?? '#7f8c8d' }}
+          />
+          {playerName(room ?? undefined, spotlight.player)}：{spotlight.text}
+        </div>
+      ) : null}
+      {roundBanner !== null ? (
+        <div className="round-banner" data-testid="round-banner">
+          {roundBanner}
+        </div>
+      ) : null}
+    </div>
+  );
+  const handEl = (
+    <HandBar
+      state={state}
+      seat={seat}
+      selectedCard={selectedCard}
+      onSelect={
+        myTurn
+          ? (id) => store.selectCard(id === selectedCard ? null : id)
+          : undefined
+      }
+    />
+  );
+  const actionEl = (
+    <ActionBar
+      myTurn={myTurn}
+      waitingFor={playerName(room ?? undefined, turnHold ?? current)}
+      selectedCard={myTurn ? selectedCard : null}
+      hand={hand}
+      draft={draft}
+      state={state}
+      turnHold={turnHold}
+      seat={seat}
+      canResetTurn={myTurn && state.actionsThisTurn > 0}
+      onConfirm={() => {
+        if (draft.resolved !== null) store.submitAction(draft.resolved);
+      }}
+      onCancel={draft.reset}
+      onEndTurn={() => store.endTurn()}
+      onResetTurn={() => store.resetTurn()}
+    />
+  );
+
   return (
-    <div className="game-screen">
+    <div className={`game-screen${layoutWide ? ' wide' : ''}`}>
       <header className="game-screen-head">
         {room !== null ? (
           <span className="game-room-code" data-testid="game-room-code">
             房间 {room.code}
           </span>
         ) : null}
+        <button type="button" className="btn-ghost" data-testid="toggle-layout" onClick={toggleLayout}>
+          {layoutWide ? '经典布局' : '宽屏布局'}
+        </button>
         <button
           type="button"
           className="btn-ghost"
@@ -138,74 +214,53 @@ function GameBoard({
           （{gameOver.finalScores.join(' / ')} 分）
         </p>
       ) : null}
-      <div className="player-boards">
-        {seatsBefore.map((i) => (
-          <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} />
-        ))}
-      </div>
-      <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
-      <div className="board-wrap">
-        <BoardSvg
-          state={state}
-          highlights={myTurn ? draft.highlights : undefined}
-          spotlight={spotlight}
-          thinkingSeats={thinkingSeats}
-          buildPreview={myTurn && draft.buildPreview !== null ? { ...draft.buildPreview, player: seat } : null}
-          beerMatches={myTurn ? draft.beerMatches : undefined}
-          onSlotClick={myTurn ? draft.clickSlot : undefined}
-          onLinkClick={myTurn ? draft.clickLink : undefined}
-        />
-        {spotlight !== null ? (
-          <div className="action-spotlight-banner" data-testid="action-spotlight">
-            <span
-              className="spotlight-dot"
-              style={{ background: PLAYER_COLORS[spotlight.player] ?? '#7f8c8d' }}
-            />
-            {playerName(room ?? undefined, spotlight.player)}：{spotlight.text}
+      {layoutWide ? (
+        <div className="wide-grid">
+          <aside className="wide-col wide-col-left">
+            {state.turnOrder.slice(0, Math.ceil(state.playerCount / 2)).map((i) => (
+              <div key={i} className="wide-seat">
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} />
+                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} />
+              </div>
+            ))}
+          </aside>
+          <div className="wide-center">
+            <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
+            {boardEl}
+            {handEl}
+            {actionEl}
           </div>
-        ) : null}
-        {roundBanner !== null ? (
-          <div className="round-banner" data-testid="round-banner">
-            {roundBanner}
-          </div>
-        ) : null}
-      </div>
-      {/* 自己的单元:手牌+行动条紧贴地图正下方(选牌找点路径最短),版图再往下 */}
-      <HandBar
-        state={state}
-        seat={seat}
-        selectedCard={selectedCard}
-        onSelect={
-          myTurn
-            ? (id) => store.selectCard(id === selectedCard ? null : id)
-            : undefined
-        }
-      />
-      <ActionBar
-        myTurn={myTurn}
-        waitingFor={playerName(room ?? undefined, turnHold ?? current)}
-        selectedCard={myTurn ? selectedCard : null}
-        hand={hand}
-        draft={draft}
-        state={state}
-        turnHold={turnHold}
-        seat={seat}
-        canResetTurn={myTurn && state.actionsThisTurn > 0}
-        onConfirm={() => {
-          if (draft.resolved !== null) store.submitAction(draft.resolved);
-        }}
-        onCancel={draft.reset}
-        onEndTurn={() => store.endTurn()}
-        onResetTurn={() => store.resetTurn()}
-      />
-      <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} />
-      {seatsAfter.length > 0 ? (
-        <div className="player-boards player-boards-after">
-          {seatsAfter.map((i) => (
-            <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} />
-          ))}
+          <aside className="wide-col wide-col-right">
+            {state.turnOrder.slice(Math.ceil(state.playerCount / 2)).map((i) => (
+              <div key={i} className="wide-seat">
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} />
+                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} />
+              </div>
+            ))}
+          </aside>
+>>>>>>> 15d0f84 (feat(web): 宽屏布局模式——地图居中,左右两列面板铺开 + 本回合信息行)
         </div>
-      ) : null}
+      ) : (
+        <>
+          <div className="player-boards">
+            {seatsBefore.map((i) => (
+              <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} />
+            ))}
+          </div>
+          <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
+          {boardEl}
+          {handEl}
+          {actionEl}
+          <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} />
+          {seatsAfter.length > 0 ? (
+            <div className="player-boards player-boards-after">
+              {seatsAfter.map((i) => (
+                <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} />
+              ))}
+            </div>
+          ) : null}
+        </>
+      )}
       <LogPanel log={log} room={room ?? undefined} />
     </div>
   );
@@ -232,6 +287,7 @@ export function GameScreen({ store }: { store: GameStore }): ReactElement {
       thinkingSeats={s.thinkingSeats}
       gameOver={s.gameOver}
       turnHold={s.turnHold}
+      seq={s.seq}
     />
   );
 }
