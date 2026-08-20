@@ -25,6 +25,31 @@ describe('<BoardSvg>', () => {
     expect(container.querySelector('svg')?.getAttribute('viewBox')).toBe('990 990 4200 4200');
   });
 
+  it('顺位轨:角色头像嵌入顺位桶,本轮花费渲染钱币堆椭圆块', () => {
+    const state = freshState();
+    const cur = state.turnOrder[state.currentPlayerIdx]!;
+    state.players[cur]!.spentThisRound = 7;
+    const { container } = render(<BoardSvg state={state} thinkingSeats={[state.turnOrder[1]!]} />);
+    const track = container.querySelector('g.board-turn-track');
+    expect(track).not.toBeNull();
+    // 4 个桶位各一个头像(圆形裁剪),当前玩家金圈(current 类),思考中 thinking 类
+    expect(track?.querySelectorAll('image[clip-path]')).toHaveLength(4);
+    expect(track?.querySelector(`[data-turn-seat="${cur}"]`)?.classList.contains('current')).toBe(true);
+    expect(
+      track?.querySelector(`[data-turn-seat="${state.turnOrder[1]!}"]`)?.classList.contains('thinking'),
+    ).toBe(true);
+    // 花费 £7:按 15/5/1 面额分解 = 5+1+1 共 3 枚 + 数字
+    const spent = track?.querySelector(`[data-testid="turn-spent-${cur}"]`);
+    expect(spent).not.toBeNull();
+    const coinImgs = [...(spent?.querySelectorAll('image') ?? [])].map((img) =>
+      img.getAttribute('href'),
+    );
+    expect(coinImgs).toEqual(['/assets/coins/5.png', '/assets/coins/1.png', '/assets/coins/1.png']);
+    expect(spent?.textContent).toContain('£7');
+    // 未花费的玩家无椭圆块
+    expect(container.querySelector(`[data-testid="turn-spent-${state.turnOrder[2]!}"]`)).toBeNull();
+  });
+
   it('渲染 5 个商人位与每个城市的产业槽位热区', () => {
     const { container } = render(<BoardSvg state={freshState()} />);
     expect(container.querySelectorAll('g.board-merchant-group')).toHaveLength(5);

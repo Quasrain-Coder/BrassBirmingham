@@ -1469,6 +1469,31 @@ body {
   filter: drop-shadow(10px 14px 10px rgba(0, 0, 0, 0.55));
 }
 
+/* 顺位轨:当前玩家金圈辉光、AI 思考呼吸(SVG 内,滤镜像素域) */
+.board-turn-track .current circle {
+  filter: drop-shadow(0 0 14px rgba(240, 201, 100, 0.85));
+}
+
+.board-turn-track .thinking image {
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+/* 行动播报:行动方面板描边脉冲(玩家色,约 5s 随聚光灯结束) */
+.player-board.pulse {
+  animation: panel-pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes panel-pulse {
+  from {
+    box-shadow: 0 0 0 2px var(--pulse-color, #f0c964);
+  }
+  to {
+    box-shadow:
+      0 0 22px 4px var(--pulse-color, #f0c964),
+      0 0 0 3px var(--pulse-color, #f0c964);
+  }
+}
+
 .board-ind {
   display: flex;
   align-items: baseline;

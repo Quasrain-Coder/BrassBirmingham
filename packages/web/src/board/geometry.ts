@@ -245,6 +245,24 @@ export const CITY_LABEL: Record<LocationId, Point> = Object.fromEntries(
   }),
 ) as Record<LocationId, Point>;
 
+/**
+ * 顺位轨（6144 坐标系）：版图左侧 1-4 号顺位桶位。
+ * 玩家头像嵌入**左侧大桶**（TURN_BARRELS,turnOrder[i] → 第 i 名）;
+ * 本轮花费的钱币堆(1/5/15 面额)+ £n 数字放在**右侧数字桶上的椭圆块**(TURN_MONEY)。
+ */
+export const TURN_BARRELS: Point[] = [
+  { x: 1490, y: 3780 },
+  { x: 1495, y: 4110 },
+  { x: 1490, y: 4425 },
+  { x: 1495, y: 4700 },
+];
+export const TURN_MONEY: Point[] = [
+  { x: 1770, y: 3785 },
+  { x: 1775, y: 4115 },
+  { x: 1775, y: 4430 },
+  { x: 1772, y: 4705 },
+];
+
 /** 商人位：板块格（按引擎 `merchants[id].tiles` 顺序）与啤酒桶格。 */
 export const MERCHANT_GEOM: Record<MerchantId, { tiles: Point[]; beer: Point[] }> = {
   warrington: {

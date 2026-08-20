@@ -15,7 +15,7 @@ import { PLAYER_COLORS } from '../board/BoardSvg';
 import type { ActionSpotlight } from '../board/BoardSvg';
 import { ActionBar, useActionDraft } from './ActionBar';
 import { AIIndicator } from './AIIndicator';
-import { HandBar, LogPanel, PlayerBoard, TurnOrderBar, playerName } from './Panels';
+import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
 import { describeAction } from './display';
 import { SPOTLIGHT_DURATION_MS, spotlightOf } from './spotlight';
 import type { GameStore, GameStoreState, LogEntry } from './store';
@@ -101,7 +101,7 @@ function GameBoard({
       ) : null}
       <div className="player-boards">
         {seatsBefore.map((i) => (
-          <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} />
+          <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} />
         ))}
       </div>
       <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
@@ -110,6 +110,7 @@ function GameBoard({
           state={state}
           highlights={myTurn ? draft.highlights : undefined}
           spotlight={spotlight}
+          thinkingSeats={thinkingSeats}
           onSlotClick={myTurn ? draft.clickSlot : undefined}
           onLinkClick={myTurn ? draft.clickLink : undefined}
         />
@@ -122,11 +123,9 @@ function GameBoard({
             {playerName(room ?? undefined, spotlight.player)}：{spotlight.text}
           </div>
         ) : null}
-        {/* 行动顺位叠在版图左下角（1-4 名原始轮次 + 本轮花费） */}
-        <TurnOrderBar state={state} room={room ?? undefined} thinkingSeats={thinkingSeats} overlay />
       </div>
       {/* 自己的单元:面板(默认展开,锚定在手牌/行动条旁,不随布局移动) */}
-      <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen />
+      <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} />
       <HandBar
         state={state}
         seat={seat}
@@ -151,7 +150,7 @@ function GameBoard({
       {seatsAfter.length > 0 ? (
         <div className="player-boards player-boards-after">
           {seatsAfter.map((i) => (
-            <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} />
+            <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} />
           ))}
         </div>
       ) : null}

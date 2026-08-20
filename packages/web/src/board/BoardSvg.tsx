@@ -32,6 +32,8 @@ import {
   SLOT_CENTERS,
   SLOT_RECTS,
   SLOT_SIZE,
+  TURN_BARRELS,
+  TURN_MONEY,
   VP_TRACK,
   locationAnchor,
   merchantAnchor,
@@ -74,6 +76,8 @@ export interface BoardSvgProps {
   state: FilteredState;
   highlights?: BoardHighlights | undefined;
   spotlight?: ActionSpotlight | null | undefined;
+  /** AI 思考中的座位（顺位轨头像呼吸灯）。 */
+  thinkingSeats?: readonly PlayerIndex[] | undefined;
   onSlotClick?: ((location: LocationId, slotIndex: number) => void) | undefined;
   onLinkClick?: ((linkIndex: number) => void) | undefined;
 }
@@ -177,7 +181,7 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
   );
 }
 
-export function BoardSvg({ state, highlights, spotlight, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
+export function BoardSvg({ state, highlights, spotlight, thinkingSeats, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const builtByLink = new Map<number, { player: PlayerIndex; era: 'canal' | 'rail' }>();
@@ -496,6 +500,67 @@ export function BoardSvg({ state, highlights, spotlight, onSlotClick, onLinkClic
 
       {/* 连线 token 顶层渲染（不被板块图遮挡） */}
       <g className="board-link-tokens">{linkTokens}</g>
+
+      {/* 顺位轨:头像嵌左侧大桶,右侧数字桶上椭圆块放本轮花费(1/5/15 钱币堆) */}
+      <g className="board-turn-track" pointerEvents="none">
+        <defs>
+          {state.turnOrder.map((_seat, rank) => (
+            <clipPath key={`turn-clip-${rank}`} id={`turn-clip-${rank}`}>
+              <circle cx={TURN_BARRELS[rank]!.x} cy={TURN_BARRELS[rank]!.y} r={105} />
+            </clipPath>
+          ))}
+        </defs>
+        {state.turnOrder.map((seat, rank) => {
+          const b = TURN_BARRELS[rank]!;
+          const m = TURN_MONEY[rank]!;
+          const spent = state.players[seat]!.spentThisRound;
+          const isCurrent = state.turnOrder[state.currentPlayerIdx] === seat;
+          const thinking = thinkingSeats?.includes(seat) ?? false;
+          const colorKey = PLAYER_COLOR_KEYS[seat] ?? 'purple';
+          // 钱币按 15/5/1 面额分解堆叠(最多 5 枚)
+          const coins: number[] = [];
+          for (let rest = spent; rest > 0 && coins.length < 5; ) {
+            const d = rest >= 15 ? 15 : rest >= 5 ? 5 : 1;
+            coins.push(d);
+            rest -= d;
+          }
+          return (
+            <g
+              key={`turn-${seat}`}
+              data-turn-seat={seat}
+              className={isCurrent ? 'current' : thinking ? 'thinking' : undefined}
+            >
+              <image
+                href={`/assets/players/${colorKey}.png`}
+                x={b.x - 105}
+                y={b.y - 105}
+                width={210}
+                height={210}
+                clipPath={`url(#turn-clip-${rank})`}
+              />
+              <circle
+                cx={b.x}
+                cy={b.y}
+                r={105}
+                fill="none"
+                stroke={isCurrent ? '#f0c964' : playerColor(seat)}
+                strokeWidth={isCurrent ? 14 : 8}
+              />
+              {spent > 0 ? (
+                <g className="turn-money-oval" data-testid={`turn-spent-${seat}`}>
+                  <ellipse cx={m.x} cy={m.y} rx={108} ry={56} fill="#14100a" opacity={0.88} stroke="#8a6d3b" strokeWidth={3} />
+                  {coins.map((d, i) => (
+                    <image key={i} href={`/assets/coins/${d}.png`} x={m.x - 86 + i * 30} y={m.y - 18} width={36} height={36} />
+                  ))}
+                  <text x={m.x + 64} y={m.y + 13} textAnchor="middle" fontSize={34} fill="#f0d89a" fontWeight={700}>
+                    £{spent}
+                  </text>
+                </g>
+              ) : null}
+            </g>
+          );
+        })}
+      </g>
 
       {/* 行动聚光灯：刚执行的行动目标高亮（玩家色脉冲，GameScreen 约 5 秒后清除） */}
       {spotlight ? (

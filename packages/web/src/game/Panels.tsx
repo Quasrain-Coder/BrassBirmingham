@@ -8,7 +8,7 @@
  * 煤/铁市场与收入轨已搬上官方版图（BoardSvg），不再有独立侧边栏组件。
  */
 import { useState } from 'react';
-import type { ReactElement } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import { INCOME_LEVEL_SPACES, TILES, incomeLevelAt } from '@brass/engine';
 import type { Action, Card, IndustryType, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
@@ -222,12 +222,15 @@ export function PlayerBoard({
   seat,
   room,
   defaultOpen = false,
+  pulse = false,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
   room?: RoomState | undefined;
   /** 初始展开（本人面板传 true，他人折叠）。 */
   defaultOpen?: boolean;
+  /** 行动播报：该座位刚执行行动,面板描边脉冲(聚光灯窗口内,约 5s)。 */
+  pulse?: boolean;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen);
   // 堆叠视图:版图(官方玩家面板美术)/明细(#19 列表)——记住玩家选择
@@ -269,7 +272,11 @@ export function PlayerBoard({
   }
 
   return (
-    <section className="player-board" data-testid={`player-board-${seat}`}>
+    <section
+      className={`player-board${pulse ? ' pulse' : ''}`}
+      data-testid={`player-board-${seat}`}
+      style={pulse ? ({ '--pulse-color': PLAYER_COLORS[seat] ?? '#f0c964' } as CSSProperties) : undefined}
+    >
       <button
         type="button"
         className="player-board-head"
