@@ -81,15 +81,23 @@ export function applyScout(
     else toDiscard.push(c);
   }
 
-  // 拿两张 Wild（id 按流通量编号：第 m 张 = 计数 - 供应余量，确定性唯一）
-  const wildLocation: Card = {
-    id: `wild-location-${WILD_LOCATION_COUNT - wildSupply.location}`,
-    kind: 'wild-location',
+  // 拿两张 Wild。id 取"未在任何玩家手牌中流通"的最小编号（确定性唯一）：
+  // 不能用 COUNT - 供应余量——Wild 弃置归还供应堆后可被再次取出，公式会与
+  // 仍在其他玩家手中的同种 Wild 撞号。
+  const inHands = new Set(
+    state.players.flatMap((p) => p.hand.filter(isWild).map((c) => c.id)),
+  );
+  const takeWildId = (kind: 'wild-location' | 'wild-industry'): string => {
+    const count = kind === 'wild-location' ? WILD_LOCATION_COUNT : WILD_INDUSTRY_COUNT;
+    for (let i = 0; i < count; i++) {
+      const id = `${kind}-${i}`;
+      if (!inHands.has(id)) return id;
+    }
+    // 供应余量 > 0（枚举已校验）⇒ 必有空闲 id，正常不可达
+    throw new IllegalActionError('illegal-scout', `illegal-scout: no free ${kind} id`);
   };
-  const wildIndustry: Card = {
-    id: `wild-industry-${WILD_INDUSTRY_COUNT - wildSupply.industry}`,
-    kind: 'wild-industry',
-  };
+  const wildLocation: Card = { id: takeWildId('wild-location'), kind: 'wild-location' };
+  const wildIndustry: Card = { id: takeWildId('wild-industry'), kind: 'wild-industry' };
   wildSupply = { location: wildSupply.location - 1, industry: wildSupply.industry - 1 };
 
   const players = state.players.slice();
