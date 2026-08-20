@@ -70,6 +70,24 @@ describe('prescreen', () => {
     const s = newGame(4, 42);
     expect(prescreen(s, 0, enumerateActions(s, 0), 0)).toEqual([]);
   });
+
+  it('类型配额：每种行动类型至少保留该类最高分 1 个', () => {
+    const s = newGame(4, 42);
+    const legal = enumerateActions(s, 0);
+    const kindsInLegal = new Set(legal.map((a) => a.type));
+    const picked = prescreen(s, 0, legal, Math.max(kindsInLegal.size, 8));
+    const kindsInPicked = new Set(picked.map((a) => a.type));
+    // legal 中出现的类型全部在候选里各保留至少 1 个
+    expect(kindsInPicked).toEqual(kindsInLegal);
+    // 且保留的是该类最高分
+    for (const kind of kindsInLegal) {
+      const best = Math.max(
+        ...legal.filter((a) => a.type === kind).map((a) => scoreAction(s, 0, a)),
+      );
+      const pickedOfKind = picked.filter((a) => a.type === kind);
+      expect(pickedOfKind.some((a) => scoreAction(s, 0, a) === best)).toBe(true);
+    }
+  });
 });
 
 describe('scoreAction components', () => {

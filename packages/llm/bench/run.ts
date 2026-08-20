@@ -26,6 +26,7 @@ import { HeuristicAgent } from '../src/heuristic.js';
 import { LLMAgent, type Difficulty } from '../src/llm-agent.js';
 import { driveGame } from './drive-game.js';
 import { TraceWriter, gameRecord, type GameRecord } from './trace.js';
+import { parseLlmSpec } from './variants.js';
 
 interface CliOptions {
   agentSpecs: string[];
@@ -98,9 +99,11 @@ function parseArgs(argv: string[]): CliOptions {
   }
   for (const spec of opts.agentSpecs) {
     if (spec === 'heuristic') continue;
-    const m = /^llm:(.+)$/.exec(spec);
-    if (!m || !DIFFICULTIES.has(m[1]!)) {
-      throw new Error(`未知 agent: ${spec}（支持 heuristic / llm:easy|normal|hard）`);
+    const parsed = parseLlmSpec(spec);
+    if (!parsed || !DIFFICULTIES.has(parsed.difficulty)) {
+      throw new Error(
+        `未知 agent: ${spec}（支持 heuristic / llm:easy|normal|hard[@变体]）`,
+      );
     }
   }
   return opts;
@@ -115,8 +118,18 @@ function makeAgents(specs: string[]): { agents: DecidingAgent[]; labels: string[
   const client = needsLLM ? new AnthropicClient() : null;
   const agents = specs.map((spec): DecidingAgent => {
     if (spec === 'heuristic') return new HeuristicAgent();
-    const difficulty = spec.slice('llm:'.length) as Difficulty;
-    return new LLMAgent(client!, difficulty);
+    const parsed = parseLlmSpec(spec);
+    if (!parsed || !DIFFICULTIES.has(parsed.difficulty)) {
+      throw new Error(
+        `未知 agent: ${spec}（支持 heuristic / llm:easy|normal|hard[@变体]）`,
+      );
+    }
+    return new LLMAgent(
+      client!,
+      parsed.difficulty as Difficulty,
+      undefined,
+      parsed.systemExtra !== undefined ? { systemExtra: parsed.systemExtra } : undefined,
+    );
   });
   return { agents, labels: [...specs] };
 }

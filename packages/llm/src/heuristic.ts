@@ -229,6 +229,12 @@ export function scoreAction(
 /**
  * LLM 候选集预筛：按 scoreAction 降序取 Top k（并列保持原数组序，确定性）。
  * k 超出 legal 长度时返回全部（仍按分排序）。
+ *
+ * **类型配额**：先为每种行动类型（build/network/sell/develop/loan/scout/pass）
+ * 各保留该类最高分 1 个，剩余名额再按分数填满。动机：base-llm20 实测 87%
+ * 决策 legal 数 > topK，纯分数截断时 build/network 挤满候选，sell/develop
+ * 等低频高价值行动根本到不了 LLM 眼前（sell 实测只占 2%）。k 小于类型数
+ * 时只保留分数最高的前 k 类。输出恒按分数降序（LLM 看到的编号序）。
  */
 export function prescreen(
   state: GameState,
@@ -236,11 +242,22 @@ export function prescreen(
   legal: Action[],
   k: number,
 ): Action[] {
-  return legal
+  const scored = legal
     .map((action, index) => ({ action, index, score: scoreAction(state, player, action) }))
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, Math.max(0, k))
-    .map((x) => x.action);
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+  const picked = new Set<(typeof scored)[number]>();
+  const seenKinds = new Set<string>();
+  for (const x of scored) {
+    if (!seenKinds.has(x.action.type)) {
+      seenKinds.add(x.action.type);
+      picked.add(x);
+    }
+  }
+  for (const x of scored) {
+    if (picked.size >= k) break;
+    picked.add(x);
+  }
+  return scored.filter((x) => picked.has(x)).slice(0, k).map((x) => x.action);
 }
 
 const HEURISTIC_REASON =

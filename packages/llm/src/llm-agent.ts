@@ -103,15 +103,18 @@ export class LLMAgent implements DecidingAgent {
   private readonly client: ClaudeClient;
   private readonly difficulty: Difficulty;
   private readonly fallback: DecidingAgent;
+  private readonly systemExtra: string | undefined;
 
   constructor(
     client: ClaudeClient,
     difficulty: Difficulty = 'normal',
     fallback: DecidingAgent = new HeuristicAgent(),
+    opts?: { systemExtra?: string },
   ) {
     this.client = client;
     this.difficulty = difficulty;
     this.fallback = fallback;
+    this.systemExtra = opts?.systemExtra;
   }
 
   async decide(
@@ -129,11 +132,15 @@ export class LLMAgent implements DecidingAgent {
       description: describeAction(state, player, action),
     }));
     const { system, user } = buildDecisionPrompt(state, player, described);
+    // systemExtra（bench 策略变体注入缝）拼在静态 system 尾部——前缀不变，
+    // 缓存友好；生产不注入（undefined 时逐字节同 buildDecisionPrompt 输出）。
+    const fullSystem =
+      this.systemExtra !== undefined ? `${system}\n${this.systemExtra}` : system;
     const fullUser =
       this.difficulty === 'hard' ? user + lookaheadSection(state) : user;
 
     const baseReq = {
-      system,
+      system: fullSystem,
       candidates: candidates.length,
       model: cfg.model,
       maxTokens: cfg.maxTokens,
