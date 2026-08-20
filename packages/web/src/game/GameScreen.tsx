@@ -56,6 +56,11 @@ function GameBoard({
 }: GameBoardProps): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx] ?? seat;
   const myTurn = current === seat && gameOver === null;
+  // 宽屏四个侧列面板按**初始顺位**固定位置(不随每轮顺位重排而换位);
+  // 信息行里的顺位徽标仍按当前轮顺位显示。
+  const fixedSeatsRef = useRef<PlayerIndex[] | null>(null);
+  if (fixedSeatsRef.current === null) fixedSeatsRef.current = [...state.turnOrder];
+  const fixedSeats = fixedSeatsRef.current;
   // 面板按本轮顺位排布:顺位在自己之前的排在版图上区,自己锚定在手牌/行动条旁
   // (默认展开),之后的排在自己单元之后——每轮顺位变化时两侧名单随之重排。
   const myPos = state.turnOrder.indexOf(seat);
@@ -217,9 +222,9 @@ function GameBoard({
       {layoutWide ? (
         <div className="wide-grid">
           <aside className="wide-col wide-col-left">
-            {state.turnOrder.slice(0, Math.ceil(state.playerCount / 2)).map((i) => (
+            {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} compact />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={current === i} compact />
                 <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} />
               </div>
             ))}
@@ -231,9 +236,9 @@ function GameBoard({
             {actionEl}
           </div>
           <aside className="wide-col wide-col-right">
-            {state.turnOrder.slice(Math.ceil(state.playerCount / 2)).map((i) => (
+            {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} compact />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={current === i} compact />
                 <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} />
               </div>
             ))}

@@ -1759,6 +1759,19 @@ body {
   animation: panel-pulse 0.9s ease-in-out infinite alternate;
 }
 
+/* 当前回合玩家面板:稳态持续发光(思考/行动全程,区别于脉冲) */
+.player-board.active-turn {
+  box-shadow:
+    0 0 0 2px var(--pulse-color, #f0c964),
+    0 0 16px 2px var(--pulse-color, #f0c964);
+}
+
+/* 本回合信息行:当前回合玩家高亮 */
+.round-info.active {
+  border-color: var(--pulse-color, #f0c964);
+  box-shadow: 0 0 10px 0 var(--pulse-color, #f0c964);
+}
+
 @keyframes panel-pulse {
   from {
     box-shadow: 0 0 0 2px var(--pulse-color, #f0c964);

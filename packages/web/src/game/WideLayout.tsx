@@ -3,7 +3,7 @@
  * 面板图/明细双模式与经典布局一致),每个面板下方一行本回合关键信息
  * (顺位、回合前金钱-开销-回合后金钱、本回合两动)。地图底下是我方手牌与行动。
  */
-import type { ReactElement } from 'react';
+import type { ReactElement, CSSProperties } from 'react';
 import type { PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { PLAYER_COLORS } from '../board/BoardSvg';
@@ -41,8 +41,13 @@ export function RoundInfo({
   const start = roundStartSeq(state, seq);
   const acts = log.filter((e) => e.seq >= start && e.player === seat);
   const before = p.money + p.spentThisRound;
+  const active = state.turnOrder[state.currentPlayerIdx] === seat;
   return (
-    <div className="round-info" data-testid={`round-info-${seat}`}>
+    <div
+      className={`round-info${active ? ' active' : ''}`}
+      data-testid={`round-info-${seat}`}
+      style={active ? ({ '--pulse-color': PLAYER_COLORS[seat] } as CSSProperties) : undefined}
+    >
       <span className="round-info-rank" style={{ borderColor: PLAYER_COLORS[seat] }}>
         {rank === -1 ? '—' : `#${rank}`}
       </span>

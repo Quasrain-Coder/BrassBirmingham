@@ -224,6 +224,7 @@ export function PlayerBoard({
   defaultOpen = false,
   pulse = false,
   compact = false,
+  activeTurn = false,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -234,6 +235,8 @@ export function PlayerBoard({
   pulse?: boolean;
   /** 宽屏紧凑模式:单行头部(不换行),省略 meta 与已建板块区,默认铺开。 */
   compact?: boolean;
+  /** 当前回合进行中(思考/行动全程):面板持续发光(稳态,区别于脉冲)。 */
+  activeTurn?: boolean;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
   // 堆叠视图:版图(官方玩家面板美术)/明细(#19 列表)——记住玩家选择
@@ -262,9 +265,9 @@ export function PlayerBoard({
   if (compact) {
     return (
       <section
-        className={`player-board compact${pulse ? ' pulse' : ''}`}
+        className={`player-board compact${pulse ? ' pulse' : ''}${activeTurn ? ' active-turn' : ''}`}
         data-testid={`player-board-${seat}`}
-        style={pulse ? ({ '--pulse-color': PLAYER_COLORS[seat] ?? '#f0c964' } as CSSProperties) : undefined}
+        style={pulse || activeTurn ? ({ '--pulse-color': PLAYER_COLORS[seat] ?? '#f0c964' } as CSSProperties) : undefined}
       >
         <div className="compact-head">
           <ColorDot seat={seat} />
@@ -361,9 +364,9 @@ export function PlayerBoard({
 
   return (
     <section
-      className={`player-board${pulse ? ' pulse' : ''}`}
+      className={`player-board${pulse ? ' pulse' : ''}${activeTurn ? ' active-turn' : ''}`}
       data-testid={`player-board-${seat}`}
-      style={pulse ? ({ '--pulse-color': PLAYER_COLORS[seat] ?? '#f0c964' } as CSSProperties) : undefined}
+      style={pulse || activeTurn ? ({ '--pulse-color': PLAYER_COLORS[seat] ?? '#f0c964' } as CSSProperties) : undefined}
     >
       <button
         type="button"
