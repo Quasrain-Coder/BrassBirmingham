@@ -92,6 +92,13 @@ describe('<PlayerBoard>', () => {
     const cotton2 = container.querySelector('[data-mat-slot="cotton-2"]');
     expect(cotton2?.querySelector('.mat-slot-top')).not.toBeNull();
     expect(cotton2?.textContent).toContain('×2');
+    // 实物堆叠:栈顶按剩余数叠放玩家色板块 token(棉 II 剩 2 → 2 张图)
+    const pile = cotton2?.querySelectorAll('.mat-pile image');
+    expect(pile).toHaveLength(2);
+    expect(pile?.[0]?.getAttribute('href')).toBe('/assets/tiles/cotton-2-purple.png');
+    // 初始局面的制造厂 I(剩 1)→ 单块堆叠
+    const m1 = container.querySelector('[data-mat-slot="manufacturer-1"]');
+    expect(m1?.querySelectorAll('.mat-pile image')).toHaveLength(1);
     // 初始局面:每产业栈顶都是 Lv1(制造厂 8 框 + 其余 5 产业 = 6 个描边)
     expect(container.querySelectorAll('.mat-slot-top')).toHaveLength(6);
     // 切换明细后列表出现、版图消失

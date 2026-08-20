@@ -302,7 +302,11 @@ export function PlayerBoard({
               </span>
             </div>
             {matView ? (
-              <PlayerMat tiles={self.tiles} playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'} />
+              <PlayerMat
+                tiles={self.tiles}
+                playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
+                colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
+              />
             ) : (
             INDUSTRY_ORDER.map((ind) => (
               <div key={ind} className="board-ind">
