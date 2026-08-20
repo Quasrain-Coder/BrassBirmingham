@@ -226,9 +226,9 @@ function GameBoard({
           </aside>
           <div className="wide-center">
             <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
-            {actionEl}
             {boardEl}
             {handEl}
+            {actionEl}
           </div>
           <aside className="wide-col wide-col-right">
             {state.turnOrder.slice(Math.ceil(state.playerCount / 2)).map((i) => (
