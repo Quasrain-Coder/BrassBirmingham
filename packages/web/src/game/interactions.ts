@@ -217,6 +217,17 @@ export function developOptions(candidates: readonly Action[]): IndustryType[] {
   return INDUSTRY_ORDER.filter((ind) => seen.has(ind));
 }
 
+/** 同产业双研发可选的产业：存在 [x, x] 候选（engine develop.ts doubleSameIndustryOk）。 */
+export function developDoubles(candidates: readonly Action[]): Set<IndustryType> {
+  const out = new Set<IndustryType>();
+  for (const a of candidates) {
+    if (a.type !== 'develop') continue;
+    const [r0, r1] = a.removals;
+    if (a.removals.length === 2 && r0 !== undefined && r0 === r1) out.add(r0);
+  }
+  return out;
+}
+
 /** removals 规范化排序（INDUSTRY_ORDER 升序；同产业双块保持相邻）。 */
 export function normalizeRemovals(picks: readonly IndustryType[]): IndustryType[] {
   return [...picks].sort((x, y) => industryRank(x) - industryRank(y));
