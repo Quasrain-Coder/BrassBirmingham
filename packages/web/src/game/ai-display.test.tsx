@@ -132,7 +132,7 @@ describe('<Lobby> AI 座位配置', () => {
       type: 'create_room',
       protocolVersion: PROTOCOL_VERSION,
       nickname: '甲',
-      config: { playerCount: 3, aiSeats: { count: 1, difficulty: 'hard' } },
+      config: { playerCount: 3, seed: expect.any(Number), aiSeats: { count: 1, difficulty: 'hard' } },
     });
   });
 
@@ -143,7 +143,7 @@ describe('<Lobby> AI 座位配置', () => {
       type: 'create_room',
       protocolVersion: PROTOCOL_VERSION,
       nickname: '甲',
-      config: { playerCount: 4 },
+      config: { playerCount: 4, seed: expect.any(Number) },
     });
   });
 });
