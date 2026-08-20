@@ -16,8 +16,8 @@ it('viewer sees own hand, others only counts', () => {
 it('deck/discard are counts; rngState stripped; JSON-serializable', () => {
   const s = newGame(4, 42);
   const f = JSON.parse(JSON.stringify(filterStateFor(s, 0)));
-  expect(f.deck.count).toBe(31);
-  expect(f.discard.count).toBe(1);
+  expect(f.deck.count).toBe(28); // 64 − 4×8 手牌 − 4 张逐玩家弃牌堆底
+  expect(f.discard.count).toBe(4);
   expect(f.rngState).toBeUndefined();
 });
 it('filtering does not mutate original state', () => {
