@@ -604,9 +604,21 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
                 cy={b.y}
                 r={105}
                 fill="none"
-                stroke={isCurrent ? '#f5f2e8' : playerColor(seat)}
-                strokeWidth={isCurrent ? 14 : 8}
+                stroke={playerColor(seat)}
+                strokeWidth={8}
               />
+              {/* 当前玩家:白色光环画在最外圈,不遮玩家色内圈 */}
+              {isCurrent ? (
+                <circle
+                  className="current-ring"
+                  cx={b.x}
+                  cy={b.y}
+                  r={121}
+                  fill="none"
+                  stroke="#f5f2e8"
+                  strokeWidth={11}
+                />
+              ) : null}
               {spent > 0 ? (
                 <g className="turn-money-oval" data-testid={`turn-spent-${seat}`}>
                   <ellipse cx={m.x} cy={m.y} rx={108} ry={56} fill="#14100a" opacity={0.88} stroke="#8a6d3b" strokeWidth={3} />
