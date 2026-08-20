@@ -21,6 +21,7 @@ import {
   buildCandidatesAt,
   buildSlotTargets,
   describeAction,
+  developDoubles,
   developOptions,
   extendableLinks,
   matchDevelop,
@@ -163,12 +164,21 @@ export function useActionDraft({
     }
   };
 
+  /**
+   * develop 点选：0→1→2→0 循环（第 2 次点同产业 = 双研发同产业两块，
+   * 仅当 legalActions 含 [x,x] 候选时开放；否则 0→1→0 即原 toggle 语义）。
+   */
   const toggleDevelop = (ind: IndustryType): void => {
     setDevelopPicks((prev) => {
-      const i = prev.indexOf(ind);
-      if (i >= 0) return [...prev.slice(0, i), ...prev.slice(i + 1)];
-      if (prev.length >= 2) return prev; // develop 至多 2 块
-      return [...prev, ind];
+      const count = prev.filter((x) => x === ind).length;
+      if (count === 0) return prev.length >= 2 ? prev : [...prev, ind];
+      if (count === 1) {
+        if (developDoubles(candidates).has(ind) && prev.length < 2) return [...prev, ind];
+        const i = prev.indexOf(ind);
+        return [...prev.slice(0, i), ...prev.slice(i + 1)];
+      }
+      // count === 2 → 全取消该产业
+      return prev.filter((x) => x !== ind);
     });
   };
 
@@ -278,18 +288,22 @@ export function ActionBar({
 
           {draft.developChoices.length > 0 ? (
             <div className="action-choices" data-testid="develop-options">
-              <span>研发（1-2 块）：</span>
-              {draft.developChoices.map((ind) => (
-                <button
-                  key={ind}
-                  type="button"
-                  data-testid={`develop-opt-${ind}`}
-                  className={draft.developPicks.includes(ind) ? 'selected' : undefined}
-                  onClick={() => draft.toggleDevelop(ind)}
-                >
-                  {industryName(ind)}
-                </button>
-              ))}
+              <span>研发（1-2 块；同产业再点一次 = 研发两块）：</span>
+              {draft.developChoices.map((ind) => {
+                const count = draft.developPicks.filter((x) => x === ind).length;
+                return (
+                  <button
+                    key={ind}
+                    type="button"
+                    data-testid={`develop-opt-${ind}`}
+                    className={count > 0 ? 'selected' : undefined}
+                    onClick={() => draft.toggleDevelop(ind)}
+                  >
+                    {industryName(ind)}
+                    {count > 0 ? ` ×${count}` : ''}
+                  </button>
+                );
+              })}
             </div>
           ) : null}
 

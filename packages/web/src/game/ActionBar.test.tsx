@@ -134,6 +134,33 @@ describe('useActionDraft', () => {
     expect(result.current.resolved).toBe(legal[0]);
   });
 
+  it('develop 同产业双研发：再点一次累积 ×2，命中 [x,x] 原对象；第三次点清空该产业', () => {
+    const f = freshFixture();
+    const legal: Action[] = [
+      { type: 'develop', cardId: 'c1', removals: ['cotton'] },
+      { type: 'develop', cardId: 'c1', removals: ['cotton', 'cotton'] },
+    ];
+    const { result } = renderDraft(f, 'c1', legal);
+    act(() => result.current.toggleDevelop('cotton'));
+    expect(result.current.resolved).toBe(legal[0]);
+    act(() => result.current.toggleDevelop('cotton')); // ×2
+    expect(result.current.developPicks).toEqual(['cotton', 'cotton']);
+    expect(result.current.resolved).toBe(legal[1]);
+    act(() => result.current.toggleDevelop('cotton')); // 清空
+    expect(result.current.developPicks).toEqual([]);
+    expect(result.current.resolved).toBeNull();
+  });
+
+  it('develop 无 [x,x] 候选时同产业保持 toggle 语义（不可累积）', () => {
+    const f = freshFixture();
+    const legal: Action[] = [{ type: 'develop', cardId: 'c1', removals: ['iron'] }];
+    const { result } = renderDraft(f, 'c1', legal);
+    act(() => result.current.toggleDevelop('iron'));
+    act(() => result.current.toggleDevelop('iron')); // 无双研发候选 → 取消
+    expect(result.current.developPicks).toEqual([]);
+    expect(result.current.resolved).toBeNull();
+  });
+
   it('scout：任意顺序选 3 张命中枚举原对象', () => {
     const f = freshFixture();
     const card = f.hand[0]!;
