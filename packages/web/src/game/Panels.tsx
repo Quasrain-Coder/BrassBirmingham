@@ -7,14 +7,15 @@
  *
  * 煤/铁市场与收入轨已搬上官方版图（BoardSvg），不再有独立侧边栏组件。
  */
-import { useState } from 'react';
-import type { ReactElement } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import { INCOME_LEVEL_SPACES, TILES, incomeLevelAt } from '@brass/engine';
 import type { Action, Card, IndustryType, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
-import { INDUSTRY_STYLE, PLAYER_COLORS } from '../board/BoardSvg';
+import { INDUSTRY_STYLE, PLAYER_COLORS, PLAYER_COLOR_KEYS } from '../board/BoardSvg';
 import { cardFaceKey, cardName, describeAction, industryName, locationName } from './display';
 import { INDUSTRY_ORDER } from './interactions';
+import { PlayerMat } from './PlayerMat';
 import type { LogEntry } from './store';
 
 /** 座位显示名：有房间信息用昵称，否则 玩家{seat+1}。 */
@@ -57,10 +58,55 @@ export function TurnOrderBar({
   room?: RoomState | undefined;
   /** ai_thinking 中的座位（M3）：高亮并显示"思考中…"。 */
   thinkingSeats?: readonly PlayerIndex[] | undefined;
-  /** 叠加模式：竖排 1-4 名，绝对定位于版图左下角（.board-wrap 内）。 */
+  /** 叠加模式：官方式圆形头像横排 + 本轮花费钱币堆，绝对定位于版图左下角。 */
   overlay?: boolean;
 }): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx];
+  if (overlay) {
+    // 官方式顺位轨:圆形角色头像按顺位横排,本轮花费的钱堆在该玩家头像旁
+    // (钱币逐层叠放 + 数字),当前玩家金圈,AI 思考中呼吸灯。不遮版图。
+    return (
+      <section className="turn-order-bar overlay" aria-label="行动顺位">
+        <ol data-testid="turn-order" className="turn-track">
+          {state.turnOrder.map((seat) => {
+            const player = state.players[seat];
+            const thinking = thinkingSeats?.includes(seat) ?? false;
+            const spent = player?.spentThisRound ?? 0;
+            const colorKey = PLAYER_COLOR_KEYS[seat] ?? 'purple';
+            const classes = [seat === current ? 'current' : '', thinking ? 'thinking' : '']
+              .filter((c) => c !== '')
+              .join(' ');
+            return (
+              <li
+                key={seat}
+                data-player={seat}
+                className={classes === '' ? undefined : classes}
+                title={`${playerName(room, seat)}｜本轮已花 £${spent}`}
+              >
+                <img
+                  className="turn-avatar"
+                  src={`/assets/players/${colorKey}.png`}
+                  alt={playerName(room, seat)}
+                  style={{ borderColor: PLAYER_COLORS[seat] ?? '#7f8c8d' }}
+                />
+                {spent > 0 ? (
+                  <span className="turn-spent" data-testid={`turn-spent-${seat}`}>
+                    <span className="turn-coins" aria-hidden="true">
+                      {Array.from({ length: Math.min(spent, 4) }, (_, i) => (
+                        <img key={i} src="/assets/coins/1.png" alt="" />
+                      ))}
+                    </span>
+                    <span className="turn-spent-num">£{spent}</span>
+                  </span>
+                ) : null}
+                {thinking ? <span className="thinking-dot" aria-label="思考中" /> : null}
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+    );
+  }
   return (
     <section className={`turn-order-bar${overlay ? ' overlay' : ''}`}>
       <h3>行动顺位</h3>
@@ -176,14 +222,27 @@ export function PlayerBoard({
   seat,
   room,
   defaultOpen = false,
+  pulse = false,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
   room?: RoomState | undefined;
   /** 初始展开（本人面板传 true，他人折叠）。 */
   defaultOpen?: boolean;
+  /** 行动播报：该座位刚执行行动,面板描边脉冲(聚光灯窗口内,约 5s)。 */
+  pulse?: boolean;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen);
+  // 堆叠视图:版图(官方玩家面板美术)/明细(#19 列表)——记住玩家选择
+  // (jsdom 等环境无 localStorage,降级为会话内状态)
+  const storage = typeof localStorage === 'undefined' ? null : localStorage;
+  const [matView, setMatViewState] = useState<boolean>(
+    () => storage?.getItem('brass-stack-view') !== 'list',
+  );
+  const setMatView = (v: boolean): void => {
+    setMatViewState(v);
+    storage?.setItem('brass-stack-view', v ? 'mat' : 'list');
+  };
   const self = state.players[seat];
   if (self === undefined) return <></>;
   const level = incomeLevelAt(self.incomeSpace);
@@ -213,7 +272,11 @@ export function PlayerBoard({
   }
 
   return (
-    <section className="player-board" data-testid={`player-board-${seat}`}>
+    <section
+      className={`player-board${pulse ? ' pulse' : ''}`}
+      data-testid={`player-board-${seat}`}
+      style={pulse ? ({ '--pulse-color': PLAYER_COLORS[seat] ?? '#f0c964' } as CSSProperties) : undefined}
+    >
       <button
         type="button"
         className="player-board-head"
@@ -269,8 +332,35 @@ export function PlayerBoard({
             )}
           </div>
           <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
-            <h4>面板堆叠（未建）</h4>
-            {INDUSTRY_ORDER.map((ind) => (
+            <div className="board-stack-head">
+              <h4>面板堆叠（未建）</h4>
+              <span className="stack-view-toggle" role="group" aria-label="堆叠视图切换">
+                <button
+                  type="button"
+                  className={matView ? 'active' : ''}
+                  data-testid={`stack-view-mat-${seat}`}
+                  onClick={() => setMatView(true)}
+                >
+                  版图
+                </button>
+                <button
+                  type="button"
+                  className={matView ? '' : 'active'}
+                  data-testid={`stack-view-list-${seat}`}
+                  onClick={() => setMatView(false)}
+                >
+                  明细
+                </button>
+              </span>
+            </div>
+            {matView ? (
+              <PlayerMat
+                tiles={self.tiles}
+                playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
+                colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
+              />
+            ) : (
+            INDUSTRY_ORDER.map((ind) => (
               <div key={ind} className="board-ind">
                 <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
                   {industryName(ind)}
@@ -302,7 +392,8 @@ export function PlayerBoard({
                   })}
                 </span>
               </div>
-            ))}
+            ))
+            )}
           </div>
         </div>
       ) : null}
@@ -322,13 +413,25 @@ export function LogPanel({
   log: LogEntry[];
   room?: RoomState | undefined;
 }): ReactElement {
+  const listRef = useRef<HTMLOListElement>(null);
+  // 历史滚动框:用户滚轮上翻查看历史时保持位置;停在底部附近时新行动自动跟底
+  const stickToBottom = useRef(true);
+  useEffect(() => {
+    const el = listRef.current;
+    if (el !== null && stickToBottom.current) el.scrollTop = el.scrollHeight;
+  }, [log.length]);
+  const onScroll = (): void => {
+    const el = listRef.current;
+    if (el === null) return;
+    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  };
   return (
     <section className="log-panel">
       <h3>行动日志</h3>
       {log.length === 0 ? (
         <p data-testid="log-empty">暂无行动</p>
       ) : (
-        <ol>
+        <ol ref={listRef} className="log-scroll" onScroll={onScroll}>
           {log.map((entry) => (
             <li key={entry.seq} data-testid="log-entry">
               #{entry.seq} {playerName(room, entry.player)}：{actionSummary(entry.action)}

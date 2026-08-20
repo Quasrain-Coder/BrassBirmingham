@@ -30,7 +30,10 @@ import {
   MERCHANT_TILE_H,
   MERCHANT_TILE_W,
   SLOT_CENTERS,
+  SLOT_RECTS,
   SLOT_SIZE,
+  TURN_BARRELS,
+  TURN_MONEY,
   VP_TRACK,
   locationAnchor,
   merchantAnchor,
@@ -40,7 +43,7 @@ import { LOCATION_ZH } from '../game/display';
 /** 官方玩家色：P0 紫 / P1 黄 / P2 橙 / P3 青（与官方板块底色一致）。 */
 export const PLAYER_COLORS = ['#8e6bb0', '#d9a832', '#c05a30', '#4fa3a5'];
 /** 玩家色英文键（素材文件名用）。 */
-const PLAYER_COLOR_KEYS = ['purple', 'yellow', 'orange', 'teal'] as const;
+export const PLAYER_COLOR_KEYS = ['purple', 'yellow', 'orange', 'teal'] as const;
 
 /** 产业配色与中文标注（面板/行动描述共用）。 */
 export const INDUSTRY_STYLE: Record<IndustryType, { fill: string; label: string }> = {
@@ -60,11 +63,25 @@ export interface SlotRef {
 export interface BoardHighlights {
   slots?: SlotRef[];
   links?: number[];
+  /** 可建城市级高亮（选产业/城市卡时，所有可放置地点的外框）。 */
+  locations?: LocationId[];
+}
+
+/** 行动聚光灯：某玩家刚执行的行动在棋盘上的高亮目标（约 5 秒，GameScreen 驱动）。 */
+export interface ActionSpotlight {
+  player: PlayerIndex;
+  locations: LocationId[];
+  links: number[];
 }
 
 export interface BoardSvgProps {
   state: FilteredState;
   highlights?: BoardHighlights | undefined;
+  spotlight?: ActionSpotlight | null | undefined;
+  /** AI 思考中的座位（顺位轨头像呼吸灯）。 */
+  thinkingSeats?: readonly PlayerIndex[] | undefined;
+  /** 建造预览:非贴合预览 token 盖在目标槽位(确认前,切换城市即跟随)。 */
+  buildPreview?: { location: LocationId; slotIndex: number; industry: IndustryType; player: PlayerIndex } | null | undefined;
   onSlotClick?: ((location: LocationId, slotIndex: number) => void) | undefined;
   onLinkClick?: ((linkIndex: number) => void) | undefined;
 }
@@ -81,8 +98,12 @@ function tileImage(industry: IndustryType, level: number, player: PlayerIndex, f
   return `/assets/tiles/${industry}-${level}-${color}${flipped ? '-back' : ''}.png`;
 }
 
-/** 连线路径点：端点锚点 → 投影中点 → 端点锚点（沿印刷运河/铁路）。端点向中点回缩，避免压住槽位。 */
-function linkPath(a: { x: number; y: number }, b: { x: number; y: number }, mid: { x: number; y: number } | undefined): string {
+/** 连线渲染几何：回缩端点 ta/tb、路径点串、主方向角（deg，ta→tb）。 */
+function linkGeom(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  mid: { x: number; y: number } | undefined,
+): { m: { x: number; y: number }; pts: string; angle: number } {
   const m = mid ?? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   const trim = (p: { x: number; y: number }): { x: number; y: number } => {
     const dx = m.x - p.x;
@@ -93,7 +114,13 @@ function linkPath(a: { x: number; y: number }, b: { x: number; y: number }, mid:
   };
   const ta = trim(a);
   const tb = trim(b);
-  return `${ta.x},${ta.y} ${m.x},${m.y} ${tb.x},${tb.y}`;
+  const angle = (Math.atan2(tb.y - ta.y, tb.x - ta.x) * 180) / Math.PI;
+  return { m, pts: `${ta.x},${ta.y} ${m.x},${m.y} ${tb.x},${tb.y}`, angle };
+}
+
+/** 连线路径点：端点锚点 → 投影中点 → 端点锚点（沿印刷运河/铁路）。端点向中点回缩，避免压住槽位。 */
+function linkPath(a: { x: number; y: number }, b: { x: number; y: number }, mid: { x: number; y: number } | undefined): string {
+  return linkGeom(a, b, mid).pts;
 }
 
 /** 煤/铁方块（官方即纯色木方块，圆角+顶面高光）。 */
@@ -121,46 +148,47 @@ function ResourceTokens({ cx, cy, industry, count }: { cx: number; cy: number; i
       industry === 'brewery' ? (
         <image key={i} href="/assets/beer.png" x={x - 26} y={y - 26} width={52} height={52} />
       ) : (
-        <Cube key={i} x={x} y={y} size={44} fill={industry === 'coal' ? '#454c58' : '#c76b2a'} />
+        <Cube key={i} x={x} y={y} size={44} fill={industry === 'coal' ? '#1f2329' : '#c76b2a'} />
       ),
     );
   }
   return <g className="tile-resource-tokens">{tokens}</g>;
 }
 
-/** 连线 token 尺寸（中点的玩家色圆角牌 + 驳船/火车图标）。 */
-const LINK_TOKEN_W = 150;
-const LINK_TOKEN_H = 88;
+/** 连线 token 尺寸（中点的玩家色连接牌，沿线路方向旋转）。 */
+const LINK_TOKEN_W = 190;
+const LINK_TOKEN_H = 76;
 
-/** 已建连线：玩家色路径 + 中点 token（运河=驳船 / 铁路=火车，按建造时时代）。 */
-function BuiltLinkToken({ mid, player, era }: { mid: { x: number; y: number }; player: PlayerIndex; era: 'canal' | 'rail' }): ReactElement {
+/** 已建连线：中点放玩家连接牌（实物即玩家色船/车牌），运河=驳船 / 铁路=火车（按建造时时代）。 */
+function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: number }; angle: number; player: PlayerIndex; era: 'canal' | 'rail' }): ReactElement {
   return (
-    <g className="link-token" pointerEvents="none">
+    <g className="link-token" transform={`rotate(${Math.round(angle)} ${mid.x} ${mid.y})`} pointerEvents="none">
       <rect
         x={mid.x - LINK_TOKEN_W / 2}
         y={mid.y - LINK_TOKEN_H / 2}
         width={LINK_TOKEN_W}
         height={LINK_TOKEN_H}
-        rx={16}
+        rx={18}
         fill={playerColor(player)}
         stroke="#14100a"
         strokeWidth={6}
       />
       <image
         href={era === 'canal' ? '/assets/link-canal.png' : '/assets/link-rail.png'}
-        x={mid.x - 52}
-        y={mid.y - 33}
-        width={104}
-        height={66}
+        x={mid.x - 46}
+        y={mid.y - 26}
+        width={92}
+        height={52}
         preserveAspectRatio="xMidYMid meet"
       />
     </g>
   );
 }
 
-export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
+export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPreview, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
+  const highlightedLocations = new Set(highlights?.locations ?? []);
   const builtByLink = new Map<number, { player: PlayerIndex; era: 'canal' | 'rail' }>();
   for (const l of state.board.links) builtByLink.set(l.linkIndex, { player: l.player, era: l.era });
 
@@ -174,12 +202,11 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
   // 连线 token 收集后置于所有槽位/板块之上渲染（中点常与槽位重叠，不能被板块图盖住）
   const linkTokens: ReactElement[] = [];
   for (const l of state.board.links) {
-    const mid = LINK_MIDPOINTS[l.linkIndex];
-    if (mid !== undefined) {
-      linkTokens.push(
-        <BuiltLinkToken key={`link-token-${l.linkIndex}`} mid={mid} player={l.player} era={l.era} />,
-      );
-    }
+    const link = LINKS[l.linkIndex]!;
+    const g = linkGeom(anchorOf(link.a), anchorOf(link.b), LINK_MIDPOINTS[l.linkIndex]);
+    linkTokens.push(
+      <BuiltLinkToken key={`link-token-${l.linkIndex}`} mid={g.m} angle={g.angle} player={l.player} era={l.era} />,
+    );
   }
 
   return (
@@ -218,10 +245,10 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
                   points={pts}
                   fill="none"
                   stroke={playerColor(builtBy.player)}
-                  strokeWidth={34}
+                  strokeWidth={12}
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  opacity={0.85}
+                  opacity={0.6}
                   pointerEvents="none"
                 />
               ) : null}
@@ -232,10 +259,10 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
                     points={pts}
                     fill="none"
                     stroke="#f0c964"
-                    strokeWidth={40}
+                    strokeWidth={16}
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    opacity={0.75}
+                    opacity={0.85}
                     filter="url(#hl-glow)"
                     pointerEvents="none"
                   />
@@ -243,16 +270,16 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
                   {mid !== undefined ? (
                     <g className="link-hl-chip" pointerEvents="none">
                       <rect
-                        x={mid.x - 56}
-                        y={mid.y - 56}
-                        width={112}
-                        height={112}
-                        rx={20}
+                        x={mid.x - 44}
+                        y={mid.y - 44}
+                        width={88}
+                        height={88}
+                        rx={16}
                         fill="#f0c964"
                         opacity={0.9}
                         filter="url(#hl-glow)"
                       />
-                      <text x={mid.x} y={mid.y + 26} textAnchor="middle" fontSize={72} fill="#241b0b" fontWeight={700}>
+                      <text x={mid.x} y={mid.y + 20} textAnchor="middle" fontSize={56} fill="#241b0b" fontWeight={700}>
                         +
                       </text>
                     </g>
@@ -283,9 +310,9 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
                         points={`${m.x},${m.y} ${e.x},${e.y}`}
                         fill="none"
                         stroke={playerColor(builtBy.player)}
-                        strokeWidth={34}
+                        strokeWidth={12}
                         strokeLinecap="round"
-                        opacity={0.85}
+                        opacity={0.6}
                         pointerEvents="none"
                       />
                     ) : null}
@@ -313,30 +340,70 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
       <g className="board-locations">
         {Object.entries(LOCATIONS).map(([id]) => {
           const centers = SLOT_CENTERS[id as LocationId] ?? [];
+          const rects = SLOT_RECTS[id as LocationId] ?? [];
           const placed = state.board.slots[id as LocationId] ?? [];
           return (
             <g className="board-location" data-location={id} key={id}>
+              {/* 可建城市级高亮:选产业/城市卡时外框框出所有可放置地点 */}
+              {highlightedLocations.has(id as LocationId) && rects.length > 0
+                ? (() => {
+                    const pad = 26;
+                    const x = Math.min(...rects.map((r) => r.x)) - pad;
+                    const y = Math.min(...rects.map((r) => r.y)) - pad;
+                    const w = Math.max(...rects.map((r) => r.x + r.w)) - x + pad;
+                    const h = Math.max(...rects.map((r) => r.y + r.h)) - y + pad;
+                    return (
+                      <rect
+                        className="board-loc-hl"
+                        data-testid={`loc-hl-${id}`}
+                        x={x}
+                        y={y}
+                        width={w}
+                        height={h}
+                        rx={18}
+                        fill="none"
+                        stroke="#f0c964"
+                        strokeWidth={6}
+                        filter="url(#hl-glow)"
+                        pointerEvents="none"
+                      />
+                    );
+                  })()
+                : null}
               {centers.map((c, si) => {
                 const tile = placed[si] ?? null;
                 const hl = highlightedSlots.has(`${id}:${si}`);
+                // 印刷框精确矩形(几何标定);兜底退回中心方块
+                const r = rects[si] ?? { x: c.x - SLOT_SIZE / 2, y: c.y - SLOT_SIZE / 2, w: SLOT_SIZE, h: SLOT_SIZE };
+                const fresh =
+                  tile !== null &&
+                  spotlight != null &&
+                  tile.player === spotlight.player &&
+                  spotlight.locations.includes(id as LocationId);
                 return (
                   <g key={`${id}-slot-${si}`}>
                     {tile ? (
                       <g pointerEvents="none">
-                        <image
-                          className="board-tile"
-                          href={tileImage(tile.tile.industry, tile.tile.level, tile.player, tile.flipped)}
-                          x={c.x - SLOT_SIZE / 2}
-                          y={c.y - SLOT_SIZE / 2}
-                          width={SLOT_SIZE}
-                          height={SLOT_SIZE}
-                        />
+                        {/* 贴合印刷框;刚放上的(聚光灯窗口内)带一点倾斜+立体感,过后回正 */}
+                        <g
+                          className={fresh ? 'tile-fresh' : undefined}
+                          transform={fresh ? `rotate(3 ${r.x + r.w / 2} ${r.y + r.h / 2})` : undefined}
+                        >
+                          <image
+                            className="board-tile"
+                            href={tileImage(tile.tile.industry, tile.tile.level, tile.player, tile.flipped)}
+                            x={r.x}
+                            y={r.y}
+                            width={r.w}
+                            height={r.h}
+                          />
+                        </g>
                         {tile.resources > 0 && !tile.flipped ? (
                           <>
                             <ResourceTokens cx={c.x} cy={c.y} industry={tile.tile.industry} count={tile.resources} />
                             <g className="tile-resources">
-                              <rect x={c.x + SLOT_SIZE / 2 - 62} y={c.y - SLOT_SIZE / 2} width={62} height={62} rx={12} fill="#14100a" opacity={0.85} />
-                              <text x={c.x + SLOT_SIZE / 2 - 31} y={c.y - SLOT_SIZE / 2 + 44} textAnchor="middle" fontSize={40} fill="#f3e9c8">
+                              <rect x={r.x + r.w - 62} y={r.y + r.h - 62} width={62} height={62} rx={12} fill="#14100a" opacity={0.85} />
+                              <text x={r.x + r.w - 31} y={r.y + r.h - 18} textAnchor="middle" fontSize={40} fill="#f3e9c8">
                                 {tile.resources}
                               </text>
                             </g>
@@ -347,10 +414,10 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
                     {hl && !tile ? (
                       <rect
                         className="board-slot-hl"
-                        x={c.x - SLOT_SIZE / 2}
-                        y={c.y - SLOT_SIZE / 2}
-                        width={SLOT_SIZE}
-                        height={SLOT_SIZE}
+                        x={r.x}
+                        y={r.y}
+                        width={r.w}
+                        height={r.h}
                         rx={16}
                         fill="#f0c964"
                         opacity={0.4}
@@ -364,17 +431,17 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
                       className={`board-slot${hl ? ' highlighted' : ''}`}
                       data-location={id}
                       data-slot-index={si}
-                      x={c.x - SLOT_SIZE / 2}
-                      y={c.y - SLOT_SIZE / 2}
-                      width={SLOT_SIZE}
-                      height={SLOT_SIZE}
+                      x={r.x}
+                      y={r.y}
+                      width={r.w}
+                      height={r.h}
                       fill="transparent"
                       onClick={onSlotClick ? () => onSlotClick(id as LocationId, si) : undefined}
                     />
                   </g>
                 );
               })}
-              {/* 城市中文铭牌（盖住英文印刷名） */}
+              {/* 城市中文铭牌（默认在英文印刷横幅正下方，遮路城侧置——几何校订） */}
               {CITY_LABEL[id as LocationId] ? (
                 <g className="city-label" pointerEvents="none">
                   {(() => {
@@ -455,7 +522,7 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
       {/* 煤/铁市场：已填格叠方块 */}
       <g className="board-markets" pointerEvents="none">
         {COAL_MARKET_CELLS.map((p, i) =>
-          i >= coalFilledFrom ? <Cube key={`coal-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#454c58" /> : null,
+          i >= coalFilledFrom ? <Cube key={`coal-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#1f2329" /> : null,
         )}
         {IRON_MARKET_CELLS.map((p, i) =>
           i >= ironFilledFrom ? <Cube key={`iron-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#c76b2a" /> : null,
@@ -464,6 +531,163 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
 
       {/* 连线 token 顶层渲染（不被板块图遮挡） */}
       <g className="board-link-tokens">{linkTokens}</g>
+
+      {/* 建造预览:确认前把非贴合预览 token 盖在目标槽位(倾斜+半透明) */}
+      {buildPreview
+        ? (() => {
+            const r = SLOT_RECTS[buildPreview.location]?.[buildPreview.slotIndex];
+            const def = state.players[buildPreview.player]?.tiles.find(
+              (t) => t.industry === buildPreview.industry,
+            );
+            if (r === undefined || def === undefined) return null;
+            const cx = r.x + r.w / 2;
+            const cy = r.y + r.h / 2;
+            return (
+              <g
+                className="build-preview"
+                data-testid="build-preview"
+                pointerEvents="none"
+                transform={`rotate(4 ${cx} ${cy})`}
+                opacity={0.85}
+              >
+                <image
+                  href={tileImage(buildPreview.industry, def.level, buildPreview.player, false)}
+                  x={r.x}
+                  y={r.y}
+                  width={r.w}
+                  height={r.h}
+                />
+              </g>
+            );
+          })()
+        : null}
+
+      {/* 顺位轨:头像嵌左侧大桶,右侧数字桶上椭圆块放本轮花费(1/5/15 钱币堆) */}
+      <g className="board-turn-track" pointerEvents="none">
+        <defs>
+          {state.turnOrder.map((_seat, rank) => (
+            <clipPath key={`turn-clip-${rank}`} id={`turn-clip-${rank}`}>
+              <circle cx={TURN_BARRELS[rank]!.x} cy={TURN_BARRELS[rank]!.y} r={105} />
+            </clipPath>
+          ))}
+        </defs>
+        {state.turnOrder.map((seat, rank) => {
+          const b = TURN_BARRELS[rank]!;
+          const m = TURN_MONEY[rank]!;
+          const spent = state.players[seat]!.spentThisRound;
+          const isCurrent = state.turnOrder[state.currentPlayerIdx] === seat;
+          const thinking = thinkingSeats?.includes(seat) ?? false;
+          const colorKey = PLAYER_COLOR_KEYS[seat] ?? 'purple';
+          // 钱币按 15/5/1 面额分解堆叠(最多 5 枚)
+          const coins: number[] = [];
+          for (let rest = spent; rest > 0 && coins.length < 5; ) {
+            const d = rest >= 15 ? 15 : rest >= 5 ? 5 : 1;
+            coins.push(d);
+            rest -= d;
+          }
+          return (
+            <g
+              key={`turn-${seat}`}
+              data-turn-seat={seat}
+              className={isCurrent ? 'current' : thinking ? 'thinking' : undefined}
+            >
+              <image
+                href={`/assets/players/${colorKey}.png`}
+                x={b.x - 105}
+                y={b.y - 105}
+                width={210}
+                height={210}
+                clipPath={`url(#turn-clip-${rank})`}
+              />
+              <circle
+                cx={b.x}
+                cy={b.y}
+                r={105}
+                fill="none"
+                stroke={playerColor(seat)}
+                strokeWidth={8}
+              />
+              {/* 当前玩家:白色光环画在最外圈,不遮玩家色内圈 */}
+              {isCurrent ? (
+                <circle
+                  className="current-ring"
+                  cx={b.x}
+                  cy={b.y}
+                  r={121}
+                  fill="none"
+                  stroke="#f5f2e8"
+                  strokeWidth={11}
+                />
+              ) : null}
+              {spent > 0 ? (
+                <g className="turn-money-oval" data-testid={`turn-spent-${seat}`}>
+                  <ellipse cx={m.x} cy={m.y} rx={108} ry={56} fill="#14100a" opacity={0.88} stroke="#8a6d3b" strokeWidth={3} />
+                  {coins.map((d, i) => (
+                    <image key={i} href={`/assets/coins/${d}.png`} x={m.x - 86 + i * 30} y={m.y - 18} width={36} height={36} />
+                  ))}
+                  <text x={m.x + 64} y={m.y + 13} textAnchor="middle" fontSize={34} fill="#f0d89a" fontWeight={700}>
+                    £{spent}
+                  </text>
+                </g>
+              ) : null}
+            </g>
+          );
+        })}
+      </g>
+
+      {/* 行动聚光灯：刚执行的行动目标高亮（玩家色脉冲，GameScreen 约 5 秒后清除） */}
+      {spotlight ? (
+        <g className="board-spotlight" pointerEvents="none">
+          {spotlight.links.map((i) => {
+            const link = LINKS[i];
+            if (!link) return null;
+            const g = linkGeom(anchorOf(link.a), anchorOf(link.b), LINK_MIDPOINTS[i]);
+            return (
+              <g
+                key={`sp-link-${i}`}
+                transform={`rotate(${Math.round(g.angle)} ${g.m.x} ${g.m.y})`}
+              >
+                <rect
+                  className="board-spotlight-pulse"
+                  x={g.m.x - LINK_TOKEN_W / 2 - 16}
+                  y={g.m.y - LINK_TOKEN_H / 2 - 16}
+                  width={LINK_TOKEN_W + 32}
+                  height={LINK_TOKEN_H + 32}
+                  rx={26}
+                  fill="none"
+                  stroke={playerColor(spotlight.player)}
+                  strokeWidth={12}
+                />
+              </g>
+            );
+          })}
+          {spotlight.locations.map((loc) => {
+            const pts = SLOT_CENTERS[loc] ?? [];
+            if (pts.length === 0) return null;
+            const pad = 130;
+            const xs = pts.map((p) => p.x);
+            const ys = pts.map((p) => p.y);
+            const x = Math.min(...xs) - pad;
+            const y = Math.min(...ys) - pad;
+            const w = Math.max(...xs) - Math.min(...xs) + pad * 2;
+            const h = Math.max(...ys) - Math.min(...ys) + pad * 2;
+            return (
+              <rect
+                key={`sp-loc-${loc}`}
+                className="board-spotlight-pulse"
+                x={x}
+                y={y}
+                width={w}
+                height={h}
+                rx={36}
+                fill="none"
+                stroke={playerColor(spotlight.player)}
+                strokeWidth={12}
+              />
+            );
+          })}
+        </g>
+      ) : null}
 
       {/* VP / 收入轨玩家标记 */}
       <g className="board-tracks" pointerEvents="none">

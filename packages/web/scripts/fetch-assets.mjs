@@ -151,8 +151,13 @@ job('beer.png', async (sharp) => {
 // ---- 连线 token 图标：从版图扫描右下角的建路图例裁驳船/火车 ----
 job('link-icons', async (sharp) => {
   const raw = await download(manifest.board);
-  await sharp(raw).extract({ left: 3978, top: 4683, width: 118, height: 50 }).png().toFile(join(OUT, 'link-canal.png'));
-  await sharp(raw).extract({ left: 4098, top: 4680, width: 90, height: 75 }).png().toFile(join(OUT, 'link-rail.png'));
+  await sharp(raw).extract({ left: 3995, top: 4698, width: 88, height: 48 }).resize(176).png().toFile(join(OUT, 'link-canal.png'));
+  await sharp(raw).extract({ left: 4075, top: 4697, width: 92, height: 52 }).resize(184).png().toFile(join(OUT, 'link-rail.png'));
+});
+
+// ---- 玩家面板（官方美术原稿,TTS 存档 Custom_Tile 贴图）----
+job('player-mat.jpg', async (sharp) => {
+  await sharp(await download(manifest.playerMat)).resize(1400).jpeg({ quality: 85 }).toFile(join(OUT, 'player-mat.jpg'));
 });
 
 // ---- 执行 ----

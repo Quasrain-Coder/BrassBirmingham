@@ -16,7 +16,7 @@ export const LOCATION_ZH: Record<string, string> = {
   stone: '斯通',
   uttoxeter: '乌托克斯特',
   stafford: '斯塔福德',
-  'burton-on-trent': '伯顿',
+  'burton-on-trent': '特伦特河畔伯顿',
   cannock: '坎诺克',
   tamworth: '塔姆沃思',
   walsall: '沃尔索尔',

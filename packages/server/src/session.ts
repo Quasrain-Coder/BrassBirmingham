@@ -27,7 +27,7 @@ import {
 import type { Action, GameState, PlayerIndex } from '@brass/engine';
 import { filterStateFor } from '@brass/protocol';
 import type { FilteredState } from '@brass/protocol';
-import { appendAction, createGame, finishGame, type Db } from './db/repo.js';
+import { appendAction, createGame, deleteActionsFrom, finishGame, type Db } from './db/repo.js';
 
 /**
  * SessionError.code：'game-finished' / 'invalid-seat' / 'invalid-seats' / 'not-your-turn'
@@ -67,6 +67,11 @@ export class GameSession {
   private readonly seats: ReadonlySet<PlayerIndex>;
   private gameState: GameState;
   private seq = 0;
+  /**
+   * 回合备份：每个回合第 1 个行动前的状态引用(GameState 不可变,引用即快照)与
+   * 当时 seq。供 resetTurn 撤销本回合全部行动(server 扣住回合期间可反悔)。
+   */
+  private turnBackup: { state: GameState; seq: number } | null = null;
 
   constructor(
     db: Db,
@@ -148,6 +153,10 @@ export class GameSession {
       }
       throw e;
     }
+    // 回合第 1 个行动前留下备份(应用前捕获)
+    if (this.gameState.actionsThisTurn === 0) {
+      this.turnBackup = { state: this.gameState, seq: this.seq };
+    }
     appendAction(this.db, this.gameId, this.seq, seat, action);
     this.gameState = next;
     const applied = this.seq;
@@ -156,6 +165,19 @@ export class GameSession {
       finishGame(this.db, this.gameId, this.gameState);
     }
     return { seq: applied };
+  }
+
+  /**
+   * 撤销当前回合：恢复到本回合第 1 个行动前的状态,删除已落库的本回合行动行。
+   * 仅在"扣住回合"(turnHold)窗口内由 WS 层调用;无备份返回 false。
+   */
+  resetTurn(): boolean {
+    if (this.turnBackup === null) return false;
+    deleteActionsFrom(this.db, this.gameId, this.turnBackup.seq);
+    this.gameState = this.turnBackup.state;
+    this.seq = this.turnBackup.seq;
+    this.turnBackup = null;
+    return true;
   }
 
   /** 按座位视角的快照；legalActions 仅当 seat 是当前玩家且对局未结束时非空。 */

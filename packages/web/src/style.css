@@ -798,30 +798,173 @@ body {
   position: relative;
 }
 
+/* 行动聚光灯：顶部横幅（约 5 秒淡出）+ 棋盘玩家色脉冲高亮 */
+.action-spotlight-banner {
+  position: absolute;
+  top: 1.2%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  border: 1px solid #6b5b3e;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(20, 16, 10, 0.92), rgba(20, 16, 10, 0.82));
+  color: #f3ead4;
+  font-size: 1rem;
+  white-space: nowrap;
+  animation: spotlight-banner-fade 5s ease-in forwards;
+  pointer-events: none;
+}
+
+.action-spotlight-banner .spotlight-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #14100a;
+  flex: none;
+}
+
+/* 新一轮/新时代播报:红字横幅(约 5 秒淡出,与行动横幅错位下排) */
+.round-banner {
+  position: absolute;
+  top: 8.5%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 6px 22px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(20, 16, 10, 0.9), rgba(20, 16, 10, 0.78));
+  border: 1px solid #7a2e22;
+  color: #e8574a;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  white-space: nowrap;
+  animation: spotlight-banner-fade 5s ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes spotlight-banner-fade {
+  0%,
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.board-spotlight-pulse {
+  animation: board-spotlight-pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes board-spotlight-pulse {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 0.9;
+  }
+}
+
+/* 官方式顺位轨：圆形角色头像横排 + 本轮花费钱币堆（不遮版图，无面板底色） */
 .turn-order-bar.overlay {
   position: absolute;
-  left: 0.6%;
-  bottom: 1.2%;
+  left: 0.8%;
+  bottom: 1.4%;
   z-index: 2;
-  padding: 8px 10px;
-  max-width: 34%;
-  background: linear-gradient(180deg, rgba(20, 16, 10, 0.88), rgba(20, 16, 10, 0.78));
+  padding: 0;
+  background: transparent;
 }
 
-.turn-order-bar.overlay h3 {
-  margin: 0 0 6px;
-  font-size: 0.8rem;
-}
-
-.turn-order-bar.overlay ol {
-  flex-direction: column;
-  flex-wrap: nowrap;
-  gap: 4px;
+.turn-order-bar.overlay .turn-track {
+  display: flex;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .turn-order-bar.overlay li {
-  padding: 3px 10px;
-  font-size: 0.8rem;
+  position: relative;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.turn-order-bar.overlay .turn-avatar {
+  display: block;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 4px solid #7f8c8d;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.turn-order-bar.overlay li.current .turn-avatar {
+  border-color: #f0c964;
+  box-shadow:
+    0 0 0 3px rgba(240, 201, 100, 0.45),
+    0 0 18px rgba(240, 201, 100, 0.75);
+}
+
+.turn-order-bar.overlay li.thinking .turn-avatar {
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+/* 本轮花费：头像右下的钱币堆（逐层叠放）+ 金额数字 */
+.turn-order-bar.overlay .turn-spent {
+  position: absolute;
+  right: -22px;
+  bottom: -8px;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.turn-order-bar.overlay .turn-coins {
+  display: flex;
+  align-items: flex-end;
+}
+
+.turn-order-bar.overlay .turn-coins img {
+  width: 26px;
+  height: 26px;
+  margin-left: -14px;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
+}
+
+.turn-order-bar.overlay .turn-coins img:first-child {
+  margin-left: 0;
+}
+
+.turn-order-bar.overlay .turn-spent-num {
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: rgba(20, 16, 10, 0.92);
+  border: 1px solid #8a6d3b;
+  color: #f0d89a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.turn-order-bar.overlay .thinking-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #c58fe0;
+  border: 2px solid #14100a;
+  animation: breathe 1.2s ease-in-out infinite;
 }
 
 .turn-rank {
@@ -1052,6 +1195,14 @@ body {
   gap: 8px;
 }
 
+/* 历史滚动框:限高 + 滚轮上翻查看历史(贴底时新行动自动跟底) */
+.log-panel .log-scroll {
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding-right: 4px;
+}
+
 .log-panel li {
   padding: 8px 12px;
   border: 1px solid #2e2b23;
@@ -1206,6 +1357,11 @@ body {
   gap: 8px;
 }
 
+/* 顺位在自己之后的玩家列表(排在自己单元与日志之间) */
+.player-boards-after {
+  margin-top: 8px;
+}
+
 .player-board {
   border: 1px solid #3a3226;
   border-radius: 10px;
@@ -1281,6 +1437,89 @@ body {
   font-size: 0.78rem;
   letter-spacing: 0.12em;
   color: #b3a888;
+}
+
+/* 堆叠视图切换（版图/明细） */
+.board-stack-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.board-stack-head h4 {
+  margin-bottom: 0;
+}
+
+.stack-view-toggle {
+  display: inline-flex;
+  border: 1px solid #4a3f2c;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.stack-view-toggle button {
+  padding: 3px 12px;
+  border: none;
+  background: transparent;
+  color: #9aa4b2;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.stack-view-toggle button.active {
+  background: #c9a86a;
+  color: #1a1d23;
+  font-weight: 600;
+}
+
+/* 玩家建筑版图（官方面板美术 + 堆叠状态叠加） */
+.player-mat {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 8px;
+  border: 1px solid #4a3f2c;
+  border-radius: 10px;
+}
+
+.player-mat .mat-slot-exhausted {
+  fill: #0b0d10;
+  opacity: 0.62;
+}
+
+.player-mat .mat-slot-top {
+  filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.25));
+}
+
+/* 刚放上的建筑 token:轻微倾斜 + 投影立体感(聚光灯窗口约 5s,过后回正贴框) */
+.board-svg .tile-fresh {
+  filter: drop-shadow(10px 14px 10px rgba(0, 0, 0, 0.55));
+}
+
+/* 顺位轨:当前玩家白色光环(最外圈,不遮玩家色内圈)、AI 思考呼吸(SVG 内,滤镜像素域) */
+.board-turn-track .current .current-ring {
+  filter: drop-shadow(0 0 16px rgba(245, 242, 232, 0.9)) drop-shadow(0 0 4px rgba(20, 16, 10, 0.8));
+}
+
+.board-turn-track .thinking image {
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+/* 行动播报:行动方面板描边脉冲(玩家色,约 5s 随聚光灯结束) */
+.player-board.pulse {
+  animation: panel-pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes panel-pulse {
+  from {
+    box-shadow: 0 0 0 2px var(--pulse-color, #f0c964);
+  }
+  to {
+    box-shadow:
+      0 0 22px 4px var(--pulse-color, #f0c964),
+      0 0 0 3px var(--pulse-color, #f0c964);
+  }
 }
 
 .board-ind {

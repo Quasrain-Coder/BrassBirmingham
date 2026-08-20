@@ -51,6 +51,11 @@ export interface GameServerOptions {
    * （ANTHROPIC_API_KEY 缺失时的降级路径同此）。每个 AI 座位开局时各构造一个。
    */
   aiAgentFactory?: (seat: PlayerIndex, difficulty: Difficulty) => DecidingAgent;
+  /**
+   * AI 行动节奏（ms）：每步 AI 行动之间的间隔，让真人玩家看得清 AI 过程
+   * （启发式瞬算时 AI 连动会在一帧内打完）。缺省 0（测试不减速）;生产 main.ts 注入。
+   */
+  aiPaceMs?: number;
 }
 
 export interface GameServer {
@@ -87,6 +92,11 @@ interface SessionEntry {
   agents: Map<PlayerIndex, DecidingAgent>;
   /** driveAI 并发守卫：同一 session 同时只有一个驱动循环。 */
   driving: boolean;
+  /**
+   * 扣住的回合：真人行动数打满后等待其显式"结束回合"(end_turn 放行 /
+   * reset_turn 撤销重来);期间 driveAI 不推进、一切 submit 被拒。
+   */
+  turnHold: PlayerIndex | null;
   /** AI 决策 token 用量（M4 用；本任务记内存 + 终局日志行）。 */
   usage: { decisions: number; input: number; output: number };
 }
@@ -117,6 +127,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
   const sessionsByGameId = new Map<string, SessionEntry>();
   const sessionByToken = new Map<string, SessionEntry>();
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30_000;
+  /** AI 行动节奏:与客户端聚光灯时长对齐,每步 AI 行动播足 5 秒(生产注入,测试为 0)。 */
+  const aiPaceMs = options.aiPaceMs ?? 0;
   const heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 60_000;
   const staticRoot = options.staticDir !== undefined ? resolve(options.staticDir) : null;
   /** driveAI 末级兜底用的共享 HeuristicAgent（无状态，可复用）。 */
@@ -182,7 +194,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     }
   }
 
-  /** 每人视角快照（legalActions 仅当前玩家非空）。 */
+  /** 每人视角快照（legalActions 仅当前玩家非空；附带 turnHold 扣回合状态）。 */
   function broadcastSnapshots(entry: SessionEntry): void {
     for (const conn of conns) {
       if (conn.roomCode !== entry.room.code || conn.seat === null) continue;
@@ -193,6 +205,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         seq: snap.seq,
         state: snap.state,
         legalActions: snap.legalActions,
+        turnHold: entry.turnHold,
       });
     }
   }
@@ -280,6 +293,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
       ),
       agents,
       driving: false,
+      turnHold: null,
       usage: { decisions: 0, input: 0, output: 0 },
     };
     sessionsByGameId.set(session.gameId, entry);
@@ -344,6 +358,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
    */
   async function driveAI(entry: SessionEntry): Promise<void> {
     if (entry.driving) return;
+    if (entry.turnHold !== null) return; // 真人回合被扣住:等 end_turn/reset_turn
     entry.driving = true;
     const thinkingSeats = new Set<PlayerIndex>();
     try {
@@ -388,6 +403,18 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
             break;
           }
         }
+        // 逐座位结算 thinking(false)(连动时不再整段只收一次);
+        // 节奏延迟:启发式瞬算时给真人留看清每步 AI 行动的时间
+        broadcast(entry.room, {
+          type: 'ai_thinking',
+          protocolVersion: PROTOCOL_VERSION,
+          seat,
+          thinking: false,
+        });
+        thinkingSeats.delete(seat);
+        if (aiPaceMs > 0 && !entry.session.finished && entry.agents.has(entry.session.currentSeat)) {
+          await new Promise((r) => setTimeout(r, aiPaceMs));
+        }
       }
     } catch (err) {
       // 循环体已整体 try/catch，理论不可达；兜底防 unhandled rejection
@@ -414,6 +441,10 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
       }
       throw new WsError('invalid-token', 'token 不属于任何进行中对局');
     }
+    // 扣回合窗口内:一切行动提交都被拒(等 held 玩家 end_turn/reset_turn)
+    if (entry.turnHold !== null) {
+      throw new WsError('awaiting-turn-confirm', '等待回合确认：先结束或重置被扣住的回合');
+    }
     // token → seat 映射：身份由 token 唯一决定，client 无法指定座位代打
     const seat = entry.tokenSeats.get(msg.token);
     if (seat === undefined) throw new WsError('invalid-token', 'token 无效');
@@ -422,6 +453,10 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
       seat,
       msg.action as Parameters<GameSession['submitAction']>[1],
     );
+    // 真人行动后回合推进了 → 扣住,等其显式结束/重置(终局不扣,直接 game_over)
+    if (!entry.session.finished && entry.session.currentSeat !== seat) {
+      entry.turnHold = seat;
+    }
     broadcast(entry.room, {
       type: 'action_applied',
       protocolVersion: PROTOCOL_VERSION,
@@ -435,6 +470,51 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
       broadcastGameOver(entry);
     }
     void driveAI(entry);
+  }
+
+  /** token → {entry, seat} 并校验该座位正是被扣住的玩家。 */
+  function heldEntry(msg: { token: string }): { entry: SessionEntry; seat: PlayerIndex } {
+    if (typeof msg.token !== 'string') throw new WsError('bad-message', '需要 token');
+    const entry = sessionByToken.get(msg.token);
+    if (entry === undefined) throw new WsError('invalid-token', 'token 不属于任何进行中对局');
+    const seat = entry.tokenSeats.get(msg.token);
+    if (seat === undefined || entry.turnHold !== seat) {
+      throw new WsError('no-turn-hold', '当前没有需要你确认的回合');
+    }
+    return { entry, seat };
+  }
+
+  /** 结束回合：放行,driveAI 接着推进(广播新快照让各端刷新 legalActions)。 */
+  function handleEndTurn(msg: { token: string }): void {
+    const { entry } = heldEntry(msg);
+    entry.turnHold = null;
+    broadcastSnapshots(entry);
+    void driveAI(entry);
+  }
+
+  /** 重置回合：撤销本回合全部行动(恢复回合备份 + 删本回合落库行动),回到回合初。
+   *  两种可用时机:① 回合打满被扣住(turnHold=本人);② 自己回合进行中
+   *  (actionsThisTurn>0,随时可反悔);其他情况报错。 */
+  function handleResetTurn(msg: { token: string }): void {
+    if (typeof msg.token !== 'string') throw new WsError('bad-message', '需要 token');
+    const entry = sessionByToken.get(msg.token);
+    if (entry === undefined) throw new WsError('invalid-token', 'token 不属于任何进行中对局');
+    const seat = entry.tokenSeats.get(msg.token);
+    if (seat === undefined) throw new WsError('invalid-token', 'token 无效');
+    if (entry.turnHold !== null && entry.turnHold !== seat) {
+      throw new WsError('awaiting-turn-confirm', '等待回合确认：先结束或重置被扣住的回合');
+    }
+    const midTurn =
+      entry.turnHold === seat ||
+      (seat === entry.session.currentSeat && entry.session.state.actionsThisTurn > 0);
+    if (!midTurn) {
+      throw new WsError('no-turn-hold', '当前没有可重置的回合');
+    }
+    if (!entry.session.resetTurn()) {
+      throw new WsError('no-turn-backup', '回合备份不存在,无法重置');
+    }
+    entry.turnHold = null;
+    broadcastSnapshots(entry);
   }
 
   /**
@@ -457,6 +537,12 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     if (entry !== undefined) {
       entry.tokenSeats.delete(msg.token);
       sessionByToken.delete(msg.token);
+      // 扣住的玩家主动离开:自动放行该回合(保留其行动),对局不被永久卡住
+      if (entry.turnHold === conn.seat) {
+        entry.turnHold = null;
+        broadcastSnapshots(entry);
+        void driveAI(entry);
+      }
     } else {
       rooms.dropToken(msg.token);
       // 开局前：清空座位（避免幽灵座位卡死后续开局）
@@ -495,6 +581,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         seq: snap.seq,
         state: snap.state,
         legalActions: snap.legalActions,
+        turnHold: entry.turnHold,
       });
       broadcastRoomState(entry.room);
       // resume 重触发 driveAI（幂等，守卫防重入）——对局若停在 AI 回合则被唤醒
@@ -529,6 +616,12 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         break;
       case 'submit_action':
         handleSubmitAction(msg);
+        break;
+      case 'end_turn':
+        handleEndTurn(msg);
+        break;
+      case 'reset_turn':
+        handleResetTurn(msg);
         break;
       case 'resume':
         handleResume(conn, msg);

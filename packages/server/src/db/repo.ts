@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import type { Database as SqliteDatabase } from 'better-sqlite3';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, and, gte } from 'drizzle-orm';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { Action } from '@brass/engine';
 import type { RoomConfig } from '@brass/protocol';
@@ -83,6 +83,13 @@ export function createGame(db: Db, game: NewGame): void {
 export function appendAction(db: Db, gameId: string, seq: number, player: number, action: Action): void {
   db.insert(actions)
     .values({ gameId, seq, player, action: JSON.stringify(action) })
+    .run();
+}
+
+/** 删除 fromSeq 起（含）的行动行——resetTurn 撤销本回合时用。 */
+export function deleteActionsFrom(db: Db, gameId: string, fromSeq: number): void {
+  db.delete(actions)
+    .where(and(eq(actions.gameId, gameId), gte(actions.seq, fromSeq)))
     .run();
 }
 

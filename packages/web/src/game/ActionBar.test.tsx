@@ -251,6 +251,7 @@ function draftFixture(overrides: Partial<ActionDraft> = {}): ActionDraft {
     sellFullSet: null,
     sellTile: null,
     buildChoices: [],
+    buildPreview: null,
     resolved: null,
     clickSlot: () => {},
     clickLink: () => {},
@@ -271,8 +272,13 @@ describe('<ActionBar>', () => {
         selectedCard={null}
         hand={[]}
         draft={draftFixture()}
+        turnHold={null}
+        seat={0}
+        canResetTurn={false}
         onConfirm={() => {}}
         onCancel={() => {}}
+        onEndTurn={() => {}}
+        onResetTurn={() => {}}
       />,
     );
     expect(screen.getByTestId('waiting')).toHaveTextContent('等待 乙 行动');
@@ -286,8 +292,13 @@ describe('<ActionBar>', () => {
         selectedCard={null}
         hand={[]}
         draft={draftFixture()}
+        turnHold={null}
+        seat={0}
+        canResetTurn={false}
         onConfirm={() => {}}
         onCancel={() => {}}
+        onEndTurn={() => {}}
+        onResetTurn={() => {}}
       />,
     );
     expect(screen.getByTestId('select-card-hint')).toBeInTheDocument();
@@ -304,10 +315,15 @@ describe('<ActionBar>', () => {
         selectedCard="c1"
         hand={[]}
         draft={draftFixture({ resolved: action })}
+        turnHold={null}
+        seat={0}
+        canResetTurn={false}
         onConfirm={() => {
           confirmed += 1;
         }}
         onCancel={() => {}}
+        onEndTurn={() => {}}
+        onResetTurn={() => {}}
       />,
     );
     const btn = screen.getByTestId('confirm-action');
@@ -331,8 +347,13 @@ describe('<ActionBar>', () => {
           scoutPicks: picked,
           toggleScoutCard: (id) => picked.push(id),
         })}
+        turnHold={null}
+        seat={0}
+        canResetTurn={false}
         onConfirm={() => {}}
         onCancel={() => {}}
+        onEndTurn={() => {}}
+        onResetTurn={() => {}}
       />,
     );
     const btn = screen.getByTestId(`scout-card-${f.hand[1]!.id}`);
