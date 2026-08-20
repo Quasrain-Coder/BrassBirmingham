@@ -1018,6 +1018,74 @@ body {
   animation: breathe 1.2s ease-in-out infinite;
 }
 
+/* 分数构成弹窗(时代末自动弹出,手动关闭;头部按钮随时查阅) */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 12, 16, 0.62);
+}
+
+.score-modal {
+  min-width: 420px;
+  max-width: 92vw;
+  max-height: 84vh;
+  overflow-y: auto;
+  padding: 18px 22px;
+  border: 1px solid #6b5b3e;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #23262e, #1a1d23);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+}
+
+.score-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.score-modal-head h3 {
+  margin: 0;
+  color: #f3ead4;
+}
+
+.score-table {
+  width: 100%;
+  margin: 10px 0;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.score-table caption {
+  text-align: left;
+  padding: 4px 0;
+  color: #b3a888;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+}
+
+.score-table th,
+.score-table td {
+  padding: 5px 12px;
+  border-bottom: 1px solid #2e2b23;
+  text-align: left;
+  color: #e6e6e6;
+}
+
+.score-table th {
+  color: #9aa4b2;
+  font-weight: 500;
+  font-size: 0.8rem;
+}
+
+.score-total td:last-child {
+  color: #e3c58f;
+  font-weight: 700;
+}
+
 /* AI 思考中指示条 */
 .ai-thinking {
   display: flex;

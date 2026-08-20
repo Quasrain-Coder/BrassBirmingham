@@ -17,6 +17,7 @@ import { ActionBar, useActionDraft } from './ActionBar';
 import { AIIndicator } from './AIIndicator';
 import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
 import { describeAction } from './display';
+import { ScoreModal, useScoreHistory } from './ScoreTable';
 import { SPOTLIGHT_DURATION_MS, spotlightOf } from './spotlight';
 import type { GameStore, GameStoreState, LogEntry } from './store';
 import { useGameStore } from './store';
@@ -64,6 +65,8 @@ function GameBoard({
     state,
     seat,
   });
+  // 分数构成:时代切换时自动弹出(手动关闭),头部按钮随时查阅
+  const scoreHistory = useScoreHistory(state);
 
   // 行动聚光灯：最新一条 action_applied → 棋盘高亮 + 横幅，约 5 秒后自动清除；
   // 新行动到达即替换并重置计时（以 seq 为触发键，lastEntry 由 seq 唯一确定）。
@@ -107,12 +110,28 @@ function GameBoard({
         <button
           type="button"
           className="btn-ghost"
+          data-testid="open-score-modal"
+          onClick={() => scoreHistory.setOpen(true)}
+        >
+          分数构成
+        </button>
+        <button
+          type="button"
+          className="btn-ghost"
           data-testid="leave-game"
           onClick={() => store.leaveRoom()}
         >
           离开对局
         </button>
       </header>
+      {scoreHistory.open ? (
+        <ScoreModal
+          entries={scoreHistory.entries}
+          state={state}
+          room={room}
+          onClose={() => scoreHistory.setOpen(false)}
+        />
+      ) : null}
       {gameOver !== null ? (
         <p className="game-over" data-testid="game-over">
           对局结束——胜者：{gameOver.winner.map((w) => playerName(room ?? undefined, w)).join('、')}
