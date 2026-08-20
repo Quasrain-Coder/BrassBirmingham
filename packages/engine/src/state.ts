@@ -39,6 +39,8 @@ export interface PlacedTile {
 export interface BuiltLink {
   linkIndex: number;
   player: PlayerIndex;
+  /** 建造时所在时代（运河时代的连接画驳船、铁路时代画火车）。 */
+  era: Era;
 }
 
 export interface PlayerState {

@@ -60,7 +60,7 @@ describe('network', () => {
     const s = newGame(4, 3);
     withTile(s, 0, 'coventry', 'pottery');
     s.players[0]!.hand = [{ id: 'c1', kind: 'industry', industries: ['coal'] }];
-    s.board.links.push({ linkIndex: 2, player: 1 }); // 对手已建 birmingham-coventry
+    s.board.links.push({ linkIndex: 2, player: 1, era: 'canal' }); // 对手已建 birmingham-coventry
     const nets = enumerateNetwork(s, 0);
     const links = new Set(nets.flatMap((a) => (a.type === 'network' ? a.links : [])));
     expect(links.has(2)).toBe(false); // 同一条边只能 1 条 Link

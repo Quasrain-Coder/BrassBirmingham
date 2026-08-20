@@ -148,6 +148,13 @@ job('beer.png', async (sharp) => {
     .toFile(join(OUT, 'beer.png'));
 });
 
+// ---- 连线 token 图标：从版图扫描右下角的建路图例裁驳船/火车 ----
+job('link-icons', async (sharp) => {
+  const raw = await download(manifest.board);
+  await sharp(raw).extract({ left: 3978, top: 4683, width: 118, height: 50 }).png().toFile(join(OUT, 'link-canal.png'));
+  await sharp(raw).extract({ left: 4098, top: 4680, width: 90, height: 75 }).png().toFile(join(OUT, 'link-rail.png'));
+});
+
 // ---- 执行 ----
 const { default: sharp } = await import('sharp').catch(() => {
   console.error('缺少 sharp：请先 npm install（sharp 在 @brass/web 的 devDependencies）');

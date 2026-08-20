@@ -25,7 +25,7 @@ function place(
 
 /** 手工铺一条 Link（linkIndex 为 0 基，= rules-reference §1.2 的 # - 1）。 */
 function build(s: GameState, linkIndex: number, player: PlayerIndex): void {
-  s.board.links.push({ linkIndex, player });
+  s.board.links.push({ linkIndex, player, era: 'canal' });
 }
 
 /** 直接覆写某商人位的板块与啤酒（初始设置洗混不确定，测试显式给定）。 */

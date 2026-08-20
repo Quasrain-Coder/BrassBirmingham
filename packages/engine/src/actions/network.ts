@@ -82,7 +82,7 @@ function singleCandidates(state: GameState, player: PlayerIndex): number[] {
 function withLink(state: GameState, linkIndex: number, player: PlayerIndex): GameState {
   return {
     ...state,
-    board: { ...state.board, links: [...state.board.links, { linkIndex, player }] },
+    board: { ...state.board, links: [...state.board.links, { linkIndex, player, era: state.era }] },
   };
 }
 

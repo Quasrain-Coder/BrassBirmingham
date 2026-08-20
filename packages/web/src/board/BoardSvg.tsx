@@ -128,11 +128,41 @@ function ResourceTokens({ cx, cy, industry, count }: { cx: number; cy: number; i
   return <g className="tile-resource-tokens">{tokens}</g>;
 }
 
+/** 连线 token 尺寸（中点的玩家色圆角牌 + 驳船/火车图标）。 */
+const LINK_TOKEN_W = 150;
+const LINK_TOKEN_H = 88;
+
+/** 已建连线：玩家色路径 + 中点 token（运河=驳船 / 铁路=火车，按建造时时代）。 */
+function BuiltLinkToken({ mid, player, era }: { mid: { x: number; y: number }; player: PlayerIndex; era: 'canal' | 'rail' }): ReactElement {
+  return (
+    <g className="link-token" pointerEvents="none">
+      <rect
+        x={mid.x - LINK_TOKEN_W / 2}
+        y={mid.y - LINK_TOKEN_H / 2}
+        width={LINK_TOKEN_W}
+        height={LINK_TOKEN_H}
+        rx={16}
+        fill={playerColor(player)}
+        stroke="#14100a"
+        strokeWidth={6}
+      />
+      <image
+        href={era === 'canal' ? '/assets/link-canal.png' : '/assets/link-rail.png'}
+        x={mid.x - 52}
+        y={mid.y - 33}
+        width={104}
+        height={66}
+        preserveAspectRatio="xMidYMid meet"
+      />
+    </g>
+  );
+}
+
 export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
-  const builtByLink = new Map<number, PlayerIndex>();
-  for (const l of state.board.links) builtByLink.set(l.linkIndex, l.player);
+  const builtByLink = new Map<number, { player: PlayerIndex; era: 'canal' | 'rail' }>();
+  for (const l of state.board.links) builtByLink.set(l.linkIndex, { player: l.player, era: l.era });
 
   const anchorOf = (id: LocationId | MerchantId): { x: number; y: number } =>
     id in MERCHANT_GEOM ? merchantAnchor(id as MerchantId) : locationAnchor(id as LocationId);
@@ -140,6 +170,17 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
   // 市场已填格 = 最贵 filled 格（索引 length-filled .. length-1），见 engine/market.ts。
   const coalFilledFrom = COAL_MARKET_CELLS.length - state.coalMarket;
   const ironFilledFrom = IRON_MARKET_CELLS.length - state.ironMarket;
+
+  // 连线 token 收集后置于所有槽位/板块之上渲染（中点常与槽位重叠，不能被板块图盖住）
+  const linkTokens: ReactElement[] = [];
+  for (const l of state.board.links) {
+    const mid = LINK_MIDPOINTS[l.linkIndex];
+    if (mid !== undefined) {
+      linkTokens.push(
+        <BuiltLinkToken key={`link-token-${l.linkIndex}`} mid={mid} player={l.player} era={l.era} />,
+      );
+    }
+  }
 
   return (
     <svg
@@ -176,27 +217,47 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
                   className="board-link-visual"
                   points={pts}
                   fill="none"
-                  stroke={playerColor(builtBy)}
-                  strokeWidth={46}
+                  stroke={playerColor(builtBy.player)}
+                  strokeWidth={34}
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  opacity={0.92}
+                  opacity={0.85}
                   pointerEvents="none"
                 />
               ) : null}
               {hl && !built ? (
-                <polyline
-                  className="board-link-hl"
-                  points={pts}
-                  fill="none"
-                  stroke="#f0c964"
-                  strokeWidth={40}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  opacity={0.75}
-                  filter="url(#hl-glow)"
-                  pointerEvents="none"
-                />
+                <>
+                  <polyline
+                    className="board-link-hl"
+                    points={pts}
+                    fill="none"
+                    stroke="#f0c964"
+                    strokeWidth={40}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity={0.75}
+                    filter="url(#hl-glow)"
+                    pointerEvents="none"
+                  />
+                  {/* 中点可点提示牌：让可建目标在板上一眼可见 */}
+                  {mid !== undefined ? (
+                    <g className="link-hl-chip" pointerEvents="none">
+                      <rect
+                        x={mid.x - 56}
+                        y={mid.y - 56}
+                        width={112}
+                        height={112}
+                        rx={20}
+                        fill="#f0c964"
+                        opacity={0.9}
+                        filter="url(#hl-glow)"
+                      />
+                      <text x={mid.x} y={mid.y + 26} textAnchor="middle" fontSize={72} fill="#241b0b" fontWeight={700}>
+                        +
+                      </text>
+                    </g>
+                  ) : null}
+                </>
               ) : null}
               {/* 透明粗热区（保留 data-link-index 契约） */}
               <line
@@ -221,10 +282,10 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
                         className="board-link-visual"
                         points={`${m.x},${m.y} ${e.x},${e.y}`}
                         fill="none"
-                        stroke={playerColor(builtBy)}
-                        strokeWidth={46}
+                        stroke={playerColor(builtBy.player)}
+                        strokeWidth={34}
                         strokeLinecap="round"
-                        opacity={0.92}
+                        opacity={0.85}
                         pointerEvents="none"
                       />
                     ) : null}
@@ -400,6 +461,9 @@ export function BoardSvg({ state, highlights, onSlotClick, onLinkClick }: BoardS
           i >= ironFilledFrom ? <Cube key={`iron-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#c76b2a" /> : null,
         )}
       </g>
+
+      {/* 连线 token 顶层渲染（不被板块图遮挡） */}
+      <g className="board-link-tokens">{linkTokens}</g>
 
       {/* VP / 收入轨玩家标记 */}
       <g className="board-tracks" pointerEvents="none">
