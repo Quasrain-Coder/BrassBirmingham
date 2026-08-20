@@ -6,10 +6,14 @@
  *   （choiceIndex + reason + token usage）。测试用 fixture client 替换，不烧
  *   token（见 test/fixtures.ts）。
  * - AnthropicClient：@anthropic-ai/sdk 实现。**tool use 强制结构**——定义
- *   `choose` tool（choice_index 整数 + reason 字符串），tool_choice 强制调用，
- *   从 tool_use block 解析输入，杜绝自由文本 JSON 解析脆弱性。响应不含
- *   tool_use 时返回 choiceIndex=-1（由 LLMAgent 校验层走重试/降级，本层不判
- *   候选界——它不知道候选集）。
+ *   `choose` tool（choice_index 整数 + reason 字符串），tool_choice: 'any' 强制调用
+ *   （只有一个 tool，any 等价于强制 choose），从 tool_use block 解析输入，杜绝
+ *   自由文本 JSON 解析脆弱性。响应不含 tool_use 时返回 choiceIndex=-1（由
+ *   LLMAgent 校验层走重试/降级，本层不判候选界——它不知道候选集）。
+ * - thinking 显式 disabled：默认开 thinking 的端点（thinking 模型或会注入
+ *   thinking 的代理网关）与一切强制 tool_choice 冲突——'any'/'required' 与
+ *   { type: 'tool', name } 形态都会被 400 'incompatible with thinking enabled'；
+ *   显式关闭后强制 tool 调用恢复可用（且省 thinking token、决策更快）。
  * - model：以 req.model 为准（调用方按难度给）；req.model 为空串时回落环境
  *   变量 BRASS_AI_MODEL，再回落 claude-sonnet-4-5。
  * - timeout：用 SDK 的 per-request timeout 选项（req.timeoutMs，毫秒），超时
@@ -100,7 +104,11 @@ export class AnthropicClient implements ClaudeClient {
         system: req.system,
         messages: [{ role: 'user', content: req.user }],
         tools: [tool],
-        tool_choice: { type: 'tool', name: 'choose' },
+        // 'any' = 必须调用某个 tool（只有一个 choose，等价强制）。
+        // thinking 显式 disabled：端点默认开 thinking 时会拒绝一切强制
+        // tool_choice（400 incompatible with thinking enabled）。
+        tool_choice: { type: 'any' },
+        thinking: { type: 'disabled' },
       },
       { timeout: req.timeoutMs },
     );
