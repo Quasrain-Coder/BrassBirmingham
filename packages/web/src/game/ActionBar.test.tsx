@@ -252,6 +252,7 @@ function draftFixture(overrides: Partial<ActionDraft> = {}): ActionDraft {
     sellTile: null,
     buildChoices: [],
     buildPreview: null,
+    beerMatches: [],
     resolved: null,
     clickSlot: () => {},
     clickLink: () => {},
@@ -272,6 +273,7 @@ describe('<ActionBar>', () => {
         selectedCard={null}
         hand={[]}
         draft={draftFixture()}
+        state={filterStateFor(newGame(4, 42), 0)}
         turnHold={null}
         seat={0}
         canResetTurn={false}
@@ -292,6 +294,7 @@ describe('<ActionBar>', () => {
         selectedCard={null}
         hand={[]}
         draft={draftFixture()}
+        state={filterStateFor(newGame(4, 42), 0)}
         turnHold={null}
         seat={0}
         canResetTurn={false}
@@ -315,6 +318,7 @@ describe('<ActionBar>', () => {
         selectedCard="c1"
         hand={[]}
         draft={draftFixture({ resolved: action })}
+        state={filterStateFor(newGame(4, 42), 0)}
         turnHold={null}
         seat={0}
         canResetTurn={false}
@@ -347,6 +351,7 @@ describe('<ActionBar>', () => {
           scoutPicks: picked,
           toggleScoutCard: (id) => picked.push(id),
         })}
+        state={filterStateFor(newGame(4, 42), 0)}
         turnHold={null}
         seat={0}
         canResetTurn={false}
@@ -359,5 +364,61 @@ describe('<ActionBar>', () => {
     const btn = screen.getByTestId(`scout-card-${f.hand[1]!.id}`);
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(picked).toEqual([f.hand[1]!.id]);
+  });
+
+  it('啤酒实况:显示自有酒厂与商人位余量;收益预览:贷款显示 +£30 与收入 −3', () => {
+    const state = filterStateFor(newGame(4, 42), 0);
+    const brew = tileDef('brewery', 1)!;
+    state.board.slots['derby']![0] = { tile: brew, player: 0, flipped: false, resources: 1 };
+    state.merchants.oxford = { tiles: ['any'], beer: 1 };
+    const action: Action = { type: 'loan', cardId: 'c1' };
+    render(
+      <ActionBar
+        myTurn
+        waitingFor="甲"
+        selectedCard="c1"
+        hand={[]}
+        draft={draftFixture({ resolved: action, candidates: [action] })}
+        state={state}
+        turnHold={null}
+        seat={0}
+        canResetTurn={false}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+        onEndTurn={() => {}}
+        onResetTurn={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('beer-status')).toHaveTextContent('德比×1');
+    expect(screen.getByTestId('beer-status')).toHaveTextContent('牛津×1');
+    const preview = screen.getByTestId('action-preview');
+    expect(preview).toHaveTextContent('+£30');
+    expect(preview).toHaveTextContent('收入等级 −3');
+  });
+
+  it('有可卖板块但不可售时显示原因提示(需连通收该货的商人)', () => {
+    const state = filterStateFor(newGame(4, 42), 0);
+    const cotton = tileDef('cotton', 1)!;
+    state.board.slots['worcester']![0] = { tile: cotton, player: 0, flipped: false, resources: 0 };
+    const passAction: Action = { type: 'pass', cardId: 'c1' };
+    render(
+      <ActionBar
+        myTurn
+        waitingFor="甲"
+        selectedCard="c1"
+        hand={[]}
+        draft={draftFixture({ candidates: [passAction] })}
+        state={state}
+        turnHold={null}
+        seat={0}
+        canResetTurn={false}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+        onEndTurn={() => {}}
+        onResetTurn={() => {}}
+      />,
+    );
+    const hints = screen.getAllByTestId('blocked-hint');
+    expect(hints.some((h) => h.textContent?.includes('连通到收该货图标的商人'))).toBe(true);
   });
 });

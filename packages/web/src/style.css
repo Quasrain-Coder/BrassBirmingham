@@ -820,6 +820,31 @@ body {
   position: relative;
 }
 
+/* 行动条:啤酒实况行/收益预览行/不可执行原因提示 */
+.beer-status {
+  margin: 4px 0 6px;
+  color: #c9b98a;
+  font-size: 0.82rem;
+}
+
+.action-preview {
+  margin: 0 0 8px;
+  padding: 6px 12px;
+  border-left: 3px solid #58c47b;
+  background: rgba(88, 196, 123, 0.08);
+  color: #a8d8b8;
+  font-size: 0.85rem;
+}
+
+.action-blocked-hint {
+  margin: 0 0 8px;
+  padding: 6px 12px;
+  border-left: 3px solid #c9a86a;
+  background: rgba(201, 168, 106, 0.08);
+  color: #c9b98a;
+  font-size: 0.85rem;
+}
+
 /* 行动聚光灯：顶部横幅（约 5 秒淡出）+ 棋盘玩家色脉冲高亮 */
 .action-spotlight-banner {
   position: absolute;
@@ -1314,6 +1339,11 @@ body {
   font-size: 0.7rem;
 }
 
+.log-panel li .log-bonus {
+  color: #e3c58f;
+  font-size: 0.82rem;
+}
+
 .log-panel .log-reason {
   margin: 6px 0 0;
   padding-left: 10px;
@@ -1585,6 +1615,22 @@ body {
 /* 刚放上的建筑 token:轻微倾斜 + 投影立体感(聚光灯窗口约 5s,过后回正贴框) */
 .board-svg .tile-fresh {
   filter: drop-shadow(10px 14px 10px rgba(0, 0, 0, 0.55));
+}
+
+/* 啤酒源金圈与匹配虚线(match 效果) */
+.beer-source-ring {
+  animation: board-spotlight-pulse 0.9s ease-in-out infinite alternate;
+}
+
+.beer-match-line {
+  animation: beer-match-march 1.2s linear infinite;
+  opacity: 0.85;
+}
+
+@keyframes beer-match-march {
+  to {
+    stroke-dashoffset: -44;
+  }
 }
 
 /* 顺位轨:当前玩家白色光环(最外圈,不遮玩家色内圈)、AI 思考呼吸(SVG 内,滤镜像素域) */
