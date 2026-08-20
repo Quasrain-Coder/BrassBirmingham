@@ -110,35 +110,34 @@ describe('<Lobby> 创建/加入表单', () => {
     expect(screen.getByTestId('join-submit')).toBeEnabled();
   });
 
-  it('创建房间：昵称 + 人数 + 种子 → create_room 帧', () => {
+  it('创建房间：昵称 + 人数 + 默认随机种子 → create_room 帧带 seed', () => {
     const { store, ws } = setup();
     act(() => ws.open());
     render(<Lobby store={store} />);
+    // 默认生成 8 位种子码(房间号字符集)
+    const code = screen.getByTestId('seed-code').textContent!;
+    expect(code).toMatch(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/);
     fireEvent.change(screen.getByTestId('create-nickname'), { target: { value: ' 甲 ' } });
     fireEvent.change(screen.getByTestId('create-player-count'), { target: { value: '3' } });
-    fireEvent.change(screen.getByTestId('create-seed'), { target: { value: '7' } });
     fireEvent.click(screen.getByTestId('create-submit'));
-    expect(ws.lastSent()).toEqual({
-      type: 'create_room',
-      protocolVersion: PROTOCOL_VERSION,
-      nickname: '甲',
-      config: { playerCount: 3, seed: 7 },
-    });
+    const sent = ws.lastSent() as { config: { playerCount: number; seed: number } };
+    expect(sent.config.playerCount).toBe(3);
+    expect(Number.isInteger(sent.config.seed)).toBe(true);
   });
 
-  it('创建房间：种子留空或非法时不带 seed 字段，默认 4 人', () => {
+  it('重随按钮：种子码变化', () => {
     const { store, ws } = setup();
     act(() => ws.open());
     render(<Lobby store={store} />);
-    fireEvent.change(screen.getByTestId('create-nickname'), { target: { value: '甲' } });
-    fireEvent.change(screen.getByTestId('create-seed'), { target: { value: 'abc' } });
-    fireEvent.click(screen.getByTestId('create-submit'));
-    expect(ws.lastSent()).toEqual({
-      type: 'create_room',
-      protocolVersion: PROTOCOL_VERSION,
-      nickname: '甲',
-      config: { playerCount: 4 },
-    });
+    const before = screen.getByTestId('seed-code').textContent!;
+    fireEvent.click(screen.getByTestId('seed-reroll'));
+    const after = screen.getByTestId('seed-code').textContent!;
+    expect(after).toMatch(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/);
+    // 极小概率撞码(31^8),撞了再随一次
+    if (after === before) {
+      fireEvent.click(screen.getByTestId('seed-reroll'));
+      expect(screen.getByTestId('seed-code').textContent).not.toBe(before);
+    }
   });
 
   it('加入房间：房间号转大写 → join_room 帧', () => {

@@ -478,6 +478,28 @@ body {
   letter-spacing: 0.06em;
 }
 
+/* 大厅种子:8 位码 + 重随按钮 */
+.seed-reroll {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.seed-code {
+  padding: 6px 14px;
+  border: 1px dashed #8a6d3b;
+  border-radius: 8px;
+  background: rgba(201, 168, 106, 0.08);
+  color: #e3c58f;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+}
+
+.seed-reroll-btn {
+  white-space: nowrap;
+}
+
 /* 席位面板 */
 .seat-panel {
   padding: 20px 22px 22px;

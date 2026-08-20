@@ -13,11 +13,22 @@ import type { AIDifficulty, RoomConfig } from '@brass/protocol';
 import type { GameStore } from '../game/store';
 import { useGameStore } from '../game/store';
 
-/** 解析可选种子：留空/非整数 → 不带 seed（服务器随机）。 */
-function parseSeed(raw: string): number | undefined {
-  if (raw.trim() === '') return undefined;
-  const n = Number(raw);
-  return Number.isInteger(n) ? n : undefined;
+/** 种子字符集：与房间号一致（大写字母数字去混淆 31 个）。 */
+const SEED_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+/**
+ * 生成一个随机引擎种子(uint32)并编码为 8 位 hash 码展示。
+ * 大厅默认带一个随机种子;「重随」重新生成,玩家可记录该码复现对局。
+ */
+function randomSeedCode(): { code: string; seed: number } {
+  const seed = Math.floor(Math.random() * 0x100000000);
+  let n = seed;
+  let code = '';
+  for (let i = 0; i < 8; i++) {
+    code = SEED_ALPHABET[n % SEED_ALPHABET.length] + code;
+    n = Math.floor(n / SEED_ALPHABET.length);
+  }
+  return { code, seed };
 }
 
 /** AI 难度中文标签——与 packages/server/src/rooms.ts DIFFICULTY_LABEL 同步（双拷贝，改动需同步两侧）。 */
@@ -103,7 +114,7 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
   const connected = s.connection === 'connected';
   const [createNick, setCreateNick] = useState('');
   const [playerCount, setPlayerCount] = useState('4');
-  const [seed, setSeed] = useState('');
+  const [seedCode, setSeedCode] = useState<{ code: string; seed: number }>(randomSeedCode);
   const [aiCount, setAiCount] = useState('0');
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('normal');
   const [joinNick, setJoinNick] = useState('');
@@ -115,8 +126,7 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
     if (!connected || nickname === '') return;
     const count = Number(playerCount);
     const config: RoomConfig = { playerCount: count === 2 || count === 3 ? count : 4 };
-    const parsed = parseSeed(seed);
-    if (parsed !== undefined) config.seed = parsed;
+    config.seed = seedCode.seed;
     const ai = Number(aiCount);
     // 合法域 0..playerCount-1（选项已 clamp，这里再守一道）
     if (Number.isInteger(ai) && ai >= 1 && ai <= config.playerCount - 1) {
@@ -213,13 +223,21 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
               </Field>
             ) : null}
           </div>
-          <Field label="种子（可选）">
-            <input
-              data-testid="create-seed"
-              value={seed}
-              placeholder="留空随机"
-              onChange={(e) => setSeed(e.target.value)}
-            />
+          <Field label="种子">
+            <div className="seed-reroll">
+              <code className="seed-code" data-testid="seed-code">
+                {seedCode.code}
+              </code>
+              <button
+                type="button"
+                className="btn-ghost seed-reroll-btn"
+                data-testid="seed-reroll"
+                title="重新随机一个种子"
+                onClick={() => setSeedCode(randomSeedCode())}
+              >
+                🎲 重随
+              </button>
+            </div>
           </Field>
           <button
             type="submit"
