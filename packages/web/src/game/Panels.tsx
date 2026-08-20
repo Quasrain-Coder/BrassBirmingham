@@ -51,18 +51,21 @@ export function TurnOrderBar({
   state,
   room,
   thinkingSeats,
+  overlay = false,
 }: {
   state: FilteredState;
   room?: RoomState | undefined;
   /** ai_thinking 中的座位（M3）：高亮并显示"思考中…"。 */
   thinkingSeats?: readonly PlayerIndex[] | undefined;
+  /** 叠加模式：竖排 1-4 名，绝对定位于版图左下角（.board-wrap 内）。 */
+  overlay?: boolean;
 }): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx];
   return (
-    <section className="turn-order-bar">
+    <section className={`turn-order-bar${overlay ? ' overlay' : ''}`}>
       <h3>行动顺位</h3>
       <ol data-testid="turn-order">
-        {state.turnOrder.map((seat) => {
+        {state.turnOrder.map((seat, rank) => {
           const player = state.players[seat];
           const thinking = thinkingSeats?.includes(seat) ?? false;
           const classes = [seat === current ? 'current' : '', thinking ? 'thinking' : '']
@@ -70,6 +73,7 @@ export function TurnOrderBar({
             .join(' ');
           return (
             <li key={seat} data-player={seat} className={classes === '' ? undefined : classes}>
+              {overlay ? <span className="turn-rank">{rank + 1}</span> : null}
               <ColorDot seat={seat} />
               <span className="player-name">{playerName(room, seat)}</span>{' '}
               <AIBadge room={room} seat={seat} />

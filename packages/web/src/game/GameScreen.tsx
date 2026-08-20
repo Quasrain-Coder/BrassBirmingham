@@ -76,19 +76,22 @@ function GameBoard({
           （{gameOver.finalScores.join(' / ')} 分）
         </p>
       ) : null}
-      <TurnOrderBar state={state} room={room ?? undefined} thinkingSeats={thinkingSeats} />
       <div className="player-boards">
         {state.players.map((_p, i) => (
           <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={i === seat} />
         ))}
       </div>
       <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
-      <BoardSvg
-        state={state}
-        highlights={myTurn ? draft.highlights : undefined}
-        onSlotClick={myTurn ? draft.clickSlot : undefined}
-        onLinkClick={myTurn ? draft.clickLink : undefined}
-      />
+      <div className="board-wrap">
+        <BoardSvg
+          state={state}
+          highlights={myTurn ? draft.highlights : undefined}
+          onSlotClick={myTurn ? draft.clickSlot : undefined}
+          onLinkClick={myTurn ? draft.clickLink : undefined}
+        />
+        {/* 行动顺位叠在版图左下角（1-4 名原始轮次 + 本轮花费） */}
+        <TurnOrderBar state={state} room={room ?? undefined} thinkingSeats={thinkingSeats} overlay />
+      </div>
       <HandBar
         state={state}
         seat={seat}
