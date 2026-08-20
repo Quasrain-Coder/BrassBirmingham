@@ -267,50 +267,64 @@ export const TURN_MONEY: Point[] = [
   { x: 1772, y: 4705 },
 ];
 
-/** 商人位：板块格（按引擎 `merchants[id].tiles` 顺序）与啤酒桶格。 */
-export const MERCHANT_GEOM: Record<MerchantId, { tiles: Point[]; beer: Point[] }> = {
+/** 商人位几何：板块格与啤酒桶格均为印刷框内沿矩形（6144 坐标系）。 */
+export interface MerchantGeom {
+  tiles: SlotRect[];
+  beer: SlotRect[];
+}
+
+/**
+ * 商人位矩形（2026-08-21 标定，替换原手估中心点——原值偏差达 60-280px）。
+ * 标定方法：2x 放大 + 10px 坐标网格裁片目视初读，条带亮度 profile 定位银色框线，
+ * 再两轮醒目色框叠加目检逐框微调；框边精度 ±4px。
+ * tiles 顺序 = 引擎 `merchants[id].tiles` 从左到右序；beer[i] 对应 tiles[i] 旁的啤酒桶格
+ * （2 格商人位：啤酒格外侧对齐——左格左对齐、右格右对齐，奖励框居中；Warrington/Nottingham
+ * 啤酒格在板块格下方，Gloucester/Oxford 在上方，Shrewsbury 在右侧）。
+ * 板块格为 D 形印刷框（直边+浅弧底），矩形取其内沿包围盒（h 含弧底下沉 ~10px）。
+ */
+export const MERCHANT_GEOM: Record<MerchantId, MerchantGeom> = {
   warrington: {
     tiles: [
-      { x: 1925, y: 1610 },
-      { x: 2110, y: 1610 },
+      { x: 2004, y: 1496, w: 171, h: 166 },
+      { x: 2186, y: 1496, w: 180, h: 166 },
     ],
     beer: [
-      { x: 1900, y: 1765 },
-      { x: 2190, y: 1765 },
+      { x: 2011, y: 1682, w: 90, h: 98 },
+      { x: 2236, y: 1682, w: 93, h: 98 },
     ],
   },
   nottingham: {
     tiles: [
-      { x: 4590, y: 1520 },
-      { x: 4770, y: 1520 },
+      { x: 4505, y: 1749, w: 177, h: 178 },
+      { x: 4702, y: 1749, w: 167, h: 178 },
     ],
     beer: [
-      { x: 4560, y: 1700 },
-      { x: 4820, y: 1700 },
+      { x: 4514, y: 1958, w: 92, h: 102 },
+      { x: 4781, y: 1958, w: 88, h: 102 },
     ],
   },
   shrewsbury: {
-    tiles: [{ x: 1300, y: 3425 }],
-    beer: [{ x: 1475, y: 3355 }],
+    tiles: [{ x: 1343, y: 3311, w: 178, h: 186 }],
+    beer: [{ x: 1551, y: 3329, w: 95, h: 100 }],
   },
   gloucester: {
     tiles: [
-      { x: 3245, y: 4830 },
-      { x: 3530, y: 4830 },
+      { x: 3313, y: 4706, w: 178, h: 180 },
+      { x: 3500, y: 4706, w: 170, h: 180 },
     ],
     beer: [
-      { x: 3240, y: 4605 },
-      { x: 3530, y: 4605 },
+      { x: 3313, y: 4595, w: 89, h: 93 },
+      { x: 3582, y: 4595, w: 92, h: 93 },
     ],
   },
   oxford: {
     tiles: [
-      { x: 3980, y: 4500 },
-      { x: 4240, y: 4500 },
+      { x: 4203, y: 4402, w: 176, h: 182 },
+      { x: 4390, y: 4402, w: 170, h: 182 },
     ],
     beer: [
-      { x: 3860, y: 4270 },
-      { x: 4235, y: 4270 },
+      { x: 4204, y: 4291, w: 86, h: 98 },
+      { x: 4470, y: 4291, w: 85, h: 98 },
     ],
   },
 };
@@ -422,8 +436,8 @@ export function locationAnchor(id: LocationId): Point {
 
 /** 商人位锚点（连线端点用板块格簇质心）。 */
 export function merchantAnchor(id: MerchantId): Point {
-  const pts = MERCHANT_GEOM[id].tiles;
-  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
-  const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  const rects = MERCHANT_GEOM[id].tiles;
+  const cx = rects.reduce((s, r) => s + r.x + r.w / 2, 0) / rects.length;
+  const cy = rects.reduce((s, r) => s + r.y + r.h / 2, 0) / rects.length;
   return { x: Math.round(cx), y: Math.round(cy) };
 }

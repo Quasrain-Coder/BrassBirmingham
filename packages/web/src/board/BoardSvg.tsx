@@ -27,8 +27,6 @@ import {
   LINK_MIDPOINTS,
   MARKET_CELL_SIZE,
   MERCHANT_GEOM,
-  MERCHANT_TILE_H,
-  MERCHANT_TILE_W,
   SLOT_CENTERS,
   SLOT_RECTS,
   SLOT_SIZE,
@@ -481,14 +479,14 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
         })}
       </g>
 
-      {/* 商人位：官方商人板块 + 啤酒桶 */}
+      {/* 商人位：官方商人板块贴框 + 啤酒桶格(有桶贴桶 + 剩余数 token) */}
       <g className="board-merchants">
         {(Object.keys(MERCHANTS) as MerchantId[]).map((id) => {
           const geom = MERCHANT_GEOM[id];
           const m = state.merchants[id];
           return (
             <g className="board-merchant-group" data-merchant={id} key={id}>
-              {geom.tiles.map((p, ti) => {
+              {geom.tiles.map((r, ti) => {
                 const type = m?.tiles[ti];
                 if (type === undefined) return null;
                 return (
@@ -496,24 +494,52 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
                     key={`${id}-tile-${ti}`}
                     className="board-merchant-tile"
                     href={`/assets/merchants/${type}.png`}
-                    x={p.x - MERCHANT_TILE_W / 2}
-                    y={p.y - MERCHANT_TILE_H / 2}
-                    width={MERCHANT_TILE_W}
-                    height={MERCHANT_TILE_H}
+                    x={r.x}
+                    y={r.y}
+                    width={r.w}
+                    height={r.h}
                   />
                 );
               })}
-              {geom.beer.slice(0, m?.beer ?? 0).map((p, bi) => (
-                <image
-                  key={`${id}-beer-${bi}`}
-                  className="board-merchant-beer"
-                  href="/assets/beer.png"
-                  x={p.x - 55}
-                  y={p.y - 55}
-                  width={110}
-                  height={110}
-                />
-              ))}
+              {geom.beer.map((r, bi) => {
+                // 啤酒格:有桶贴桶(空的格保持印刷空框);非 blank 板块旁才会放桶
+                const filled = bi < (m?.beer ?? 0);
+                if (!filled) return null;
+                return (
+                  <image
+                    key={`${id}-beer-${bi}`}
+                    className="board-merchant-beer"
+                    href="/assets/beer.png"
+                    x={r.x}
+                    y={r.y}
+                    width={r.w}
+                    height={r.h}
+                  />
+                );
+              })}
+              {/* 剩余酒数 token(该商人位总桶数) */}
+              {(m?.beer ?? 0) > 0 && geom.beer.length > 0 ? (
+                <g className="merchant-beer-count" data-testid={`merchant-beer-${id}`}>
+                  <rect
+                    x={geom.beer[geom.beer.length - 1]!.x + geom.beer[geom.beer.length - 1]!.w + 8}
+                    y={geom.beer[geom.beer.length - 1]!.y + geom.beer[geom.beer.length - 1]!.h / 2 - 26}
+                    width={86}
+                    height={52}
+                    rx={12}
+                    fill="#14100a"
+                    opacity={0.9}
+                  />
+                  <text
+                    x={geom.beer[geom.beer.length - 1]!.x + geom.beer[geom.beer.length - 1]!.w + 51}
+                    y={geom.beer[geom.beer.length - 1]!.y + geom.beer[geom.beer.length - 1]!.h / 2 + 12}
+                    textAnchor="middle"
+                    fontSize={34}
+                    fill="#f3e9c8"
+                  >
+                    ×{m!.beer}
+                  </text>
+                </g>
+              ) : null}
             </g>
           );
         })}
