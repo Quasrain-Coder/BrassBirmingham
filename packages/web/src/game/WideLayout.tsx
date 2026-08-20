@@ -8,7 +8,6 @@ import type { PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { PLAYER_COLORS } from '../board/BoardSvg';
 import { describeAction } from './display';
-import { playerName } from './Panels';
 import type { LogEntry } from './store';
 
 /** 本轮每玩家行动数(运河首轮 1,其余 2)。 */
@@ -40,7 +39,6 @@ export function RoundInfo({
   const rank = state.turnOrder.indexOf(seat) + 1;
   const start = roundStartSeq(state, seq);
   const acts = log.filter((e) => e.seq >= start && e.player === seat);
-  const before = p.money + p.spentThisRound;
   const active = state.turnOrder[state.currentPlayerIdx] === seat;
   return (
     <div
@@ -51,13 +49,10 @@ export function RoundInfo({
       <span className="round-info-rank" style={{ borderColor: PLAYER_COLORS[seat] }}>
         {rank === -1 ? '—' : `#${rank}`}
       </span>
-      <span className="round-info-money">
-        前 £{before} · 开销 £{p.spentThisRound} · 后 £{p.money}
-      </span>
       <span className="round-info-acts">
         {acts.length > 0 ? acts.map((a) => describeAction(a.action)).join('；') : '本回合未行动'}
       </span>
-      <span className="round-info-name">{playerName(room ?? undefined, seat)}</span>
+      <span className="round-info-spent">开销 £{p.spentThisRound}</span>
     </div>
   );
 }

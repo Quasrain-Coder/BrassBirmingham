@@ -126,6 +126,11 @@ function GameBoard({
         thinkingSeats={thinkingSeats}
         buildPreview={myTurn && draft.buildPreview !== null ? { ...draft.buildPreview, player: seat } : null}
         beerMatches={myTurn ? draft.beerMatches : undefined}
+        linkPreview={
+          myTurn && draft.pickedLinks.length > 0
+            ? { links: draft.pickedLinks, player: seat, era: state.era }
+            : null
+        }
         onSlotClick={myTurn ? draft.clickSlot : undefined}
         onLinkClick={myTurn ? draft.clickLink : undefined}
       />
@@ -243,7 +248,6 @@ function GameBoard({
               </div>
             ))}
           </aside>
->>>>>>> 15d0f84 (feat(web): 宽屏布局模式——地图居中,左右两列面板铺开 + 本回合信息行)
         </div>
       ) : (
         <>

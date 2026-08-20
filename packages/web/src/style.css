@@ -908,8 +908,9 @@ body {
   color: #f3ead4;
 }
 
-.round-info-money {
+.round-info-spent {
   color: #c9b98a;
+  margin-left: auto;
 }
 
 .round-info-acts {
@@ -917,10 +918,6 @@ body {
   color: #8f96a3;
 }
 
-.round-info-name {
-  margin-left: auto;
-  color: #6b7280;
-}
 
 /* 经典布局容器(原样) */
 .game-screen:not(.wide) .player-boards {

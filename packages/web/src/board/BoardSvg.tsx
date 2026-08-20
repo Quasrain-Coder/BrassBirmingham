@@ -84,6 +84,8 @@ export interface BoardSvgProps {
   buildPreview?: { location: LocationId; slotIndex: number; industry: IndustryType; player: PlayerIndex } | null | undefined;
   /** 啤酒匹配线(resolved 卖货):啤酒来源 → 卖货地点(虚线动效)。 */
   beerMatches?: { from: LocationId | MerchantId; to: LocationId }[] | undefined;
+  /** 铺路预览:点选中的连线,暂放一个半透明玩家连接牌(确认前可改选,跟随移动)。 */
+  linkPreview?: { links: number[]; player: PlayerIndex; era: 'canal' | 'rail' } | null | undefined;
   onSlotClick?: ((location: LocationId, slotIndex: number) => void) | undefined;
   onLinkClick?: ((linkIndex: number) => void) | undefined;
 }
@@ -187,7 +189,7 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
   );
 }
 
-export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPreview, beerMatches, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
+export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPreview, beerMatches, linkPreview, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const highlightedLocations = new Set(highlights?.locations ?? []);
@@ -563,6 +565,30 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
 
       {/* 连线 token 顶层渲染（不被板块图遮挡） */}
       <g className="board-link-tokens">{linkTokens}</g>
+
+      {/* 铺路预览:点选中的连线暂放半透明玩家连接牌(确认前可改选,跟随移动) */}
+      {linkPreview !== null && linkPreview !== undefined ? (
+        <g className="link-preview" pointerEvents="none" opacity={0.62}>
+          {linkPreview.links.map((li) => {
+            const link = LINKS[li];
+            if (!link) return null;
+            const g = linkGeom(anchorOf(link.a), anchorOf(link.b), LINK_MIDPOINTS[li]);
+            return (
+              <g key={`link-preview-${li}`} data-testid={`link-preview-${li}`}>
+                <polyline
+                  points={g.pts}
+                  fill="none"
+                  stroke={playerColor(linkPreview.player)}
+                  strokeWidth={12}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <BuiltLinkToken mid={g.m} angle={g.angle} player={linkPreview.player} era={linkPreview.era} />
+              </g>
+            );
+          })}
+        </g>
+      ) : null}
 
       {/* 建造预览:确认前把非贴合预览 token 盖在目标槽位(倾斜+半透明) */}
       {buildPreview

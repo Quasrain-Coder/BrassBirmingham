@@ -129,13 +129,11 @@ describe('<GameScreen>', () => {
     // 4p:左列 2 个席位、右列 2 个席位,面板全部铺开(defaultOpen)
     expect(container.querySelectorAll('.wide-col-left .wide-seat')).toHaveLength(2);
     expect(container.querySelectorAll('.wide-col-right .wide-seat')).toHaveLength(2);
-    // 本回合信息行:顺位徽标 + 金钱行(前/开销/后)
+    // 本回合信息行:顺位徽标 + 本回合行动 + 开销(钱数总额在面板头部,不重复)
     const info0 = screen.getByTestId(`round-info-${game.turnOrder[0]!}`);
     expect(info0).toHaveTextContent('#1');
-    expect(info0).toHaveTextContent('前 £17');
-    expect(info0).toHaveTextContent('开销 £0');
-    expect(info0).toHaveTextContent('后 £17');
     expect(info0).toHaveTextContent('本回合未行动');
+    expect(info0).toHaveTextContent('开销 £0');
     // 再点一次回到经典布局
     fireEvent.click(screen.getByTestId('toggle-layout'));
     expect(container.querySelector('.wide-grid')).toBeNull();
