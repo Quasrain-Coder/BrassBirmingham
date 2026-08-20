@@ -9,11 +9,12 @@
  */
 import { useState } from 'react';
 import type { ReactElement } from 'react';
-import { INCOME_LEVEL_SPACES, incomeLevelAt } from '@brass/engine';
+import { INCOME_LEVEL_SPACES, TILES, incomeLevelAt } from '@brass/engine';
 import type { Action, Card, IndustryType, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { INDUSTRY_STYLE, PLAYER_COLORS } from '../board/BoardSvg';
 import { cardFaceKey, cardName, describeAction, industryName, locationName } from './display';
+import { INDUSTRY_ORDER } from './interactions';
 import type { LogEntry } from './store';
 
 /** 座位显示名：有房间信息用昵称，否则 玩家{seat+1}。 */
@@ -199,14 +200,12 @@ export function PlayerBoard({
       });
     }
   }
-  // 面板堆叠：剩余未建板块（players[i].tiles 已按产业分组、等级升序）
-  const stackByIndustry = new Map<IndustryType, { level: number; count: number }[]>();
+  // 面板堆叠：按原版玩家板展示全部板块（TILES 数值表），每级 = 官方缩略图 + 剩余数 +
+  // 翻面得分/收入增加；剩余数从 players[i].tiles 数出（建完置灰）。
+  const remainingByTile = new Map<string, number>();
   for (const def of self.tiles) {
-    const list = stackByIndustry.get(def.industry) ?? [];
-    const last = list[list.length - 1];
-    if (last !== undefined && last.level === def.level) last.count += 1;
-    else list.push({ level: def.level, count: 1 });
-    stackByIndustry.set(def.industry, list);
+    const key = `${def.industry}-${def.level}`;
+    remainingByTile.set(key, (remainingByTile.get(key) ?? 0) + 1);
   }
 
   return (
@@ -267,24 +266,39 @@ export function PlayerBoard({
           </div>
           <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
             <h4>面板堆叠（未建）</h4>
-            {self.tiles.length === 0 ? (
-              <p className="board-empty">全部建完</p>
-            ) : (
-              [...stackByIndustry.entries()].map(([ind, list]) => (
-                <div key={ind} className="board-ind">
-                  <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
-                    {industryName(ind)}
-                  </span>
-                  <span className="board-ind-list">
-                    {list.map((t) => (
-                      <span key={t.level} className="board-stack-item">
-                        Lv{t.level} ×{t.count}
+            {INDUSTRY_ORDER.map((ind) => (
+              <div key={ind} className="board-ind">
+                <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
+                  {industryName(ind)}
+                </span>
+                <span className="board-ind-list">
+                  {TILES.filter((t) => t.industry === ind).map((def) => {
+                    const remaining = remainingByTile.get(`${ind}-${def.level}`) ?? 0;
+                    const cost =
+                      `£${def.costMoney}` +
+                      (def.costCoal > 0 ? ` 煤${def.costCoal}` : '') +
+                      (def.costIron > 0 ? ` 铁${def.costIron}` : '');
+                    return (
+                      <span
+                        key={def.level}
+                        className={`stack-tile${remaining === 0 ? ' exhausted' : ''}`}
+                        data-testid={`player-board-stack-${seat}-${ind}-${def.level}`}
+                        title={`${industryName(ind)} Lv${def.level}｜建造成本 ${cost}｜翻面得 ${def.vp} 分、收入 +${def.incomeAdvance} 级`}
+                      >
+                        <img
+                          src={`/assets/tiles/${ind}-${def.level}-${colorKey}.png`}
+                          alt={`${industryName(ind)} Lv${def.level}`}
+                        />
+                        <span className="stack-tile-count">×{remaining}</span>
+                        <span className="stack-tile-sub">
+                          Lv{def.level}｜翻 {def.vp}分 +{def.incomeAdvance}收
+                        </span>
                       </span>
-                    ))}
-                  </span>
-                </div>
-              ))
-            )}
+                    );
+                  })}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       ) : null}

@@ -46,13 +46,30 @@ describe('<PlayerBoard>', () => {
     expect(screen.getByTestId('player-board-meta-0')).toHaveTextContent('£30');
     expect(screen.getByTestId('player-board-meta-0')).toHaveTextContent('12 分');
     expect(screen.getByTestId('player-board-built-0')).toHaveTextContent('尚未建造');
-    // 堆叠按产业分组：棉纺 Lv1-3、制造 Lv1-8 等
+    // 堆叠按原版玩家板：每产业每级缩略图 + 剩余数 + 翻面得分/收入
     const stack = screen.getByTestId('player-board-stack-0');
     expect(stack).toHaveTextContent('棉纺厂');
     expect(stack).toHaveTextContent('制造厂');
-    expect(stack).toHaveTextContent('陶器厂');
-    expect(stack).toHaveTextContent('Lv5 ×1');
-    expect(stack).toHaveTextContent('Lv8 ×2');
+    // 陶器厂 Lv5：剩 1 块，翻面 20 分 +5 收（engine TILES 数值）
+    const pot5 = screen.getByTestId('player-board-stack-0-pottery-5');
+    expect(pot5).toHaveTextContent('×1');
+    expect(pot5).toHaveTextContent('翻 20分 +5收');
+    expect(pot5.querySelector('img')?.getAttribute('src')).toBe('/assets/tiles/pottery-5-purple.png');
+    // 制造厂 Lv8：2 块
+    expect(screen.getByTestId('player-board-stack-0-manufacturer-8')).toHaveTextContent('×2');
+  });
+
+  it('板块建造后堆叠剩余数减少', () => {
+    const state = freshState();
+    const p0 = state.players[0];
+    if (p0 === undefined) throw new Error('fixture 缺玩家 0');
+    const before = p0.tiles.filter((t) => t.industry === 'cotton' && t.level === 1).length;
+    p0.tiles = p0.tiles.filter((t) => !(t.industry === 'cotton' && t.level === 1));
+    render(<PlayerBoard state={state} seat={0} defaultOpen />);
+    const tile = screen.getByTestId('player-board-stack-0-cotton-1');
+    expect(before).toBe(3);
+    expect(tile).toHaveTextContent('×0');
+    expect(tile.classList.contains('exhausted')).toBe(true);
   });
 
   it('已建板块渲染官方板块缩略图（含翻面态）', () => {
