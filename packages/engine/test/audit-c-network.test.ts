@@ -77,7 +77,7 @@ describe('① 邻接：新 Link 必须与己方 network 相邻', () => {
 
   it('己方 Link 的商人位端点也计入 network（birmingham-oxford → 可铺 redditch-oxford）', () => {
     const s = newGame(4, 7);
-    s.board.links.push({ linkIndex: 5, player: 0 }); // #6 birmingham-oxford（自己）
+    s.board.links.push({ linkIndex: 5, player: 0, era: s.era }); // #6 birmingham-oxford（自己）
     oneCard(s, 0);
     expect(playerNetwork(s, 0).has('oxford')).toBe(true);
     const links = singleLinkSet(s, 0);
@@ -107,7 +107,7 @@ describe('① 邻接：新 Link 必须与己方 network 相邻', () => {
 
   it('Kidderminster-Worcester Link #30 同时连接南农场，且该线只能放 1 条', () => {
     const s = newGame(4, 7);
-    s.board.links.push({ linkIndex: 29, player: 0 }); // #30（自己）
+    s.board.links.push({ linkIndex: 29, player: 0, era: s.era }); // #30（自己）
     oneCard(s, 0);
     // 三端点连通：两镇与 farm-south 互相连通
     expect(playerNetwork(s, 0).has('farm-south')).toBe(true);
@@ -305,7 +305,7 @@ describe('⑦ 占用线不可再放', () => {
   it('对手已占的相邻线不枚举、apply 拒绝', () => {
     const s = newGame(4, 7);
     withTile(s, 0, 'worcester', 'cotton');
-    s.board.links.push({ linkIndex: 28, player: 1 }); // 对手占了 #29 gloucester-worcester
+    s.board.links.push({ linkIndex: 28, player: 1, era: s.era }); // 对手占了 #29 gloucester-worcester
     const cardId = oneCard(s, 0);
     expect(singleLinkSet(s, 0)).toEqual(new Set([9, 29]));
     expect(() => applyNetwork(s, 0, { type: 'network', cardId, links: [28] })).toThrowError(

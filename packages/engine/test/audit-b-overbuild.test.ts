@@ -64,7 +64,7 @@ function withTile(
 }
 
 function withLink(s: GameState, linkIndex: number, player: PlayerIndex): void {
-  s.board.links.push({ linkIndex, player });
+  s.board.links.push({ linkIndex, player, era: s.era });
 }
 
 const builds = (acts: Action[]): Extract<Action, { type: 'build' }>[] =>

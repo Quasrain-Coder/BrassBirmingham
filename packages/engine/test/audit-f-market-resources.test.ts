@@ -31,7 +31,7 @@ function setHand(s: GameState, player: PlayerIndex, cards: Card[]): void {
 
 /** 手工铺 Link（linkIndex 0 基 = 规则参考 #N - 1）。 */
 function withLink(s: GameState, linkIndex: number, player: PlayerIndex): void {
-  s.board.links.push({ linkIndex, player });
+  s.board.links.push({ linkIndex, player, era: s.era });
 }
 
 /** 手工放板块（绕过建造校验）。 */
