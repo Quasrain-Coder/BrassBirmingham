@@ -219,21 +219,21 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {state.turnOrder.slice(0, Math.ceil(state.playerCount / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} compact />
                 <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} />
               </div>
             ))}
           </aside>
           <div className="wide-center">
             <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
+            {actionEl}
             {boardEl}
             {handEl}
-            {actionEl}
           </div>
           <aside className="wide-col wide-col-right">
             {state.turnOrder.slice(Math.ceil(state.playerCount / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} compact />
                 <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} />
               </div>
             ))}

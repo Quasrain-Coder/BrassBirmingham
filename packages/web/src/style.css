@@ -44,6 +44,45 @@ body {
   gap: 12px;
 }
 
+/* 宽屏布局:占满视口宽度(27 寸全屏/小屏都不留白) */
+.game-screen.wide {
+  max-width: none;
+}
+
+/* 宽屏侧列紧凑面板:单行头部(不换行,名字截断) */
+.player-board.compact {
+  border: 1px solid #3a3226;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(38, 34, 27, 0.7), rgba(26, 29, 35, 0.85));
+  overflow: hidden;
+}
+
+.player-board.compact .compact-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  border-bottom: 1px solid #3a3226;
+  font-size: 0.85rem;
+}
+
+.player-board.compact .compact-head .player-name {
+  max-width: 7em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.player-board.compact .board-stack {
+  padding: 6px 8px 8px;
+}
+
+.player-board.compact .board-stack-head {
+  justify-content: flex-end;
+}
+
 .hand-bar .own-hand {
   display: flex;
   flex-wrap: wrap;

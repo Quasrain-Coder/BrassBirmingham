@@ -223,6 +223,7 @@ export function PlayerBoard({
   room,
   defaultOpen = false,
   pulse = false,
+  compact = false,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -231,8 +232,10 @@ export function PlayerBoard({
   defaultOpen?: boolean;
   /** 行动播报：该座位刚执行行动,面板描边脉冲(聚光灯窗口内,约 5s)。 */
   pulse?: boolean;
+  /** 宽屏紧凑模式:单行头部(不换行),省略 meta 与已建板块区,默认铺开。 */
+  compact?: boolean;
 }): ReactElement {
-  const [open, setOpen] = useState<boolean>(defaultOpen);
+  const [open, setOpen] = useState<boolean>(defaultOpen || compact);
   // 堆叠视图:版图(官方玩家面板美术)/明细(#19 列表)——记住玩家选择
   // (jsdom 等环境无 localStorage,降级为会话内状态)
   const storage = typeof localStorage === 'undefined' ? null : localStorage;
@@ -246,8 +249,101 @@ export function PlayerBoard({
   const self = state.players[seat];
   if (self === undefined) return <></>;
   const level = incomeLevelAt(self.incomeSpace);
-  const [levelStart, levelEnd] = INCOME_LEVEL_SPACES(level);
   const colorKey = ['purple', 'yellow', 'orange', 'teal'][seat] ?? 'purple';
+
+  // 面板堆叠：按原版玩家板展示全部板块（TILES 数值表），每级 = 官方缩略图 + 剩余数 +
+  // 翻面得分/收入增加；剩余数从 players[i].tiles 数出（建完置灰）。
+  const remainingByTile = new Map<string, number>();
+  for (const def of self.tiles) {
+    const key = `${def.industry}-${def.level}`;
+    remainingByTile.set(key, (remainingByTile.get(key) ?? 0) + 1);
+  }
+
+  if (compact) {
+    return (
+      <section
+        className={`player-board compact${pulse ? ' pulse' : ''}`}
+        data-testid={`player-board-${seat}`}
+        style={pulse ? ({ '--pulse-color': PLAYER_COLORS[seat] ?? '#f0c964' } as CSSProperties) : undefined}
+      >
+        <div className="compact-head">
+          <ColorDot seat={seat} />
+          <span className="player-name">{playerName(room, seat)}</span>
+          <AIBadge room={room} seat={seat} />
+          <span className={`level-chip${seat === state.turnOrder[state.currentPlayerIdx] ? ' current' : ''}`}>
+            收入等级 {level}
+          </span>
+          <span className="head-money">
+            <img className="coin-icon" src="/assets/coins/1.png" alt="" />£{self.money}
+          </span>
+          <span className="head-vp">{self.vp} 分</span>
+        </div>
+        <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
+          <div className="board-stack-head">
+            <span className="stack-view-toggle" role="group" aria-label="堆叠视图切换">
+              <button
+                type="button"
+                className={matView ? 'active' : ''}
+                data-testid={`stack-view-mat-${seat}`}
+                onClick={() => setMatView(true)}
+              >
+                版图
+              </button>
+              <button
+                type="button"
+                className={matView ? '' : 'active'}
+                data-testid={`stack-view-list-${seat}`}
+                onClick={() => setMatView(false)}
+              >
+                明细
+              </button>
+            </span>
+          </div>
+          {matView ? (
+            <PlayerMat
+              tiles={self.tiles}
+              playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
+              colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
+            />
+          ) : (
+            INDUSTRY_ORDER.map((ind) => (
+              <div key={ind} className="board-ind">
+                <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
+                  {industryName(ind)}
+                </span>
+                <span className="board-ind-list">
+                  {TILES.filter((t) => t.industry === ind).map((def) => {
+                    const remaining = remainingByTile.get(`${ind}-${def.level}`) ?? 0;
+                    const cost =
+                      `£${def.costMoney}` +
+                      (def.costCoal > 0 ? ` 煤${def.costCoal}` : '') +
+                      (def.costIron > 0 ? ` 铁${def.costIron}` : '');
+                    return (
+                      <span
+                        key={def.level}
+                        className={`stack-tile${remaining === 0 ? ' exhausted' : ''}`}
+                        data-testid={`player-board-stack-${seat}-${ind}-${def.level}`}
+                        title={`${industryName(ind)} Lv${def.level}｜建造成本 ${cost}｜翻面得 ${def.vp} 分、收入 +${def.incomeAdvance} 级`}
+                      >
+                        <img
+                          src={`/assets/tiles/${ind}-${def.level}-${colorKey}.png`}
+                          alt={`${industryName(ind)} Lv${def.level}`}
+                        />
+                        <span className="stack-tile-count">×{remaining}</span>
+                        <span className="stack-tile-sub">
+                          Lv{def.level}｜翻 {def.vp}分 +{def.incomeAdvance}收
+                        </span>
+                      </span>
+                    );
+                  })}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+    );
+  }
 
   // 聚合已建板块（board.slots 全部城市 × 槽位，挑出属于本座位的）
   const builtTiles: { industry: IndustryType; level: number; flipped: boolean; resources: number; location: string }[] = [];
@@ -263,13 +359,7 @@ export function PlayerBoard({
       });
     }
   }
-  // 面板堆叠：按原版玩家板展示全部板块（TILES 数值表），每级 = 官方缩略图 + 剩余数 +
-  // 翻面得分/收入增加；剩余数从 players[i].tiles 数出（建完置灰）。
-  const remainingByTile = new Map<string, number>();
-  for (const def of self.tiles) {
-    const key = `${def.industry}-${def.level}`;
-    remainingByTile.set(key, (remainingByTile.get(key) ?? 0) + 1);
-  }
+  const [levelStart, levelEnd] = INCOME_LEVEL_SPACES(level);
 
   return (
     <section
