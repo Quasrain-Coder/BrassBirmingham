@@ -76,10 +76,11 @@ describe('<BoardSvg>', () => {
     expect(slot.classList.contains('highlighted')).toBe(true);
   });
 
-  it('已建板块渲染官方板块图（产业-等级-玩家色），资源数角标 resources>0 才显示', () => {
+  it('已建板块渲染官方板块图（产业-等级-玩家色），资源 token 按数渲染', () => {
     const state = freshState();
     const coal = tileDef('coal', 1);
-    if (coal === undefined) throw new Error('缺 coal level 1 TileDef');
+    const brewery = tileDef('brewery', 1);
+    if (coal === undefined || brewery === undefined) throw new Error('缺 TileDef');
     state.board.slots['birmingham']![0] = {
       tile: coal,
       player: 0,
@@ -92,16 +93,29 @@ describe('<BoardSvg>', () => {
       flipped: true,
       resources: 0,
     };
+    state.board.slots['derby']![0] = {
+      tile: brewery,
+      player: 2,
+      flipped: false,
+      resources: 1,
+    };
     const { container } = render(<BoardSvg state={state} />);
     const tiles = container.querySelectorAll('g[data-location="birmingham"] image.board-tile');
     expect(tiles).toHaveLength(2);
     expect(tiles[0]?.getAttribute('href')).toBe('/assets/tiles/coal-1-purple.png');
     expect(tiles[1]?.getAttribute('href')).toBe('/assets/tiles/coal-1-yellow-back.png');
+    // 资源 token：3 煤方块 + 1 啤酒桶；数字角标同步
     const badges = container.querySelectorAll(
       'g[data-location="birmingham"] .tile-resources',
     );
     expect(badges).toHaveLength(1);
     expect(badges[0]?.textContent).toContain('3');
+    expect(
+      container.querySelectorAll('g[data-location="birmingham"] .tile-resource-tokens rect'),
+    ).toHaveLength(6); // 3 方块 ×（本体+高光）
+    expect(
+      container.querySelectorAll('g[data-location="derby"] .tile-resource-tokens image'),
+    ).toHaveLength(1);
   });
 
   it('煤/铁市场按 filled 渲染方块（初始煤 13 铁 8）', () => {
