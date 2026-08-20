@@ -10,5 +10,5 @@ dist/
 coverage/
 tmp_rules/
 
-# 官方游戏素材（npm run fetch-assets 本地生成，不进 git）
-packages/web/public/assets/
+# 官方游戏素材随仓库分发（个人非商用）；raw/ 为下载缓存，可用 fetch-assets 重建
+packages/web/public/assets/raw/
