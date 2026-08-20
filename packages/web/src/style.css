@@ -827,6 +827,26 @@ body {
   flex: none;
 }
 
+/* 新一轮/新时代播报:红字横幅(约 5 秒淡出,与行动横幅错位下排) */
+.round-banner {
+  position: absolute;
+  top: 8.5%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 6px 22px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(20, 16, 10, 0.9), rgba(20, 16, 10, 0.78));
+  border: 1px solid #7a2e22;
+  color: #e8574a;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  white-space: nowrap;
+  animation: spotlight-banner-fade 5s ease-in forwards;
+  pointer-events: none;
+}
+
 @keyframes spotlight-banner-fade {
   0%,
   78% {
@@ -1175,6 +1195,14 @@ body {
   gap: 8px;
 }
 
+/* 历史滚动框:限高 + 滚轮上翻查看历史(贴底时新行动自动跟底) */
+.log-panel .log-scroll {
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding-right: 4px;
+}
+
 .log-panel li {
   padding: 8px 12px;
   border: 1px solid #2e2b23;
@@ -1469,9 +1497,9 @@ body {
   filter: drop-shadow(10px 14px 10px rgba(0, 0, 0, 0.55));
 }
 
-/* 顺位轨:当前玩家金圈辉光、AI 思考呼吸(SVG 内,滤镜像素域) */
+/* 顺位轨:当前玩家白圈辉光(不与黄色玩家混淆)、AI 思考呼吸(SVG 内,滤镜像素域) */
 .board-turn-track .current circle {
-  filter: drop-shadow(0 0 14px rgba(240, 201, 100, 0.85));
+  filter: drop-shadow(0 0 16px rgba(245, 242, 232, 0.9)) drop-shadow(0 0 4px rgba(20, 16, 10, 0.8));
 }
 
 .board-turn-track .thinking image {

@@ -7,7 +7,7 @@
  *
  * 煤/铁市场与收入轨已搬上官方版图（BoardSvg），不再有独立侧边栏组件。
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactElement } from 'react';
 import { INCOME_LEVEL_SPACES, TILES, incomeLevelAt } from '@brass/engine';
 import type { Action, Card, IndustryType, PlayerIndex } from '@brass/engine';
@@ -413,13 +413,25 @@ export function LogPanel({
   log: LogEntry[];
   room?: RoomState | undefined;
 }): ReactElement {
+  const listRef = useRef<HTMLOListElement>(null);
+  // 历史滚动框:用户滚轮上翻查看历史时保持位置;停在底部附近时新行动自动跟底
+  const stickToBottom = useRef(true);
+  useEffect(() => {
+    const el = listRef.current;
+    if (el !== null && stickToBottom.current) el.scrollTop = el.scrollHeight;
+  }, [log.length]);
+  const onScroll = (): void => {
+    const el = listRef.current;
+    if (el === null) return;
+    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  };
   return (
     <section className="log-panel">
       <h3>行动日志</h3>
       {log.length === 0 ? (
         <p data-testid="log-empty">暂无行动</p>
       ) : (
-        <ol>
+        <ol ref={listRef} className="log-scroll" onScroll={onScroll}>
           {log.map((entry) => (
             <li key={entry.seq} data-testid="log-entry">
               #{entry.seq} {playerName(room, entry.player)}：{actionSummary(entry.action)}

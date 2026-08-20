@@ -543,7 +543,7 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, onSlotCl
                 cy={b.y}
                 r={105}
                 fill="none"
-                stroke={isCurrent ? '#f0c964' : playerColor(seat)}
+                stroke={isCurrent ? '#f5f2e8' : playerColor(seat)}
                 strokeWidth={isCurrent ? 14 : 8}
               />
               {spent > 0 ? (

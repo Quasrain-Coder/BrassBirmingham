@@ -7,7 +7,7 @@
  * - 非本人回合：棋盘只读（不传点击回调、高亮为空），ActionBar 显示"等待 X 行动"。
  */
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Action, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { BoardSvg } from '../board/BoardSvg';
@@ -76,6 +76,24 @@ function GameBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastSeq]);
 
+  // 新一轮/新时代红字播报（约 5 秒）：round 递增或 era 切换时触发;首帧不播
+  const [roundBanner, setRoundBanner] = useState<string | null>(null);
+  const prevRoundRef = useRef<{ era: string; round: number } | null>(null);
+  useEffect(() => {
+    const prev = prevRoundRef.current;
+    prevRoundRef.current = { era: state.era, round: state.round };
+    if (prev === null) return;
+    if (prev.era !== state.era) {
+      setRoundBanner('进入铁路时代！');
+    } else if (state.round > prev.round) {
+      setRoundBanner(`第 ${state.round} 轮`);
+    } else {
+      return;
+    }
+    const t = setTimeout(() => setRoundBanner(null), SPOTLIGHT_DURATION_MS);
+    return () => clearTimeout(t);
+  }, [state.era, state.round]);
+
   return (
     <div className="game-screen">
       <header className="game-screen-head">
@@ -121,6 +139,11 @@ function GameBoard({
               style={{ background: PLAYER_COLORS[spotlight.player] ?? '#7f8c8d' }}
             />
             {playerName(room ?? undefined, spotlight.player)}：{spotlight.text}
+          </div>
+        ) : null}
+        {roundBanner !== null ? (
+          <div className="round-banner" data-testid="round-banner">
+            {roundBanner}
           </div>
         ) : null}
       </div>
