@@ -2,11 +2,11 @@
  * 玩家建筑版图(官方玩家面板美术版):mat 底图 + 各产业堆叠状态叠加。
  *
  * 叠加规则(数据来自 players[i].tiles,面板为公开信息):
- * - 当前栈顶(可建的最低级)框:**按剩余数量叠放实物板块 token**(玩家色,
- *   逐层偏移,如实体游戏的板块堆),研发/建造移除后堆叠随之减少;
- * - 栈顶框外圈:玩家色描边 + 剩余数角标(始终框住最新可用等级);
- * - 已耗尽等级的框:暗色遮罩(该级板块已全部建出/研发移除);
- * - 更高等级框:原样透出(即将解锁),不叠加。
+ * - **每个有剩余的等级框都叠放实物板块 token**(玩家色,逐层偏移,如实体
+ *   游戏的板块堆),研发/建造移除后堆叠随之减少;
+ * - 当前栈顶(可建的最低级)框:额外加玩家色描边 + 剩余数角标(始终框住
+ *   最新可用等级);
+ * - 已耗尽等级的框:暗色遮罩(该级板块已全部建出/研发移除)。
  */
 import type { ReactElement } from 'react';
 import type { IndustryType } from '@brass/engine';
@@ -54,7 +54,21 @@ export function PlayerMat({
           const isTop = slot.level === topLevel;
           return (
             <g key={`${ind}-${slot.level}`} data-mat-slot={`${ind}-${slot.level}`}>
-              {left === 0 ? (
+              {left > 0 ? (
+                // 实物堆叠:每个有剩余的等级框都放玩家色板块 token(逐层偏移)
+                <g className="mat-pile">
+                  {Array.from({ length: left }, (_, i) => (
+                    <image
+                      key={i}
+                      href={`/assets/tiles/${ind}-${slot.level}-${colorKey}.png`}
+                      x={slot.x + i * PILE_DX}
+                      y={slot.y + i * PILE_DY}
+                      width={slot.w}
+                      height={slot.h}
+                    />
+                  ))}
+                </g>
+              ) : (
                 <rect
                   className="mat-slot-exhausted"
                   x={slot.x}
@@ -63,22 +77,9 @@ export function PlayerMat({
                   height={slot.h}
                   rx={10}
                 />
-              ) : null}
+              )}
               {isTop ? (
                 <>
-                  {/* 实物堆叠:底块贴框,逐层右上偏移(玩家色板块 token) */}
-                  <g className="mat-pile">
-                    {Array.from({ length: left }, (_, i) => (
-                      <image
-                        key={i}
-                        href={`/assets/tiles/${ind}-${slot.level}-${colorKey}.png`}
-                        x={slot.x + i * PILE_DX}
-                        y={slot.y + i * PILE_DY}
-                        width={slot.w}
-                        height={slot.h}
-                      />
-                    ))}
-                  </g>
                   <rect
                     className="mat-slot-top"
                     x={slot.x - 6}

@@ -99,6 +99,14 @@ describe('<PlayerBoard>', () => {
     // 初始局面的制造厂 I(剩 1)→ 单块堆叠
     const m1 = container.querySelector('[data-mat-slot="manufacturer-1"]');
     expect(m1?.querySelectorAll('.mat-pile image')).toHaveLength(1);
+    // 更高等级框同样放堆叠:制造厂 VIII(剩 2)、棉 III(剩 3)
+    const m8 = container.querySelector('[data-mat-slot="manufacturer-8"]');
+    expect(m8?.querySelectorAll('.mat-pile image')).toHaveLength(2);
+    expect(m8?.querySelector('.mat-slot-top')).toBeNull(); // 非栈顶无描边
+    const c3 = container.querySelector('[data-mat-slot="cotton-3"]');
+    expect(c3?.querySelectorAll('.mat-pile image')).toHaveLength(3);
+    // 全部有剩余时无遮罩(本场景棉 I 已移除 → 仅 1 个遮罩)
+    expect(container.querySelectorAll('.mat-slot-exhausted')).toHaveLength(1);
     // 初始局面:每产业栈顶都是 Lv1(制造厂 8 框 + 其余 5 产业 = 6 个描边)
     expect(container.querySelectorAll('.mat-slot-top')).toHaveLength(6);
     // 切换明细后列表出现、版图消失
