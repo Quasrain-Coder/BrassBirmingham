@@ -30,6 +30,7 @@ import {
   MERCHANT_TILE_H,
   MERCHANT_TILE_W,
   SLOT_CENTERS,
+  SLOT_RECTS,
   SLOT_SIZE,
   VP_TRACK,
   locationAnchor,
@@ -330,30 +331,44 @@ export function BoardSvg({ state, highlights, spotlight, onSlotClick, onLinkClic
       <g className="board-locations">
         {Object.entries(LOCATIONS).map(([id]) => {
           const centers = SLOT_CENTERS[id as LocationId] ?? [];
+          const rects = SLOT_RECTS[id as LocationId] ?? [];
           const placed = state.board.slots[id as LocationId] ?? [];
           return (
             <g className="board-location" data-location={id} key={id}>
               {centers.map((c, si) => {
                 const tile = placed[si] ?? null;
                 const hl = highlightedSlots.has(`${id}:${si}`);
+                // 印刷框精确矩形(几何标定);兜底退回中心方块
+                const r = rects[si] ?? { x: c.x - SLOT_SIZE / 2, y: c.y - SLOT_SIZE / 2, w: SLOT_SIZE, h: SLOT_SIZE };
+                const fresh =
+                  tile !== null &&
+                  spotlight != null &&
+                  tile.player === spotlight.player &&
+                  spotlight.locations.includes(id as LocationId);
                 return (
                   <g key={`${id}-slot-${si}`}>
                     {tile ? (
                       <g pointerEvents="none">
-                        <image
-                          className="board-tile"
-                          href={tileImage(tile.tile.industry, tile.tile.level, tile.player, tile.flipped)}
-                          x={c.x - SLOT_SIZE / 2}
-                          y={c.y - SLOT_SIZE / 2}
-                          width={SLOT_SIZE}
-                          height={SLOT_SIZE}
-                        />
+                        {/* 贴合印刷框;刚放上的(聚光灯窗口内)带一点倾斜+立体感,过后回正 */}
+                        <g
+                          className={fresh ? 'tile-fresh' : undefined}
+                          transform={fresh ? `rotate(3 ${r.x + r.w / 2} ${r.y + r.h / 2})` : undefined}
+                        >
+                          <image
+                            className="board-tile"
+                            href={tileImage(tile.tile.industry, tile.tile.level, tile.player, tile.flipped)}
+                            x={r.x}
+                            y={r.y}
+                            width={r.w}
+                            height={r.h}
+                          />
+                        </g>
                         {tile.resources > 0 && !tile.flipped ? (
                           <>
                             <ResourceTokens cx={c.x} cy={c.y} industry={tile.tile.industry} count={tile.resources} />
                             <g className="tile-resources">
-                              <rect x={c.x + SLOT_SIZE / 2 - 62} y={c.y - SLOT_SIZE / 2} width={62} height={62} rx={12} fill="#14100a" opacity={0.85} />
-                              <text x={c.x + SLOT_SIZE / 2 - 31} y={c.y - SLOT_SIZE / 2 + 44} textAnchor="middle" fontSize={40} fill="#f3e9c8">
+                              <rect x={r.x + r.w - 62} y={r.y + r.h - 62} width={62} height={62} rx={12} fill="#14100a" opacity={0.85} />
+                              <text x={r.x + r.w - 31} y={r.y + r.h - 18} textAnchor="middle" fontSize={40} fill="#f3e9c8">
                                 {tile.resources}
                               </text>
                             </g>
@@ -364,10 +379,10 @@ export function BoardSvg({ state, highlights, spotlight, onSlotClick, onLinkClic
                     {hl && !tile ? (
                       <rect
                         className="board-slot-hl"
-                        x={c.x - SLOT_SIZE / 2}
-                        y={c.y - SLOT_SIZE / 2}
-                        width={SLOT_SIZE}
-                        height={SLOT_SIZE}
+                        x={r.x}
+                        y={r.y}
+                        width={r.w}
+                        height={r.h}
                         rx={16}
                         fill="#f0c964"
                         opacity={0.4}
@@ -381,17 +396,17 @@ export function BoardSvg({ state, highlights, spotlight, onSlotClick, onLinkClic
                       className={`board-slot${hl ? ' highlighted' : ''}`}
                       data-location={id}
                       data-slot-index={si}
-                      x={c.x - SLOT_SIZE / 2}
-                      y={c.y - SLOT_SIZE / 2}
-                      width={SLOT_SIZE}
-                      height={SLOT_SIZE}
+                      x={r.x}
+                      y={r.y}
+                      width={r.w}
+                      height={r.h}
                       fill="transparent"
                       onClick={onSlotClick ? () => onSlotClick(id as LocationId, si) : undefined}
                     />
                   </g>
                 );
               })}
-              {/* 城市中文铭牌（盖住英文印刷名） */}
+              {/* 城市中文铭牌（默认在英文印刷横幅正下方，遮路城侧置——几何校订） */}
               {CITY_LABEL[id as LocationId] ? (
                 <g className="city-label" pointerEvents="none">
                   {(() => {

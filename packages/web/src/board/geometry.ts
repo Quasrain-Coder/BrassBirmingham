@@ -117,12 +117,131 @@ export const SLOT_CENTERS: Record<LocationId, Point[]> = {
   'farm-south': [{ x: 2100, y: 4425 }],
 };
 
-/** 城市中文名标签锚点（印在英文名牌附近；下方偏移，特殊城另调）。 */
+export interface SlotRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * 各地点产业槽位印刷框的内框矩形，顺序与 `LOCATIONS[id].slots` 一致（6144 坐标系）。
+ * 标定方法：sharp 行/列亮度 profile 检测印刷白框亮线峰值，成对峰值取内沿；
+ * 全部 49 框经叠加目检逐框复核（含单/双图标槽与两个农场酿酒厂槽），框边精度 ±4px。
+ * 注意：部分城市印刷框实际位置与 SLOT_CENTERS 有 30-160px 偏差，
+ * token 渲染应使用本表而非中心点推算。
+ */
+export const SLOT_RECTS: Record<LocationId, SlotRect[]> = {
+  belper: [
+    { x: 3810, y: 1335, w: 185, h: 177 },
+    { x: 3998, y: 1335, w: 183, h: 177 },
+    { x: 4184, y: 1335, w: 176, h: 177 },
+  ],
+  derby: [
+    { x: 4031, y: 1825, w: 177, h: 185 },
+    { x: 3939, y: 2013, w: 176, h: 177 },
+    { x: 4119, y: 2013, w: 182, h: 177 },
+  ],
+  leek: [
+    { x: 3105, y: 1277, w: 185, h: 177 },
+    { x: 3293, y: 1277, w: 176, h: 177 },
+  ],
+  'stoke-on-trent': [
+    { x: 2636, y: 1381, w: 177, h: 177 },
+    { x: 2541, y: 1567, w: 176, h: 176 },
+    { x: 2730, y: 1567, w: 176, h: 176 },
+  ],
+  stone: [
+    { x: 2124, y: 1990, w: 176, h: 177 },
+    { x: 2304, y: 1990, w: 182, h: 176 },
+  ],
+  uttoxeter: [
+    { x: 3154, y: 1921, w: 186, h: 177 },
+    { x: 3343, y: 1921, w: 177, h: 177 },
+  ],
+  stafford: [
+    { x: 2497, y: 2365, w: 177, h: 177 },
+    { x: 2677, y: 2365, w: 183, h: 177 },
+  ],
+  'burton-on-trent': [
+    { x: 3627, y: 2481, w: 176, h: 177 },
+    { x: 3807, y: 2481, w: 183, h: 177 },
+  ],
+  cannock: [
+    { x: 2793, y: 2774, w: 176, h: 178 },
+    { x: 2978, y: 2774, w: 176, h: 177 },
+  ],
+  tamworth: [
+    { x: 3687, y: 2983, w: 177, h: 176 },
+    { x: 3869, y: 2983, w: 176, h: 176 },
+  ],
+  walsall: [
+    { x: 3018, y: 3235, w: 177, h: 176 },
+    { x: 3204, y: 3235, w: 176, h: 176 },
+  ],
+  wolverhampton: [
+    { x: 2373, y: 3142, w: 176, h: 177 },
+    { x: 2558, y: 3143, w: 176, h: 176 },
+  ],
+  coalbrookdale: [
+    { x: 1915, y: 3131, w: 176, h: 184 },
+    { x: 1821, y: 3319, w: 177, h: 176 },
+    { x: 2007, y: 3317, w: 177, h: 177 },
+  ],
+  dudley: [
+    { x: 2559, y: 3634, w: 176, h: 176 },
+    { x: 2744, y: 3633, w: 176, h: 177 },
+  ],
+  kidderminster: [
+    { x: 2280, y: 4047, w: 176, h: 178 },
+    { x: 2465, y: 4047, w: 176, h: 178 },
+  ],
+  worcester: [
+    { x: 2332, y: 4566, w: 177, h: 177 },
+    { x: 2513, y: 4566, w: 182, h: 177 },
+  ],
+  birmingham: [
+    { x: 3409, y: 3600, w: 176, h: 177 },
+    { x: 3596, y: 3600, w: 176, h: 177 },
+    { x: 3409, y: 3779, w: 177, h: 186 },
+    { x: 3596, y: 3779, w: 176, h: 186 },
+  ],
+  coventry: [
+    { x: 4232, y: 3727, w: 176, h: 176 },
+    { x: 4139, y: 3914, w: 176, h: 177 },
+    { x: 4319, y: 3914, w: 183, h: 177 },
+  ],
+  nuneaton: [
+    { x: 4047, y: 3387, w: 177, h: 177 },
+    { x: 4228, y: 3386, w: 183, h: 177 },
+  ],
+  redditch: [
+    { x: 3222, y: 4261, w: 177, h: 177 },
+    { x: 3402, y: 4261, w: 185, h: 177 },
+  ],
+  'farm-north': [{ x: 2180, y: 2724, w: 176, h: 177 }],
+  'farm-south': [{ x: 2023, y: 4346, w: 177, h: 177 }],
+};
+
+/**
+ * 城市中文铭牌锚点（铭牌中心，6144 坐标系）。
+ * 默认：槽位簇质心正下方（最深槽位底边 + 130）——英文印刷横幅之下，不遮英文名；
+ * 遮路/无横幅的城逐城侧置或偏移（CITY_LABEL_OVERRIDES，叠加图逐城目视校订）。
+ */
+const CITY_LABEL_OVERRIDES: Partial<Record<LocationId, Point>> = {
+  // 两个农场酿酒厂无英文横幅，右侧是铁路岔道 → 铭牌放槽位左侧（牌宽 340）
+  'farm-north': { x: 2180 - 24 - 170, y: 2724 + 88 },
+  'farm-south': { x: 2023 - 24 - 170, y: 4346 + 88 },
+  // 伯顿默认位左缘蹭 Burton–Tamworth 纵向轨道 → 右移 60
+  'burton-on-trent': { x: 3807 + 60, y: 2658 + 130 },
+};
+
 export const CITY_LABEL: Record<LocationId, Point> = Object.fromEntries(
-  Object.entries(SLOT_CENTERS).map(([id, pts]) => {
-    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
-    const my = Math.max(...pts.map((p) => p.y));
-    return [id, { x: Math.round(cx), y: my + 165 }];
+  Object.entries(SLOT_RECTS).map(([id, rects]) => {
+    const cx = rects.reduce((s, r) => s + r.x + r.w / 2, 0) / rects.length;
+    const bottom = Math.max(...rects.map((r) => r.y + r.h));
+    const fallback = { x: Math.round(cx), y: Math.round(bottom + 130) };
+    return [id, CITY_LABEL_OVERRIDES[id as LocationId] ?? fallback];
   }),
 ) as Record<LocationId, Point>;
 

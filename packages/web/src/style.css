@@ -1393,6 +1393,11 @@ body {
   filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.25));
 }
 
+/* 刚放上的建筑 token:轻微倾斜 + 投影立体感(聚光灯窗口约 5s,过后回正贴框) */
+.board-svg .tile-fresh {
+  filter: drop-shadow(10px 14px 10px rgba(0, 0, 0, 0.55));
+}
+
 .board-ind {
   display: flex;
   align-items: baseline;
