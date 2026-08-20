@@ -229,11 +229,15 @@ export const SLOT_RECTS: Record<LocationId, SlotRect[]> = {
  * 遮路/无横幅的城逐城侧置或偏移（CITY_LABEL_OVERRIDES，叠加图逐城目视校订）。
  */
 const CITY_LABEL_OVERRIDES: Partial<Record<LocationId, Point>> = {
-  // 两个农场酿酒厂无英文横幅，右侧是铁路岔道 → 铭牌放槽位左侧（牌宽 340）
-  'farm-north': { x: 2180 - 24 - 170, y: 2724 + 88 },
-  'farm-south': { x: 2023 - 24 - 170, y: 4346 + 88 },
+  // 两个农场酿酒厂无英文横幅 → 铭牌放槽位正下方
+  'farm-north': { x: 2268, y: 2956 },
+  'farm-south': { x: 2010, y: 4578 },
   // 伯顿默认位左缘蹭 Burton–Tamworth 纵向轨道 → 右移 60
   'burton-on-trent': { x: 3807 + 60, y: 2658 + 130 },
+  // 雷迪奇/考文垂/纳尼顿：默认位偏低 → 上移 35
+  redditch: { x: 3402, y: 4533 },
+  coventry: { x: 4319, y: 4186 },
+  nuneaton: { x: 4228, y: 3658 },
 };
 
 export const CITY_LABEL: Record<LocationId, Point> = Object.fromEntries(
