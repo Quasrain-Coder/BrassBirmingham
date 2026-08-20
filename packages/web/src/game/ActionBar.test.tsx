@@ -274,6 +274,7 @@ describe('<ActionBar>', () => {
         draft={draftFixture()}
         turnHold={null}
         seat={0}
+        canResetTurn={false}
         onConfirm={() => {}}
         onCancel={() => {}}
         onEndTurn={() => {}}
@@ -293,6 +294,7 @@ describe('<ActionBar>', () => {
         draft={draftFixture()}
         turnHold={null}
         seat={0}
+        canResetTurn={false}
         onConfirm={() => {}}
         onCancel={() => {}}
         onEndTurn={() => {}}
@@ -315,6 +317,7 @@ describe('<ActionBar>', () => {
         draft={draftFixture({ resolved: action })}
         turnHold={null}
         seat={0}
+        canResetTurn={false}
         onConfirm={() => {
           confirmed += 1;
         }}
@@ -346,6 +349,7 @@ describe('<ActionBar>', () => {
         })}
         turnHold={null}
         seat={0}
+        canResetTurn={false}
         onConfirm={() => {}}
         onCancel={() => {}}
         onEndTurn={() => {}}

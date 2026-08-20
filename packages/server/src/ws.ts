@@ -473,9 +473,24 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     void driveAI(entry);
   }
 
-  /** 重置回合：撤销本回合全部行动(恢复回合备份 + 删本回合落库行动),回到回合初。 */
+  /** 重置回合：撤销本回合全部行动(恢复回合备份 + 删本回合落库行动),回到回合初。
+   *  两种可用时机:① 回合打满被扣住(turnHold=本人);② 自己回合进行中
+   *  (actionsThisTurn>0,随时可反悔);其他情况报错。 */
   function handleResetTurn(msg: { token: string }): void {
-    const { entry } = heldEntry(msg);
+    if (typeof msg.token !== 'string') throw new WsError('bad-message', '需要 token');
+    const entry = sessionByToken.get(msg.token);
+    if (entry === undefined) throw new WsError('invalid-token', 'token 不属于任何进行中对局');
+    const seat = entry.tokenSeats.get(msg.token);
+    if (seat === undefined) throw new WsError('invalid-token', 'token 无效');
+    if (entry.turnHold !== null && entry.turnHold !== seat) {
+      throw new WsError('awaiting-turn-confirm', '等待回合确认：先结束或重置被扣住的回合');
+    }
+    const midTurn =
+      entry.turnHold === seat ||
+      (seat === entry.session.currentSeat && entry.session.state.actionsThisTurn > 0);
+    if (!midTurn) {
+      throw new WsError('no-turn-hold', '当前没有可重置的回合');
+    }
     if (!entry.session.resetTurn()) {
       throw new WsError('no-turn-backup', '回合备份不存在,无法重置');
     }

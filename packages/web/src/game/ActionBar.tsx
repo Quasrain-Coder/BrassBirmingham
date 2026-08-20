@@ -245,6 +245,8 @@ export interface ActionBarProps {
   /** 被扣住待确认的座位（= 本人时显示"结束回合/重置本回合"双按钮）。 */
   turnHold: PlayerIndex | null;
   seat: PlayerIndex;
+  /** 本人回合进行中且已行动过(显示"重置本回合"撤回按钮)。 */
+  canResetTurn: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   onEndTurn: () => void;
@@ -259,6 +261,7 @@ export function ActionBar({
   draft,
   turnHold,
   seat,
+  canResetTurn,
   onConfirm,
   onCancel,
   onEndTurn,
@@ -416,8 +419,23 @@ export function ActionBar({
         >
           {draft.resolved === null ? '确认（先完成选择）' : `确认：${describeAction(draft.resolved)}`}
         </button>
-        <button type="button" data-testid="cancel-draft" onClick={onCancel}>
-          重选
+        <button
+          type="button"
+          data-testid="cancel-draft"
+          title="清空当前未确认的选择（不影响已提交的行动）"
+          onClick={onCancel}
+        >
+          取消选择
+        </button>
+        <button
+          type="button"
+          data-testid="reset-turn"
+          className="btn-ghost"
+          disabled={!canResetTurn}
+          title={canResetTurn ? '撤销本回合已提交的全部行动,回到回合初' : '本回合还没有可撤回的行动'}
+          onClick={onResetTurn}
+        >
+          重置本回合
         </button>
       </div>
     </section>

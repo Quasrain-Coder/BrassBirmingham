@@ -169,6 +169,7 @@ function GameBoard({
         draft={draft}
         turnHold={turnHold}
         seat={seat}
+        canResetTurn={myTurn && state.actionsThisTurn > 0}
         onConfirm={() => {
           if (draft.resolved !== null) store.submitAction(draft.resolved);
         }}

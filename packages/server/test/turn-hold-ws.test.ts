@@ -97,6 +97,51 @@ describe('WS turnHold(回合扣住)', () => {
     expect((back.legalActions as unknown[]).length).toBeGreaterThan(0);
   });
 
+  it('回合进行中撤回:第 1 动后 reset_turn 回到回合初(无需等回合打满)', async () => {
+    const { actor, other, actorToken, otherToken, actorSeat, actorHandCount, firstAction } = await setup();
+    const otherSeat = 1 - actorSeat;
+    // 首个行动(其 seq=0 快照已在 setup 中消费):打出后从 seq=1 起统一按 seq 驱动
+    actor.send({ type: 'submit_action', protocolVersion: PV, token: actorToken, action: firstAction });
+    await actor.nextMessage('action_applied');
+    let seq = 1;
+    for (;;) {
+      const [sa, sb] = await Promise.all([
+        actor.nextMessage('snapshot', (m) => m.seq === seq),
+        other.nextMessage('snapshot', (m) => m.seq === seq),
+      ]);
+      if (sa.turnHold === actorSeat) {
+        actor.send({ type: 'end_turn', protocolVersion: PV, token: actorToken });
+        continue;
+      }
+      if (sb.turnHold === otherSeat) {
+        other.send({ type: 'end_turn', protocolVersion: PV, token: otherToken });
+        continue;
+      }
+      const aFirst = (sa.legalActions as unknown[]).length > 0;
+      const driver = aFirst ? actor : other;
+      const driverToken = aFirst ? actorToken : otherToken;
+      const legal = (aFirst ? sa.legalActions : sb.legalActions) as Record<string, unknown>[];
+      driver.send({ type: 'submit_action', protocolVersion: PV, token: driverToken, action: legal[0]! });
+      await driver.nextMessage('action_applied');
+      if (aFirst && seq >= 2) break; // 第 2 轮我方第 1 动完成
+      seq++;
+    }
+
+    // 回合进行中(actionsThisTurn=1,未被扣住)→ 可撤回到回合初
+    actor.send({ type: 'reset_turn', protocolVersion: PV, token: actorToken });
+    const back = await actor.nextMessage(
+      'snapshot',
+      (m) => m.turnHold === null && (m.state as { actionsThisTurn: number }).actionsThisTurn === 0,
+    );
+    const st = back.state as {
+      actionsThisTurn: number;
+      players: { hand: { kind: string; cards?: unknown[] } }[];
+    };
+    const handBack = st.players[actorSeat]!.hand;
+    expect(handBack.kind === 'full' ? handBack.cards!.length : -1).toBe(actorHandCount);
+    expect((back.legalActions as unknown[]).length).toBeGreaterThan(0); // 仍是我方回合
+  });
+
   it('end_turn 时机错误:未被扣住时发 end_turn 回 no-turn-hold', async () => {
     const { actor, actorToken } = await setup();
     actor.send({ type: 'end_turn', protocolVersion: PV, token: actorToken });
