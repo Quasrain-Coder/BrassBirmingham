@@ -793,6 +793,55 @@ body {
   gap: 8px;
 }
 
+/* 版图容器 + 左下角顺位叠加层 */
+.board-wrap {
+  position: relative;
+}
+
+.turn-order-bar.overlay {
+  position: absolute;
+  left: 0.6%;
+  bottom: 1.2%;
+  z-index: 2;
+  padding: 8px 10px;
+  max-width: 34%;
+  background: linear-gradient(180deg, rgba(20, 16, 10, 0.88), rgba(20, 16, 10, 0.78));
+}
+
+.turn-order-bar.overlay h3 {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+}
+
+.turn-order-bar.overlay ol {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.turn-order-bar.overlay li {
+  padding: 3px 10px;
+  font-size: 0.8rem;
+}
+
+.turn-rank {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid #8a6d3b;
+  background: rgba(201, 168, 106, 0.15);
+  color: #e3c58f;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.turn-order-bar li.current .turn-rank {
+  background: #c9a86a;
+  color: #241b0b;
+}
+
 .turn-order-bar li {
   display: inline-flex;
   align-items: center;
