@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createRng, type Rng } from '@brass/engine';
+import { LINKS, MERCHANTS, createRng, type Rng } from '@brass/engine';
 import { createTestHarness, type TestClient } from './helpers.js';
 
 const harness = createTestHarness();
@@ -35,24 +35,34 @@ afterEach(async () => {
 
 const PER_STEP_TIMEOUT_MS = 30_000;
 
+const MERCHANT_IDS = new Set(Object.keys(MERCHANTS));
+
 /**
- * 随机选行动，对 'sell' 加权：均匀随机下 sell 几乎不出现（需已翻面产业 + 商人需求，
- * 随机对局很少走到），验收要覆盖该类型，故合法时以 1/2 概率优先选它。仍由种子 RNG
- * 驱动，测试确定性。
+ * 随机选行动,按卖前置链加权:sell 合法优先(需已建可卖产业 + 商人需求 +
+ * 啤酒,随机对局很少走到);build 偏向可卖产业与酒厂;network 偏向端点含
+ * 商人位的连线(打开卖货连通)。仍由种子 RNG 驱动,测试确定性。
  */
 function pickAction(legal: Record<string, unknown>[], rng: Rng): Record<string, unknown> {
-  // sell 的前置链很长(建可卖产业 → 连通匹配商人 → 有啤酒),纯均匀随机的对局
-  // 几乎走不到;按"sell 优先、build 偏向可卖产业与酒厂"加权,使七类覆盖稳定
-  // 可复现(固定种子 + 固定 RNG)。
   const ofType = (t: string): Record<string, unknown>[] => legal.filter((a) => a.type === t);
   const sells = ofType('sell');
   if (sells.length > 0 && rng.next() < 0.7) return sells[rng.nextInt(sells.length)]!;
   const builds = ofType('build');
-  if (builds.length > 0 && rng.next() < 0.6) {
+  if (builds.length > 0 && rng.next() < 0.7) {
     const sellable = builds.filter((a) =>
       ['cotton', 'manufacturer', 'pottery', 'brewery'].includes(String(a.industry)),
     );
     const pool = sellable.length > 0 ? sellable : builds;
+    return pool[rng.nextInt(pool.length)]!;
+  }
+  const networks = ofType('network');
+  if (networks.length > 0 && rng.next() < 0.5) {
+    const merchanty = networks.filter((a) =>
+      (a.links as number[]).some((li) => {
+        const l = LINKS[li]!;
+        return MERCHANT_IDS.has(l.a) || MERCHANT_IDS.has(l.b);
+      }),
+    );
+    const pool = merchanty.length > 0 ? merchanty : networks;
     return pool[rng.nextInt(pool.length)]!;
   }
   return legal[rng.nextInt(legal.length)]!;
