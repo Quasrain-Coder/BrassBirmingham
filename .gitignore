@@ -12,3 +12,9 @@ tmp_rules/
 
 # 官方游戏素材随仓库分发（个人非商用）；raw/ 为下载缓存，可用 fetch-assets 重建
 packages/web/public/assets/raw/
+
+# bench 临时跑批输出（含被污染的 R1 目录）；有意义的基线数据手动保留提交
+packages/llm/bench/out/*
+!packages/llm/bench/out/base-h100/
+!packages/llm/bench/out/base-llm20/
+!packages/llm/bench/out/baseline-llm/

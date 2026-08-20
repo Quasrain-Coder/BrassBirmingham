@@ -59,26 +59,57 @@ describe('prescreen', () => {
     expect(prescreen(s, 0, legal, 8)).toEqual(top8); // 确定性
   });
 
-  it('returns all actions (sorted) when k >= legal length', () => {
+  it('cardId 去重：k 足够大时返回所有不同选择（每种一份，忽略弃哪张卡）', () => {
     const s = newGame(4, 42);
     const legal = enumerateActions(s, 0);
     const all = prescreen(s, 0, legal, legal.length + 10);
-    expect(all).toHaveLength(legal.length);
+    // 至少与"按去 cardId 签名去重"的集合大小一致，且远小于含 cardId 的 legal 全量
+    const sigs = new Set(
+      legal.map((a) => JSON.stringify({ ...a, cardId: undefined })),
+    );
+    expect(all.length).toBeLessThanOrEqual(sigs.size);
+    expect(all.length).toBeGreaterThan(0);
+    // 每个不同签名只出现一次
+    const seen = new Set<string>();
+    for (const a of all) {
+      const sig = JSON.stringify({ ...a, cardId: undefined });
+      expect(seen.has(sig)).toBe(false);
+      seen.add(sig);
+    }
   });
 
   it('returns empty for k = 0', () => {
     const s = newGame(4, 42);
     expect(prescreen(s, 0, enumerateActions(s, 0), 0)).toEqual([]);
   });
+
+  it('类型配额：每种候选类型至少保留该类最高分 1 个（自杀贷款被剔除除外）', () => {
+    const s = newGame(4, 42);
+    const legal = enumerateActions(s, 0);
+    const kindsInLegal = new Set(legal.map((a) => a.type));
+    const picked = prescreen(s, 0, legal, Math.max(kindsInLegal.size, 8));
+    const kindsInPicked = new Set(picked.map((a) => a.type));
+    // 候选类型 ⊆ legal 类型；loan 可能因"贷后收入为负"被消毒剔除
+    expect([...kindsInPicked].every((k) => kindsInLegal.has(k))).toBe(true);
+    // 且保留的是该类最高分
+    for (const kind of kindsInPicked) {
+      const best = Math.max(
+        ...legal.filter((a) => a.type === kind).map((a) => scoreAction(s, 0, a)),
+      );
+      const pickedOfKind = picked.filter((a) => a.type === kind);
+      expect(pickedOfKind.some((a) => scoreAction(s, 0, a) === best)).toBe(true);
+    }
+  });
 });
 
 describe('scoreAction components', () => {
-  it('pass scores 0 and scout scores the scout weight (-1)', () => {
+  it('pass scores negative (never neutral) and scout scores the scout weight', () => {
     const s = newGame(4, 42);
     const legal = enumerateActions(s, 0);
     const pass = legal.find((a) => a.type === 'pass');
     expect(pass).toBeDefined();
-    expect(scoreAction(s, 0, pass!)).toBe(0);
+    expect(scoreAction(s, 0, pass!)).toBe(HEURISTIC_WEIGHTS.pass);
+    expect(HEURISTIC_WEIGHTS.pass).toBeLessThan(0);
     const scout = legal.find((a) => a.type === 'scout');
     if (scout) expect(scoreAction(s, 0, scout)).toBe(HEURISTIC_WEIGHTS.scout);
   });
