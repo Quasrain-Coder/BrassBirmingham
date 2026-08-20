@@ -49,6 +49,11 @@ function GameBoard({
 }: GameBoardProps): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx] ?? seat;
   const myTurn = current === seat && gameOver === null;
+  // 面板按本轮顺位排布:顺位在自己之前的排在版图上区,自己锚定在手牌/行动条旁
+  // (默认展开),之后的排在自己单元之后——每轮顺位变化时两侧名单随之重排。
+  const myPos = state.turnOrder.indexOf(seat);
+  const seatsBefore = myPos >= 0 ? state.turnOrder.slice(0, myPos) : [];
+  const seatsAfter = myPos >= 0 ? state.turnOrder.slice(myPos + 1) : [];
   const selfHand = state.players[seat]?.hand;
   const hand = selfHand?.kind === 'full' ? selfHand.cards : [];
   const draft = useActionDraft({
@@ -95,8 +100,8 @@ function GameBoard({
         </p>
       ) : null}
       <div className="player-boards">
-        {state.players.map((_p, i) => (
-          <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={i === seat} />
+        {seatsBefore.map((i) => (
+          <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} />
         ))}
       </div>
       <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
@@ -120,6 +125,8 @@ function GameBoard({
         {/* 行动顺位叠在版图左下角（1-4 名原始轮次 + 本轮花费） */}
         <TurnOrderBar state={state} room={room ?? undefined} thinkingSeats={thinkingSeats} overlay />
       </div>
+      {/* 自己的单元:面板(默认展开,锚定在手牌/行动条旁,不随布局移动) */}
+      <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen />
       <HandBar
         state={state}
         seat={seat}
@@ -141,6 +148,13 @@ function GameBoard({
         }}
         onCancel={draft.reset}
       />
+      {seatsAfter.length > 0 ? (
+        <div className="player-boards player-boards-after">
+          {seatsAfter.map((i) => (
+            <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} />
+          ))}
+        </div>
+      ) : null}
       <LogPanel log={log} room={room ?? undefined} />
     </div>
   );
