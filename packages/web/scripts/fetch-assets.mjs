@@ -155,6 +155,11 @@ job('link-icons', async (sharp) => {
   await sharp(raw).extract({ left: 4075, top: 4697, width: 92, height: 52 }).resize(184).png().toFile(join(OUT, 'link-rail.png'));
 });
 
+// ---- 玩家面板（官方美术原稿,TTS 存档 Custom_Tile 贴图）----
+job('player-mat.jpg', async (sharp) => {
+  await sharp(await download(manifest.playerMat)).resize(1400).jpeg({ quality: 85 }).toFile(join(OUT, 'player-mat.jpg'));
+});
+
 // ---- 执行 ----
 const { default: sharp } = await import('sharp').catch(() => {
   console.error('缺少 sharp：请先 npm install（sharp 在 @brass/web 的 devDependencies）');

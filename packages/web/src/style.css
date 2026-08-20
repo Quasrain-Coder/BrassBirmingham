@@ -1335,6 +1335,59 @@ body {
   color: #b3a888;
 }
 
+/* 堆叠视图切换（版图/明细） */
+.board-stack-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.board-stack-head h4 {
+  margin-bottom: 0;
+}
+
+.stack-view-toggle {
+  display: inline-flex;
+  border: 1px solid #4a3f2c;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.stack-view-toggle button {
+  padding: 3px 12px;
+  border: none;
+  background: transparent;
+  color: #9aa4b2;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.stack-view-toggle button.active {
+  background: #c9a86a;
+  color: #1a1d23;
+  font-weight: 600;
+}
+
+/* 玩家建筑版图（官方面板美术 + 堆叠状态叠加） */
+.player-mat {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 8px;
+  border: 1px solid #4a3f2c;
+  border-radius: 10px;
+}
+
+.player-mat .mat-slot-exhausted {
+  fill: #0b0d10;
+  opacity: 0.62;
+}
+
+.player-mat .mat-slot-top {
+  filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.25));
+}
+
 .board-ind {
   display: flex;
   align-items: baseline;

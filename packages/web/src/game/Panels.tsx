@@ -15,6 +15,7 @@ import type { FilteredState, RoomState } from '@brass/protocol';
 import { INDUSTRY_STYLE, PLAYER_COLORS } from '../board/BoardSvg';
 import { cardFaceKey, cardName, describeAction, industryName, locationName } from './display';
 import { INDUSTRY_ORDER } from './interactions';
+import { PlayerMat } from './PlayerMat';
 import type { LogEntry } from './store';
 
 /** 座位显示名：有房间信息用昵称，否则 玩家{seat+1}。 */
@@ -184,6 +185,16 @@ export function PlayerBoard({
   defaultOpen?: boolean;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen);
+  // 堆叠视图:版图(官方玩家面板美术)/明细(#19 列表)——记住玩家选择
+  // (jsdom 等环境无 localStorage,降级为会话内状态)
+  const storage = typeof localStorage === 'undefined' ? null : localStorage;
+  const [matView, setMatViewState] = useState<boolean>(
+    () => storage?.getItem('brass-stack-view') !== 'list',
+  );
+  const setMatView = (v: boolean): void => {
+    setMatViewState(v);
+    storage?.setItem('brass-stack-view', v ? 'mat' : 'list');
+  };
   const self = state.players[seat];
   if (self === undefined) return <></>;
   const level = incomeLevelAt(self.incomeSpace);
@@ -269,8 +280,31 @@ export function PlayerBoard({
             )}
           </div>
           <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
-            <h4>面板堆叠（未建）</h4>
-            {INDUSTRY_ORDER.map((ind) => (
+            <div className="board-stack-head">
+              <h4>面板堆叠（未建）</h4>
+              <span className="stack-view-toggle" role="group" aria-label="堆叠视图切换">
+                <button
+                  type="button"
+                  className={matView ? 'active' : ''}
+                  data-testid={`stack-view-mat-${seat}`}
+                  onClick={() => setMatView(true)}
+                >
+                  版图
+                </button>
+                <button
+                  type="button"
+                  className={matView ? '' : 'active'}
+                  data-testid={`stack-view-list-${seat}`}
+                  onClick={() => setMatView(false)}
+                >
+                  明细
+                </button>
+              </span>
+            </div>
+            {matView ? (
+              <PlayerMat tiles={self.tiles} playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'} />
+            ) : (
+            INDUSTRY_ORDER.map((ind) => (
               <div key={ind} className="board-ind">
                 <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
                   {industryName(ind)}
@@ -302,7 +336,8 @@ export function PlayerBoard({
                   })}
                 </span>
               </div>
-            ))}
+            ))
+            )}
           </div>
         </div>
       ) : null}

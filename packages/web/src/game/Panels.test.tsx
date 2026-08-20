@@ -46,6 +46,8 @@ describe('<PlayerBoard>', () => {
     expect(screen.getByTestId('player-board-meta-0')).toHaveTextContent('£30');
     expect(screen.getByTestId('player-board-meta-0')).toHaveTextContent('12 分');
     expect(screen.getByTestId('player-board-built-0')).toHaveTextContent('尚未建造');
+    // 堆叠默认版图视图,切到明细再断言列表内容
+    fireEvent.click(screen.getByTestId('stack-view-list-0'));
     // 堆叠按原版玩家板：每产业每级缩略图 + 剩余数 + 翻面得分/收入
     const stack = screen.getByTestId('player-board-stack-0');
     expect(stack).toHaveTextContent('棉纺厂');
@@ -66,10 +68,36 @@ describe('<PlayerBoard>', () => {
     const before = p0.tiles.filter((t) => t.industry === 'cotton' && t.level === 1).length;
     p0.tiles = p0.tiles.filter((t) => !(t.industry === 'cotton' && t.level === 1));
     render(<PlayerBoard state={state} seat={0} defaultOpen />);
+    fireEvent.click(screen.getByTestId('stack-view-list-0'));
     const tile = screen.getByTestId('player-board-stack-0-cotton-1');
     expect(before).toBe(3);
     expect(tile).toHaveTextContent('×0');
     expect(tile.classList.contains('exhausted')).toBe(true);
+  });
+
+  it('堆叠默认版图视图:mat 底图 + 栈顶描边/耗尽遮罩,可切换明细', () => {
+    const state = freshState();
+    const p0 = state.players[0];
+    if (p0 === undefined) throw new Error('fixture 缺玩家 0');
+    // 棉 I 全部移除 → 棉 I 框遮罩,棉 II 成栈顶描边
+    p0.tiles = p0.tiles.filter((t) => !(t.industry === 'cotton' && t.level === 1));
+    const { container } = render(<PlayerBoard state={state} seat={0} defaultOpen />);
+    const mat = container.querySelector('svg.player-mat');
+    expect(mat).not.toBeNull();
+    expect(mat?.querySelector('image')?.getAttribute('href')).toBe('/assets/player-mat.jpg');
+    // 29 框全渲染;棉 I 遮罩、棉 II 栈顶描边
+    expect(container.querySelectorAll('[data-mat-slot]')).toHaveLength(29);
+    const cotton1 = container.querySelector('[data-mat-slot="cotton-1"]');
+    expect(cotton1?.querySelector('.mat-slot-exhausted')).not.toBeNull();
+    const cotton2 = container.querySelector('[data-mat-slot="cotton-2"]');
+    expect(cotton2?.querySelector('.mat-slot-top')).not.toBeNull();
+    expect(cotton2?.textContent).toContain('×2');
+    // 初始局面:每产业栈顶都是 Lv1(制造厂 8 框 + 其余 5 产业 = 6 个描边)
+    expect(container.querySelectorAll('.mat-slot-top')).toHaveLength(6);
+    // 切换明细后列表出现、版图消失
+    fireEvent.click(screen.getByTestId('stack-view-list-0'));
+    expect(container.querySelector('svg.player-mat')).toBeNull();
+    expect(screen.getByTestId('player-board-stack-0-pottery-5')).toHaveTextContent('×1');
   });
 
   it('已建板块渲染官方板块缩略图（含翻面态）', () => {
