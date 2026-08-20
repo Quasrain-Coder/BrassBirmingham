@@ -188,6 +188,27 @@ describe('<TurnOrderBar>', () => {
     expect(item).toHaveTextContent('已花 £5');
     expect(item).toHaveTextContent('£17');
   });
+
+  it('overlay 模式：官方式圆形头像顺位轨 + 本轮花费钱币堆', () => {
+    const state = freshState();
+    const cur = state.turnOrder[state.currentPlayerIdx]!;
+    const p = state.players[cur];
+    if (p === undefined) throw new Error('fixture 缺当前玩家');
+    p.spentThisRound = 7;
+    render(<TurnOrderBar state={state} room={roomFixture()} thinkingSeats={[state.turnOrder[1]!]} overlay />);
+    const items = screen.getByTestId('turn-order').querySelectorAll('li');
+    expect(items).toHaveLength(4);
+    // 头像图与玩家色 key 对应;当前玩家 current 类
+    const avatar = items[0]?.querySelector('img.turn-avatar');
+    expect(avatar?.getAttribute('src')).toMatch(/^\/assets\/players\/(purple|yellow|orange|teal)\.png$/);
+    expect(items[state.currentPlayerIdx]?.classList.contains('current')).toBe(true);
+    // 花费 £7:钱币堆最多 4 层 + 数字
+    const spent = screen.getByTestId(`turn-spent-${cur}`);
+    expect(spent.querySelectorAll('.turn-coins img')).toHaveLength(4);
+    expect(spent).toHaveTextContent('£7');
+    // 未花费的玩家无钱币堆
+    expect(screen.queryByTestId(`turn-spent-${state.turnOrder[2]!}`)).toBeNull();
+  });
 });
 
 describe('<HandBar>', () => {

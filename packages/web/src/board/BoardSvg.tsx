@@ -41,7 +41,7 @@ import { LOCATION_ZH } from '../game/display';
 /** 官方玩家色：P0 紫 / P1 黄 / P2 橙 / P3 青（与官方板块底色一致）。 */
 export const PLAYER_COLORS = ['#8e6bb0', '#d9a832', '#c05a30', '#4fa3a5'];
 /** 玩家色英文键（素材文件名用）。 */
-const PLAYER_COLOR_KEYS = ['purple', 'yellow', 'orange', 'teal'] as const;
+export const PLAYER_COLOR_KEYS = ['purple', 'yellow', 'orange', 'teal'] as const;
 
 /** 产业配色与中文标注（面板/行动描述共用）。 */
 export const INDUSTRY_STYLE: Record<IndustryType, { fill: string; label: string }> = {

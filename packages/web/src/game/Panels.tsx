@@ -12,7 +12,7 @@ import type { ReactElement } from 'react';
 import { INCOME_LEVEL_SPACES, TILES, incomeLevelAt } from '@brass/engine';
 import type { Action, Card, IndustryType, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
-import { INDUSTRY_STYLE, PLAYER_COLORS } from '../board/BoardSvg';
+import { INDUSTRY_STYLE, PLAYER_COLORS, PLAYER_COLOR_KEYS } from '../board/BoardSvg';
 import { cardFaceKey, cardName, describeAction, industryName, locationName } from './display';
 import { INDUSTRY_ORDER } from './interactions';
 import { PlayerMat } from './PlayerMat';
@@ -58,10 +58,55 @@ export function TurnOrderBar({
   room?: RoomState | undefined;
   /** ai_thinking 中的座位（M3）：高亮并显示"思考中…"。 */
   thinkingSeats?: readonly PlayerIndex[] | undefined;
-  /** 叠加模式：竖排 1-4 名，绝对定位于版图左下角（.board-wrap 内）。 */
+  /** 叠加模式：官方式圆形头像横排 + 本轮花费钱币堆，绝对定位于版图左下角。 */
   overlay?: boolean;
 }): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx];
+  if (overlay) {
+    // 官方式顺位轨:圆形角色头像按顺位横排,本轮花费的钱堆在该玩家头像旁
+    // (钱币逐层叠放 + 数字),当前玩家金圈,AI 思考中呼吸灯。不遮版图。
+    return (
+      <section className="turn-order-bar overlay" aria-label="行动顺位">
+        <ol data-testid="turn-order" className="turn-track">
+          {state.turnOrder.map((seat) => {
+            const player = state.players[seat];
+            const thinking = thinkingSeats?.includes(seat) ?? false;
+            const spent = player?.spentThisRound ?? 0;
+            const colorKey = PLAYER_COLOR_KEYS[seat] ?? 'purple';
+            const classes = [seat === current ? 'current' : '', thinking ? 'thinking' : '']
+              .filter((c) => c !== '')
+              .join(' ');
+            return (
+              <li
+                key={seat}
+                data-player={seat}
+                className={classes === '' ? undefined : classes}
+                title={`${playerName(room, seat)}｜本轮已花 £${spent}`}
+              >
+                <img
+                  className="turn-avatar"
+                  src={`/assets/players/${colorKey}.png`}
+                  alt={playerName(room, seat)}
+                  style={{ borderColor: PLAYER_COLORS[seat] ?? '#7f8c8d' }}
+                />
+                {spent > 0 ? (
+                  <span className="turn-spent" data-testid={`turn-spent-${seat}`}>
+                    <span className="turn-coins" aria-hidden="true">
+                      {Array.from({ length: Math.min(spent, 4) }, (_, i) => (
+                        <img key={i} src="/assets/coins/1.png" alt="" />
+                      ))}
+                    </span>
+                    <span className="turn-spent-num">£{spent}</span>
+                  </span>
+                ) : null}
+                {thinking ? <span className="thinking-dot" aria-label="思考中" /> : null}
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+    );
+  }
   return (
     <section className={`turn-order-bar${overlay ? ' overlay' : ''}`}>
       <h3>行动顺位</h3>
