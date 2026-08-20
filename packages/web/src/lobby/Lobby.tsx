@@ -276,8 +276,18 @@ export function RoomView({ store }: { store: GameStore }): ReactElement {
     );
   }
   const seated = room.seats.filter((info) => info !== null).length;
-  const full = seated === room.seats.length;
-  const pct = Math.round((seated / room.seats.length) * 100);
+  const aiCount = room.config.aiSeats?.count ?? 0;
+  const seatedAI = room.seats.filter((info) => info?.isAI === true).length;
+  // M3：真人 >= 1 且 真人 + AI 席位 >= 总人数 即可开始（server 同源裁决，见 rooms.ts startGame）。
+  const canStart = seated >= 1 && seated + aiCount >= room.seats.length;
+  // 空位中开局时会被 AI 占据的席位（扣除已入座 AI，从末尾数）
+  const remainingAi = Math.max(0, aiCount - seatedAI);
+  const emptySeatIdxs = room.seats.flatMap((info, i) => (info === null ? [i] : []));
+  const aiPlaceholderSeats = new Set(
+    // 注意：slice(-0) === slice(0) 会返回全数组，必须为 0 特判
+    remainingAi === 0 ? [] : emptySeatIdxs.slice(-Math.min(remainingAi, emptySeatIdxs.length)),
+  );
+  const pct = Math.round(((seated + aiPlaceholderSeats.size) / room.seats.length) * 100);
 
   return (
     <main className="app room-view">
@@ -304,6 +314,7 @@ export function RoomView({ store }: { store: GameStore }): ReactElement {
           <h2>玩家席位</h2>
           <p className="seat-count" data-testid="seat-count">
             已就位 {seated}/{room.config.playerCount}
+            {aiPlaceholderSeats.size > 0 ? `（+${aiPlaceholderSeats.size} AI）` : ''}
           </p>
         </header>
         {room.config.aiSeats !== undefined ? (
@@ -326,7 +337,16 @@ export function RoomView({ store }: { store: GameStore }): ReactElement {
               </span>
               <span className="seat-body">
                 {info === null ? (
-                  <span className="seat-empty">空位</span>
+                  aiPlaceholderSeats.has(i) && room.config.aiSeats !== undefined ? (
+                    <>
+                      <span className="seat-name">AI 席位</span>
+                      <span className="ai-badge" data-testid={`seat-${i}-ai-badge`}>
+                        {AI_DIFFICULTY_LABEL[room.config.aiSeats.difficulty]} · 开局加入
+                      </span>
+                    </>
+                  ) : (
+                    <span className="seat-empty">空位</span>
+                  )
                 ) : info.isAI ? (
                   <>
                     <span className="seat-name">{info.nickname}</span>
@@ -359,12 +379,12 @@ export function RoomView({ store }: { store: GameStore }): ReactElement {
         <button
           className="btn-primary btn-start"
           data-testid="start-game"
-          disabled={!full || s.connection !== 'connected'}
+          disabled={!canStart || s.connection !== 'connected'}
           onClick={() => store.startGame()}
         >
-          {full ? '开始对局' : '等待更多玩家…'}
+          {canStart ? '开始对局' : '等待更多玩家…'}
         </button>
-        {full ? null : <p className="hint">满员后才能开始</p>}
+        {canStart ? null : <p className="hint">满员后才能开始（或补 AI 席位）</p>}
         <button className="btn-ghost" data-testid="leave-room" onClick={() => store.leaveRoom()}>
           离开房间
         </button>

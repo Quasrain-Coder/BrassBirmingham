@@ -277,6 +277,47 @@ describe('<RoomView> 房间等待视图', () => {
     expect(screen.getByTestId('start-game')).toBeDisabled();
   });
 
+  it('真人 + AI 席位满编即可开始（M3 放宽），空位显示 AI 待加入', () => {
+    const { store, ws } = setup();
+    act(() => ws.open());
+    enterRoom(
+      ws,
+      fullRoom({
+        config: { playerCount: 2, aiSeats: { count: 1, difficulty: 'normal' } },
+        seats: [{ seat: 0, nickname: '甲', isAI: false, connected: true }, null],
+      }),
+    );
+    render(<RoomView store={store} />);
+    expect(screen.getByTestId('seat-count')).toHaveTextContent('已就位 1/2（+1 AI）');
+    expect(screen.getByTestId('seat-1')).toHaveTextContent('AI 席位');
+    expect(screen.getByTestId('seat-1')).toHaveTextContent('普通 · 开局加入');
+    const start = screen.getByTestId('start-game');
+    expect(start).toBeEnabled();
+    fireEvent.click(start);
+    expect(ws.lastSent()).toEqual({
+      type: 'start_game',
+      protocolVersion: PROTOCOL_VERSION,
+      token: 'tok-me',
+    });
+  });
+
+  it('真人 + AI 席位仍不足：开始按钮不可用', () => {
+    const { store, ws } = setup();
+    act(() => ws.open());
+    enterRoom(
+      ws,
+      fullRoom({
+        config: { playerCount: 3, aiSeats: { count: 1, difficulty: 'normal' } },
+        seats: [{ seat: 0, nickname: '甲', isAI: false, connected: true }, null, null],
+      }),
+    );
+    render(<RoomView store={store} />);
+    expect(screen.getByTestId('start-game')).toBeDisabled();
+    // 仅末尾 1 个空位显示 AI 占位
+    expect(screen.getByTestId('seat-1')).toHaveTextContent('空位');
+    expect(screen.getByTestId('seat-2')).toHaveTextContent('AI 席位');
+  });
+
   it('离开房间 → store 重置回大厅态', () => {
     const { store, ws } = setup();
     act(() => ws.open());
