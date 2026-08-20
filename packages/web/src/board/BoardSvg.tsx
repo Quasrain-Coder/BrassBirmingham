@@ -63,6 +63,8 @@ export interface SlotRef {
 export interface BoardHighlights {
   slots?: SlotRef[];
   links?: number[];
+  /** 可建城市级高亮（选产业/城市卡时，所有可放置地点的外框）。 */
+  locations?: LocationId[];
 }
 
 /** 行动聚光灯：某玩家刚执行的行动在棋盘上的高亮目标（约 5 秒，GameScreen 驱动）。 */
@@ -184,6 +186,7 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
 export function BoardSvg({ state, highlights, spotlight, thinkingSeats, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
+  const highlightedLocations = new Set(highlights?.locations ?? []);
   const builtByLink = new Map<number, { player: PlayerIndex; era: 'canal' | 'rail' }>();
   for (const l of state.board.links) builtByLink.set(l.linkIndex, { player: l.player, era: l.era });
 
@@ -254,10 +257,10 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, onSlotCl
                     points={pts}
                     fill="none"
                     stroke="#f0c964"
-                    strokeWidth={40}
+                    strokeWidth={16}
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    opacity={0.75}
+                    opacity={0.85}
                     filter="url(#hl-glow)"
                     pointerEvents="none"
                   />
@@ -265,16 +268,16 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, onSlotCl
                   {mid !== undefined ? (
                     <g className="link-hl-chip" pointerEvents="none">
                       <rect
-                        x={mid.x - 56}
-                        y={mid.y - 56}
-                        width={112}
-                        height={112}
-                        rx={20}
+                        x={mid.x - 44}
+                        y={mid.y - 44}
+                        width={88}
+                        height={88}
+                        rx={16}
                         fill="#f0c964"
                         opacity={0.9}
                         filter="url(#hl-glow)"
                       />
-                      <text x={mid.x} y={mid.y + 26} textAnchor="middle" fontSize={72} fill="#241b0b" fontWeight={700}>
+                      <text x={mid.x} y={mid.y + 20} textAnchor="middle" fontSize={56} fill="#241b0b" fontWeight={700}>
                         +
                       </text>
                     </g>
@@ -339,6 +342,32 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, onSlotCl
           const placed = state.board.slots[id as LocationId] ?? [];
           return (
             <g className="board-location" data-location={id} key={id}>
+              {/* 可建城市级高亮:选产业/城市卡时外框框出所有可放置地点 */}
+              {highlightedLocations.has(id as LocationId) && rects.length > 0
+                ? (() => {
+                    const pad = 26;
+                    const x = Math.min(...rects.map((r) => r.x)) - pad;
+                    const y = Math.min(...rects.map((r) => r.y)) - pad;
+                    const w = Math.max(...rects.map((r) => r.x + r.w)) - x + pad;
+                    const h = Math.max(...rects.map((r) => r.y + r.h)) - y + pad;
+                    return (
+                      <rect
+                        className="board-loc-hl"
+                        data-testid={`loc-hl-${id}`}
+                        x={x}
+                        y={y}
+                        width={w}
+                        height={h}
+                        rx={18}
+                        fill="none"
+                        stroke="#f0c964"
+                        strokeWidth={6}
+                        filter="url(#hl-glow)"
+                        pointerEvents="none"
+                      />
+                    );
+                  })()
+                : null}
               {centers.map((c, si) => {
                 const tile = placed[si] ?? null;
                 const hl = highlightedSlots.has(`${id}:${si}`);

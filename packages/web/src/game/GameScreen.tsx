@@ -147,8 +147,7 @@ function GameBoard({
           </div>
         ) : null}
       </div>
-      {/* 自己的单元:面板(默认展开,锚定在手牌/行动条旁,不随布局移动) */}
-      <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} />
+      {/* 自己的单元:手牌+行动条紧贴地图正下方(选牌找点路径最短),版图再往下 */}
       <HandBar
         state={state}
         seat={seat}
@@ -170,6 +169,7 @@ function GameBoard({
         }}
         onCancel={draft.reset}
       />
+      <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} />
       {seatsAfter.length > 0 ? (
         <div className="player-boards player-boards-after">
           {seatsAfter.map((i) => (

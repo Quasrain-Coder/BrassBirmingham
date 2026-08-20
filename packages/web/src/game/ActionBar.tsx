@@ -110,11 +110,11 @@ export function useActionDraft({
 
   const highlights = useMemo<BoardHighlights>(() => {
     const targets = targetsFor(selectedCard, legalActions);
-    const slots = [
-      ...buildSlotTargets(targets, state.board.slots),
-      ...sellSlotTargets(candidates),
-    ];
-    return { slots, links: [...extendableLinks(candidates, pickedLinks)] };
+    const buildSlots = buildSlotTargets(targets, state.board.slots);
+    const slots = [...buildSlots, ...sellSlotTargets(candidates)];
+    // 可建城市级高亮:所有可放置地点(与槽位高亮互补,找城更快)
+    const locations = [...new Set(buildSlots.map((s) => s.location))];
+    return { slots, links: [...extendableLinks(candidates, pickedLinks)], locations };
   }, [selectedCard, legalActions, candidates, state.board.slots, pickedLinks]);
 
   const networkMatch = matchNetwork(candidates, pickedLinks);
