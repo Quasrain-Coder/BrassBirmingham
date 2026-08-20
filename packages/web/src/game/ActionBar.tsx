@@ -27,6 +27,7 @@ import {
   matchDevelop,
   matchNetwork,
   matchScout,
+  resolveBuildSlot,
   sellCandidatesAt,
   sellOptions,
   sellSlotTargets,
@@ -90,8 +91,6 @@ export function useActionDraft({
   const [sellTile, setSellTile] = useState<SlotRef | null>(null);
   const [buildChoices, setBuildChoices] = useState<BuildAction[]>([]);
   const [chosen, setChosen] = useState<Action | null>(null);
-  /** 建造预览的目标槽位(点选/歧义选择的城市;切换城市即跟随)。 */
-  const [previewSlot, setPreviewSlot] = useState<SlotRef | null>(null);
 
   const reset = (): void => {
     setPickedLinks([]);
@@ -100,7 +99,6 @@ export function useActionDraft({
     setSellTile(null);
     setBuildChoices([]);
     setChosen(null);
-    setPreviewSlot(null);
   };
 
   // 换牌 / 新快照（legalActions 换引用）→ 已收集参数作废
@@ -166,13 +164,11 @@ export function useActionDraft({
     if (builds.length === 1) {
       setChosen(builds[0]!);
       setBuildChoices([]);
-      setPreviewSlot({ location, slotIndex });
       return;
     }
     if (builds.length > 1) {
       setBuildChoices(builds);
       setChosen(null);
-      setPreviewSlot({ location, slotIndex });
       return;
     }
     const sells = sellCandidatesAt(candidates, location, slotIndex);
@@ -223,14 +219,17 @@ export function useActionDraft({
   const choose = (action: Action): void => {
     setChosen(action);
     setBuildChoices([]);
-    if (action.type !== 'build') setPreviewSlot(null);
   };
 
-  /** 建造预览:已确定产业 + 目标槽位(歧义待选期间为 null,选定产业后出现)。 */
-  const buildPreview =
-    chosen?.type === 'build' && previewSlot !== null
-      ? { location: previewSlot.location, slotIndex: previewSlot.slotIndex, industry: chosen.industry }
-      : null;
+  /** 建造预览:落槽按引擎规范化(单图标槽优先等,resolveBuildSlot)——与实际结算一致。 */
+  const buildPreview = useMemo(() => {
+    if (chosen?.type !== 'build') return null;
+    const def = state.players[seat]?.tiles.find((t) => t.industry === chosen.industry);
+    if (def === undefined) return null;
+    const target = resolveBuildSlot(state, seat, chosen.location, chosen.industry, def.level);
+    if (target === null) return null;
+    return { location: target.location, slotIndex: target.slotIndex, industry: chosen.industry };
+  }, [chosen, state, seat]);
 
   /** 啤酒匹配线:resolved 为卖货时,每笔销售的啤酒来源 → 卖货地点(match 效果)。 */
   const beerMatches = useMemo(() => {

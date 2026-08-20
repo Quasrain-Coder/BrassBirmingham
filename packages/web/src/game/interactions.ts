@@ -14,7 +14,7 @@
  * - sell：单块全枚举 + "可卖全集"至多一个（sales.length >= 2）。
  */
 import { LINKS, LOCATIONS } from '@brass/engine';
-import type { Action, Card, IndustryType, LocationId } from '@brass/engine';
+import type { Action, Card, IndustryType, LocationId, PlayerIndex } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { SlotRef } from '../board/BoardSvg';
 import {
@@ -145,6 +145,74 @@ export function buildCandidatesAt(
     (a): a is BuildAction =>
       a.type === 'build' && a.location === location && slot.industries.includes(a.industry),
   );
+}
+
+/**
+ * 引擎 resolveSlot 的客户端复刻(build.ts 同一规范化):预览落槽必须与实际结算一致——
+ * ①对手煤/铁厂 overbuild(全图含市场该类方块为 0,运河时代同地有己方板块时禁)
+ * ②空槽:先单图标槽、后双图标槽(官方槽位序;运河时代同地有己方板块时禁新增)
+ * ③己方 overbuild:同产业等级最低(并列槽位序)
+ * 规则书 p.9:"If possible, place it on a space displaying only that industry's icon."
+ */
+export function resolveBuildSlot(
+  state: FilteredState,
+  player: PlayerIndex,
+  location: LocationId,
+  industry: IndustryType,
+  defLevel: number,
+): SlotRef | null {
+  const slotDefs = LOCATIONS[location]?.slots;
+  const placed = state.board.slots[location];
+  if (!slotDefs || !placed) return null;
+
+  const canalBlocked =
+    state.era === 'canal' && placed.some((t) => t !== null && t.player === player);
+
+  const globalCubes = (ind: 'coal' | 'iron'): number => {
+    let n = ind === 'coal' ? state.coalMarket : state.ironMarket;
+    for (const slots of Object.values(state.board.slots)) {
+      for (const t of slots) {
+        if (t && t.tile.industry === ind) n += t.resources;
+      }
+    }
+    return n;
+  };
+
+  // 1. 对手 overbuild
+  if (!canalBlocked && (industry === 'coal' || industry === 'iron') && globalCubes(industry) === 0) {
+    for (let i = 0; i < slotDefs.length; i++) {
+      if (!slotDefs[i]!.industries.includes(industry)) continue;
+      const t = placed[i];
+      if (t && t.player !== player && t.tile.industry === industry && t.tile.level < defLevel) {
+        return { location, slotIndex: i };
+      }
+    }
+  }
+
+  // 2. 空槽:先单图标,后双图标
+  if (!canalBlocked) {
+    for (const dual of [false, true]) {
+      for (let i = 0; i < slotDefs.length; i++) {
+        const sd = slotDefs[i]!;
+        if ((sd.industries.length === 2) !== dual) continue;
+        if (!sd.industries.includes(industry)) continue;
+        if (placed[i] === null) return { location, slotIndex: i };
+      }
+    }
+  }
+
+  // 3. 己方 overbuild:同产业、等级严格更低;多块取等级最低(并列槽位序)
+  let best: { slotIndex: number; level: number } | null = null;
+  for (let i = 0; i < slotDefs.length; i++) {
+    if (!slotDefs[i]!.industries.includes(industry)) continue;
+    const t = placed[i];
+    if (!t || t.player !== player || t.tile.industry !== industry || t.tile.level >= defLevel) {
+      continue;
+    }
+    if (!best || t.tile.level < best.level) best = { slotIndex: i, level: t.tile.level };
+  }
+  if (best) return { location, slotIndex: best.slotIndex };
+  return null;
 }
 
 /** 点击槽位后的 sell 单卖候选：sales[0] 对应该槽位（单卖 sales 长度恒为 1）。 */
