@@ -51,6 +51,11 @@ export interface GameServerOptions {
    * （ANTHROPIC_API_KEY 缺失时的降级路径同此）。每个 AI 座位开局时各构造一个。
    */
   aiAgentFactory?: (seat: PlayerIndex, difficulty: Difficulty) => DecidingAgent;
+  /**
+   * AI 行动节奏（ms）：每步 AI 行动之间的间隔，让真人玩家看得清 AI 过程
+   * （启发式瞬算时 AI 连动会在一帧内打完）。缺省 0（测试不减速）;生产 main.ts 注入。
+   */
+  aiPaceMs?: number;
 }
 
 export interface GameServer {
@@ -122,6 +127,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
   const sessionsByGameId = new Map<string, SessionEntry>();
   const sessionByToken = new Map<string, SessionEntry>();
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30_000;
+  /** AI 行动节奏:与客户端聚光灯时长对齐,每步 AI 行动播足 5 秒(生产注入,测试为 0)。 */
+  const aiPaceMs = options.aiPaceMs ?? 0;
   const heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 60_000;
   const staticRoot = options.staticDir !== undefined ? resolve(options.staticDir) : null;
   /** driveAI 末级兜底用的共享 HeuristicAgent（无状态，可复用）。 */
@@ -395,6 +402,18 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
             );
             break;
           }
+        }
+        // 逐座位结算 thinking(false)(连动时不再整段只收一次);
+        // 节奏延迟:启发式瞬算时给真人留看清每步 AI 行动的时间
+        broadcast(entry.room, {
+          type: 'ai_thinking',
+          protocolVersion: PROTOCOL_VERSION,
+          seat,
+          thinking: false,
+        });
+        thinkingSeats.delete(seat);
+        if (aiPaceMs > 0 && !entry.session.finished && entry.agents.has(entry.session.currentSeat)) {
+          await new Promise((r) => setTimeout(r, aiPaceMs));
         }
       }
     } catch (err) {
