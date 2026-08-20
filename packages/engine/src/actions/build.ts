@@ -41,7 +41,7 @@ import {
   canBuyCoalFromMarket,
   coalSources,
   ironSources,
-  isConnected,
+  playerNetwork,
 } from '../network.js';
 import { applyFlip, consumeCoal, consumeIron } from '../resources.js';
 import type { GameState, PlacedTile, PlayerState } from '../state.js';
@@ -165,10 +165,15 @@ function affordable(
   return total <= state.players[player]!.money;
 }
 
-/** 产业卡/Wild Industry 的候选地点：首建特例任意地点，否则 network 连通处。 */
+/**
+ * 产业卡/Wild Industry 的候选地点：首建特例任意地点，否则仅限**己方 network** 内
+ * （己方板块地点 + 己方 Link 端点，规则书 p.8 "Your Network"）。
+ * 对手的 Link 只服务资源连通（"Connected Locations"，煤/啤酒/市场），不扩张建造范围。
+ */
 function networkLocations(state: GameState, player: PlayerIndex, emptyBoard: boolean): LocationId[] {
   if (emptyBoard) return LOCATION_IDS;
-  return LOCATION_IDS.filter((loc) => isConnected(state, player, loc));
+  const net = playerNetwork(state, player);
+  return LOCATION_IDS.filter((loc) => net.has(loc));
 }
 
 function cardTargets(
