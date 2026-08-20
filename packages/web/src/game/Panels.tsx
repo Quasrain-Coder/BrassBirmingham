@@ -330,9 +330,7 @@ export function PlayerBoard({
                           alt={`${industryName(ind)} Lv${def.level}`}
                         />
                         <span className="stack-tile-count">×{remaining}</span>
-                        <span className="stack-tile-sub">
-                          Lv{def.level}｜翻 {def.vp}分 +{def.incomeAdvance}收
-                        </span>
+                        <span className="stack-tile-sub">Lv{def.level}</span>
                       </span>
                     );
                   })}
