@@ -132,6 +132,7 @@ function GameBoard({
           spotlight={spotlight}
           thinkingSeats={thinkingSeats}
           buildPreview={myTurn && draft.buildPreview !== null ? { ...draft.buildPreview, player: seat } : null}
+          beerMatches={myTurn ? draft.beerMatches : undefined}
           onSlotClick={myTurn ? draft.clickSlot : undefined}
           onLinkClick={myTurn ? draft.clickLink : undefined}
         />
@@ -167,6 +168,7 @@ function GameBoard({
         selectedCard={myTurn ? selectedCard : null}
         hand={hand}
         draft={draft}
+        state={state}
         turnHold={turnHold}
         seat={seat}
         canResetTurn={myTurn && state.actionsThisTurn > 0}

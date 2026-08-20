@@ -9,11 +9,11 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactElement } from 'react';
-import { INCOME_LEVEL_SPACES, TILES, incomeLevelAt } from '@brass/engine';
-import type { Action, Card, IndustryType, PlayerIndex } from '@brass/engine';
+import { INCOME_LEVEL_SPACES, MERCHANTS, TILES, incomeLevelAt } from '@brass/engine';
+import type { Action, Card, IndustryType, MerchantId, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { INDUSTRY_STYLE, PLAYER_COLORS, PLAYER_COLOR_KEYS } from '../board/BoardSvg';
-import { cardFaceKey, cardName, describeAction, industryName, locationName } from './display';
+import { cardFaceKey, cardName, describeAction, industryName, locationName, merchantName } from './display';
 import { INDUSTRY_ORDER } from './interactions';
 import { PlayerMat } from './PlayerMat';
 import type { LogEntry } from './store';
@@ -406,6 +406,29 @@ export function actionSummary(action: Action): string {
   return describeAction(action);
 }
 
+/** 商人奖励文案(项 6:用了商人桶后奖励可见)。 */
+function merchantBonusNote(events: unknown[]): string | null {
+  const bonuses = events.filter(
+    (e): e is { kind: 'merchant-bonus'; merchant: MerchantId } =>
+      typeof e === 'object' && e !== null && (e as { kind?: unknown }).kind === 'merchant-bonus',
+  );
+  if (bonuses.length === 0) return null;
+  return bonuses
+    .map((e) => {
+      const b = MERCHANTS[e.merchant].bonus;
+      const text =
+        b.type === 'vp'
+          ? `+${b.amount} VP`
+          : b.type === 'money'
+            ? `+£${b.amount}`
+            : b.type === 'income'
+              ? `收入 +${b.amount} 格`
+              : '免费研发 1 块';
+      return `${merchantName(e.merchant)}：${text}`;
+    })
+    .join('、');
+}
+
 export function LogPanel({
   log,
   room,
@@ -432,17 +455,21 @@ export function LogPanel({
         <p data-testid="log-empty">暂无行动</p>
       ) : (
         <ol ref={listRef} className="log-scroll" onScroll={onScroll}>
-          {log.map((entry) => (
-            <li key={entry.seq} data-testid="log-entry">
-              #{entry.seq} {playerName(room, entry.player)}：{actionSummary(entry.action)}
-              {entry.degraded === true ? (
-                <span className="degraded-badge">（已降级）</span>
-              ) : null}
-              {entry.reason !== undefined ? (
-                <blockquote className="log-reason">{entry.reason}</blockquote>
-              ) : null}
-            </li>
-          ))}
+          {log.map((entry) => {
+            const bonus = merchantBonusNote(entry.events);
+            return (
+              <li key={entry.seq} data-testid="log-entry">
+                #{entry.seq} {playerName(room, entry.player)}：{actionSummary(entry.action)}
+                {bonus !== null ? <span className="log-bonus" data-testid="log-bonus">（{bonus}）</span> : null}
+                {entry.degraded === true ? (
+                  <span className="degraded-badge">（已降级）</span>
+                ) : null}
+                {entry.reason !== undefined ? (
+                  <blockquote className="log-reason">{entry.reason}</blockquote>
+                ) : null}
+              </li>
+            );
+          })}
         </ol>
       )}
     </section>

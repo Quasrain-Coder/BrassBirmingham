@@ -63,6 +63,8 @@ export interface BoardHighlights {
   links?: number[];
   /** 可建城市级高亮（选产业/城市卡时，所有可放置地点的外框）。 */
   locations?: LocationId[];
+  /** 啤酒源高亮(match 效果):有余量的自有酒厂地点与有桶商人位。 */
+  beerSources?: { locations?: LocationId[]; merchants?: MerchantId[] };
 }
 
 /** 行动聚光灯：某玩家刚执行的行动在棋盘上的高亮目标（约 5 秒，GameScreen 驱动）。 */
@@ -80,6 +82,8 @@ export interface BoardSvgProps {
   thinkingSeats?: readonly PlayerIndex[] | undefined;
   /** 建造预览:非贴合预览 token 盖在目标槽位(确认前,切换城市即跟随)。 */
   buildPreview?: { location: LocationId; slotIndex: number; industry: IndustryType; player: PlayerIndex } | null | undefined;
+  /** 啤酒匹配线(resolved 卖货):啤酒来源 → 卖货地点(虚线动效)。 */
+  beerMatches?: { from: LocationId | MerchantId; to: LocationId }[] | undefined;
   onSlotClick?: ((location: LocationId, slotIndex: number) => void) | undefined;
   onLinkClick?: ((linkIndex: number) => void) | undefined;
 }
@@ -183,10 +187,12 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
   );
 }
 
-export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPreview, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
+export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPreview, beerMatches, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const highlightedLocations = new Set(highlights?.locations ?? []);
+  const beerSourceLocs = new Set(highlights?.beerSources?.locations ?? []);
+  const beerSourceMerchants = new Set(highlights?.beerSources?.merchants ?? []);
   const builtByLink = new Map<number, { player: PlayerIndex; era: 'canal' | 'rail' }>();
   for (const l of state.board.links) builtByLink.set(l.linkIndex, { player: l.player, era: l.era });
 
@@ -587,6 +593,75 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
             );
           })()
         : null}
+
+      {/* 啤酒源高亮 + 匹配线(match 效果):有余量的自有酒厂/商人桶金圈,卖货时虚线连到卖货地点 */}
+      {beerSourceLocs.size > 0 || beerSourceMerchants.size > 0 ? (
+        <g className="beer-sources" pointerEvents="none">
+          {Object.entries(SLOT_RECTS).flatMap(([loc, rects]) => {
+            if (!beerSourceLocs.has(loc as LocationId)) return [];
+            const placed = state.board.slots[loc as LocationId] ?? [];
+            return rects.map((r, si) => {
+              const t = placed[si];
+              if (!t || t.tile.industry !== 'brewery' || t.resources <= 0) return null;
+              return (
+                <rect
+                  key={`beer-src-${loc}-${si}`}
+                  className="beer-source-ring"
+                  x={r.x - 8}
+                  y={r.y - 8}
+                  width={r.w + 16}
+                  height={r.h + 16}
+                  rx={16}
+                  fill="none"
+                  stroke="#e8c96a"
+                  strokeWidth={7}
+                />
+              );
+            });
+          })}
+          {(Object.keys(MERCHANT_GEOM) as MerchantId[]).map((id) => {
+            if (!beerSourceMerchants.has(id)) return null;
+            const last = MERCHANT_GEOM[id].beer[MERCHANT_GEOM[id].beer.length - 1];
+            if (!last) return null;
+            return (
+              <rect
+                key={`beer-src-m-${id}`}
+                className="beer-source-ring"
+                x={last.x - 10}
+                y={last.y - 10}
+                width={last.w + 20}
+                height={last.h + 20}
+                rx={14}
+                fill="none"
+                stroke="#e8c96a"
+                strokeWidth={7}
+              />
+            );
+          })}
+        </g>
+      ) : null}
+      {beerMatches && beerMatches.length > 0 ? (
+        <g className="beer-matches" pointerEvents="none">
+          {beerMatches.map((m, i) => {
+            const from = anchorOf(m.from);
+            const to = anchorOf(m.to);
+            return (
+              <line
+                key={`beer-match-${i}`}
+                className="beer-match-line"
+                x1={from.x}
+                y1={from.y}
+                x2={to.x}
+                y2={to.y}
+                stroke="#e8c96a"
+                strokeWidth={10}
+                strokeDasharray="26 18"
+                strokeLinecap="round"
+              />
+            );
+          })}
+        </g>
+      ) : null}
 
       {/* 顺位轨:头像嵌左侧大桶,右侧数字桶上椭圆块放本轮花费(1/5/15 钱币堆) */}
       <g className="board-turn-track" pointerEvents="none">

@@ -13,7 +13,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
-import type { Action, Card, IndustryType, LocationId, PlayerIndex } from '@brass/engine';
+import type { Action, Card, IndustryType, LocationId, MerchantId, PlayerIndex } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { BoardHighlights, SlotRef } from '../board/BoardSvg';
 import {
@@ -33,7 +33,8 @@ import {
   targetsFor,
 } from './interactions';
 import type { BuildAction, SellAction } from './interactions';
-import { cardName, industryName } from './display';
+import { cardName, industryName, locationName, merchantName } from './display';
+import { previewOf } from './preview';
 
 export interface UseActionDraftArgs {
   legalActions: Action[];
@@ -63,6 +64,8 @@ export interface ActionDraft {
   buildChoices: BuildAction[];
   /** 建造预览（非贴合的预览 token 盖在目标槽位，切换城市即跟随）。 */
   buildPreview: { location: LocationId; slotIndex: number; industry: IndustryType } | null;
+  /** 啤酒匹配线(resolved 为卖货时):啤酒来源(商人位/自有酒厂)→ 卖货地点。 */
+  beerMatches: { from: LocationId | MerchantId; to: LocationId }[];
   /** 唯一匹配到的可提交行动（legalActions 原对象）。 */
   resolved: Action | null;
   clickSlot: (location: LocationId, slotIndex: number) => void;
@@ -119,8 +122,27 @@ export function useActionDraft({
     const slots = [...buildSlots, ...sellSlotTargets(candidates)];
     // 可建城市级高亮:所有可放置地点(与槽位高亮互补,找城更快)
     const locations = [...new Set(buildSlots.map((s) => s.location))];
-    return { slots, links: [...extendableLinks(candidates, pickedLinks)], locations };
-  }, [selectedCard, legalActions, candidates, state.board.slots, pickedLinks]);
+    // 啤酒源高亮(match 效果):卖货/铁路双轨候选存在时,自己酒厂(无需连通)与有桶商人位
+    const needsBeer = candidates.some(
+      (a) => a.type === 'sell' || (a.type === 'network' && a.links.length === 2),
+    );
+    const beerSources: NonNullable<BoardHighlights['beerSources']> = { locations: [], merchants: [] };
+    if (needsBeer) {
+      for (const [loc, slotsOfLoc] of Object.entries(state.board.slots)) {
+        if (
+          slotsOfLoc.some(
+            (t) => t && t.player === seat && !t.flipped && t.tile.industry === 'brewery' && t.resources > 0,
+          )
+        ) {
+          beerSources.locations!.push(loc as LocationId);
+        }
+      }
+      for (const [mid, m] of Object.entries(state.merchants)) {
+        if (m.beer > 0) beerSources.merchants!.push(mid as keyof typeof state.merchants);
+      }
+    }
+    return { slots, links: [...extendableLinks(candidates, pickedLinks)], locations, beerSources };
+  }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks]);
 
   const networkMatch = matchNetwork(candidates, pickedLinks);
   const sell = sellOptions(candidates);
@@ -210,6 +232,29 @@ export function useActionDraft({
       ? { location: previewSlot.location, slotIndex: previewSlot.slotIndex, industry: chosen.industry }
       : null;
 
+  /** 啤酒匹配线:resolved 为卖货时,每笔销售的啤酒来源 → 卖货地点(match 效果)。 */
+  const beerMatches = useMemo(() => {
+    if (resolved?.type !== 'sell') return [];
+    // 与 consumeBeer 规范化同序:自有酒厂按 LocationId 字典序取首个有余量者
+    const ownBreweries = Object.entries(state.board.slots)
+      .filter(([, slotsOfLoc]) =>
+        slotsOfLoc.some(
+          (t) => t && t.player === seat && !t.flipped && t.tile.industry === 'brewery' && t.resources > 0,
+        ),
+      )
+      .map(([loc]) => loc as LocationId)
+      .sort();
+    let ownIdx = 0;
+    return resolved.sales.map((sale) => {
+      if (sale.useMerchantBeer) {
+        return { from: sale.merchant, to: sale.location };
+      }
+      const from = ownBreweries[Math.min(ownIdx, Math.max(ownBreweries.length - 1, 0))];
+      ownIdx += 1;
+      return { from: from ?? sale.location, to: sale.location };
+    });
+  }, [resolved, state.board.slots, seat]);
+
   return {
     candidates,
     highlights,
@@ -224,6 +269,7 @@ export function useActionDraft({
     sellTile,
     buildChoices,
     buildPreview,
+    beerMatches,
     resolved,
     clickSlot,
     clickLink,
@@ -242,6 +288,8 @@ export interface ActionBarProps {
   /** 本人手牌（scout 弃牌选择用）。 */
   hand: Card[];
   draft: ActionDraft;
+  /** 完整局面（收益预览/啤酒显示用）。 */
+  state: FilteredState;
   /** 被扣住待确认的座位（= 本人时显示"结束回合/重置本回合"双按钮）。 */
   turnHold: PlayerIndex | null;
   seat: PlayerIndex;
@@ -259,6 +307,7 @@ export function ActionBar({
   selectedCard,
   hand,
   draft,
+  state,
   turnHold,
   seat,
   canResetTurn,
@@ -295,12 +344,53 @@ export function ActionBar({
 
   const builds = draft.candidates.filter((a) => a.type === 'build');
   const networks = draft.candidates.filter((a) => a.type === 'network');
+  const sells = draft.candidates.filter((a) => a.type === 'sell');
   const loan = draft.candidates.find((a) => a.type === 'loan');
   const pass = draft.candidates.find((a) => a.type === 'pass');
+
+  // 啤酒实况:自己的酒厂桶(无需连通)+ 各商人位余桶
+  const ownBreweries = Object.entries(state.board.slots)
+    .map(([loc, slotsOfLoc]) => {
+      const total = slotsOfLoc
+        .filter((t) => t && t.player === seat && !t.flipped && t.tile.industry === 'brewery')
+        .reduce((s, t) => s + (t?.resources ?? 0), 0);
+      return total > 0 ? `${locationName(loc)}×${total}` : null;
+    })
+    .filter((x): x is string => x !== null);
+  const merchantBeers = Object.entries(state.merchants)
+    .filter(([, m]) => m.beer > 0)
+    .map(([mid, m]) => `${merchantName(mid)}×${m.beer}`);
+
+  // 不可执行原因提示(项 1/4):选了牌但没有任何建造/卖货目标时,说明原因
+  const hasSellableOnBoard = Object.values(state.board.slots).some((slotsOfLoc) =>
+    slotsOfLoc.some(
+      (t) =>
+        t &&
+        t.player === seat &&
+        !t.flipped &&
+        (t.tile.industry === 'cotton' || t.tile.industry === 'manufacturer' || t.tile.industry === 'pottery'),
+    ),
+  );
+  const hints: string[] = [];
+  if (selectedCard !== null) {
+    if (builds.length === 0 && networks.length === 0 && sells.length === 0) {
+      hints.push('该牌当前没有可执行的建造/连接目标（可能：运河时代每城限 1 块、无匹配空槽、不在你的网络内）。');
+    }
+    if (sells.length === 0 && hasSellableOnBoard) {
+      hints.push('有可卖板块但暂不可售：板块需连通到收该货图标的商人（自己的酒不需连通）。');
+    }
+  }
+
+  const preview = draft.resolved !== null ? previewOf(draft.resolved, state, seat) : null;
 
   return (
     <section className="action-bar" data-testid="action-bar">
       <h3>行动</h3>
+      {/* 啤酒实况常驻显示(项 5) */}
+      <p className="beer-status" data-testid="beer-status">
+        啤酒：{ownBreweries.length > 0 ? `酒厂 ${ownBreweries.join('、')}` : '无酒厂余量'}
+        {merchantBeers.length > 0 ? `｜商人 ${merchantBeers.join('、')}` : ''}
+      </p>
       {selectedCard === null ? (
         <p data-testid="select-card-hint">从手牌中选一张牌，棋盘将高亮可执行的目标。</p>
       ) : (
@@ -411,6 +501,18 @@ export function ActionBar({
       )}
 
       <div className="action-confirm">
+        {hints.map((h) => (
+          <p className="action-blocked-hint" data-testid="blocked-hint" key={h}>
+            {h}
+          </p>
+        ))}
+        {preview !== null && (preview.gains.length > 0 || preview.costs.length > 0) ? (
+          <p className="action-preview" data-testid="action-preview">
+            {preview.gains.length > 0 ? `收益：${preview.gains.join('、')}` : ''}
+            {preview.gains.length > 0 && preview.costs.length > 0 ? '｜' : ''}
+            {preview.costs.length > 0 ? `花费：${preview.costs.join('、')}` : ''}
+          </p>
+        ) : null}
         <button
           type="button"
           data-testid="confirm-action"
