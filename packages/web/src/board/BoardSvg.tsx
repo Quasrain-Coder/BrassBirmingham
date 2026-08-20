@@ -89,8 +89,12 @@ function tileImage(industry: IndustryType, level: number, player: PlayerIndex, f
   return `/assets/tiles/${industry}-${level}-${color}${flipped ? '-back' : ''}.png`;
 }
 
-/** 连线路径点：端点锚点 → 投影中点 → 端点锚点（沿印刷运河/铁路）。端点向中点回缩，避免压住槽位。 */
-function linkPath(a: { x: number; y: number }, b: { x: number; y: number }, mid: { x: number; y: number } | undefined): string {
+/** 连线渲染几何：回缩端点 ta/tb、路径点串、主方向角（deg，ta→tb）。 */
+function linkGeom(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  mid: { x: number; y: number } | undefined,
+): { m: { x: number; y: number }; pts: string; angle: number } {
   const m = mid ?? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   const trim = (p: { x: number; y: number }): { x: number; y: number } => {
     const dx = m.x - p.x;
@@ -101,7 +105,13 @@ function linkPath(a: { x: number; y: number }, b: { x: number; y: number }, mid:
   };
   const ta = trim(a);
   const tb = trim(b);
-  return `${ta.x},${ta.y} ${m.x},${m.y} ${tb.x},${tb.y}`;
+  const angle = (Math.atan2(tb.y - ta.y, tb.x - ta.x) * 180) / Math.PI;
+  return { m, pts: `${ta.x},${ta.y} ${m.x},${m.y} ${tb.x},${tb.y}`, angle };
+}
+
+/** 连线路径点：端点锚点 → 投影中点 → 端点锚点（沿印刷运河/铁路）。端点向中点回缩，避免压住槽位。 */
+function linkPath(a: { x: number; y: number }, b: { x: number; y: number }, mid: { x: number; y: number } | undefined): string {
+  return linkGeom(a, b, mid).pts;
 }
 
 /** 煤/铁方块（官方即纯色木方块，圆角+顶面高光）。 */
@@ -136,30 +146,30 @@ function ResourceTokens({ cx, cy, industry, count }: { cx: number; cy: number; i
   return <g className="tile-resource-tokens">{tokens}</g>;
 }
 
-/** 连线 token 尺寸（中点的玩家色圆角牌 + 驳船/火车图标）。 */
-const LINK_TOKEN_W = 150;
-const LINK_TOKEN_H = 88;
+/** 连线 token 尺寸（中点的玩家色连接牌，沿线路方向旋转）。 */
+const LINK_TOKEN_W = 190;
+const LINK_TOKEN_H = 76;
 
-/** 已建连线：玩家色路径 + 中点 token（运河=驳船 / 铁路=火车，按建造时时代）。 */
-function BuiltLinkToken({ mid, player, era }: { mid: { x: number; y: number }; player: PlayerIndex; era: 'canal' | 'rail' }): ReactElement {
+/** 已建连线：中点放玩家连接牌（实物即玩家色船/车牌），运河=驳船 / 铁路=火车（按建造时时代）。 */
+function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: number }; angle: number; player: PlayerIndex; era: 'canal' | 'rail' }): ReactElement {
   return (
-    <g className="link-token" pointerEvents="none">
+    <g className="link-token" transform={`rotate(${Math.round(angle)} ${mid.x} ${mid.y})`} pointerEvents="none">
       <rect
         x={mid.x - LINK_TOKEN_W / 2}
         y={mid.y - LINK_TOKEN_H / 2}
         width={LINK_TOKEN_W}
         height={LINK_TOKEN_H}
-        rx={16}
+        rx={18}
         fill={playerColor(player)}
         stroke="#14100a"
         strokeWidth={6}
       />
       <image
         href={era === 'canal' ? '/assets/link-canal.png' : '/assets/link-rail.png'}
-        x={mid.x - 52}
-        y={mid.y - 33}
-        width={104}
-        height={66}
+        x={mid.x - 46}
+        y={mid.y - 26}
+        width={92}
+        height={52}
         preserveAspectRatio="xMidYMid meet"
       />
     </g>
@@ -182,12 +192,11 @@ export function BoardSvg({ state, highlights, spotlight, onSlotClick, onLinkClic
   // 连线 token 收集后置于所有槽位/板块之上渲染（中点常与槽位重叠，不能被板块图盖住）
   const linkTokens: ReactElement[] = [];
   for (const l of state.board.links) {
-    const mid = LINK_MIDPOINTS[l.linkIndex];
-    if (mid !== undefined) {
-      linkTokens.push(
-        <BuiltLinkToken key={`link-token-${l.linkIndex}`} mid={mid} player={l.player} era={l.era} />,
-      );
-    }
+    const link = LINKS[l.linkIndex]!;
+    const g = linkGeom(anchorOf(link.a), anchorOf(link.b), LINK_MIDPOINTS[l.linkIndex]);
+    linkTokens.push(
+      <BuiltLinkToken key={`link-token-${l.linkIndex}`} mid={g.m} angle={g.angle} player={l.player} era={l.era} />,
+    );
   }
 
   return (
@@ -226,10 +235,10 @@ export function BoardSvg({ state, highlights, spotlight, onSlotClick, onLinkClic
                   points={pts}
                   fill="none"
                   stroke={playerColor(builtBy.player)}
-                  strokeWidth={34}
+                  strokeWidth={12}
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  opacity={0.85}
+                  opacity={0.6}
                   pointerEvents="none"
                 />
               ) : null}
@@ -291,9 +300,9 @@ export function BoardSvg({ state, highlights, spotlight, onSlotClick, onLinkClic
                         points={`${m.x},${m.y} ${e.x},${e.y}`}
                         fill="none"
                         stroke={playerColor(builtBy.player)}
-                        strokeWidth={34}
+                        strokeWidth={12}
                         strokeLinecap="round"
-                        opacity={0.85}
+                        opacity={0.6}
                         pointerEvents="none"
                       />
                     ) : null}
@@ -479,18 +488,24 @@ export function BoardSvg({ state, highlights, spotlight, onSlotClick, onLinkClic
           {spotlight.links.map((i) => {
             const link = LINKS[i];
             if (!link) return null;
-            const pts = linkPath(anchorOf(link.a), anchorOf(link.b), LINK_MIDPOINTS[i]);
+            const g = linkGeom(anchorOf(link.a), anchorOf(link.b), LINK_MIDPOINTS[i]);
             return (
-              <polyline
+              <g
                 key={`sp-link-${i}`}
-                className="board-spotlight-pulse"
-                points={pts}
-                fill="none"
-                stroke={playerColor(spotlight.player)}
-                strokeWidth={56}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+                transform={`rotate(${Math.round(g.angle)} ${g.m.x} ${g.m.y})`}
+              >
+                <rect
+                  className="board-spotlight-pulse"
+                  x={g.m.x - LINK_TOKEN_W / 2 - 16}
+                  y={g.m.y - LINK_TOKEN_H / 2 - 16}
+                  width={LINK_TOKEN_W + 32}
+                  height={LINK_TOKEN_H + 32}
+                  rx={26}
+                  fill="none"
+                  stroke={playerColor(spotlight.player)}
+                  strokeWidth={12}
+                />
+              </g>
             );
           })}
           {spotlight.locations.map((loc) => {

@@ -230,44 +230,44 @@ export const INCOME_TRACK: Point[] = ringPositions(INCOME_SIDES);
  * 渲染时按 端点A → 中点 → 端点B 折线沿印刷运河/铁路绘制。
  */
 export const LINK_MIDPOINTS: Record<number, Point> = {
-  0: { x: 4051, y: 1495 }, // belper-derby
-  1: { x: 3577, y: 1163 }, // belper-leek
+  0: { x: 4120, y: 1725 }, // belper-derby
+  1: { x: 3645, y: 1360 }, // belper-leek
   2: { x: 3798, y: 3932 }, // birmingham-coventry
-  3: { x: 2995, y: 3798 }, // birmingham-dudley
-  4: { x: 3782, y: 3618 }, // birmingham-nuneaton
-  5: { x: 3803, y: 4130 }, // birmingham-oxford
-  6: { x: 3380, y: 4142 }, // birmingham-redditch
-  7: { x: 3720, y: 3371 }, // birmingham-tamworth
-  8: { x: 3159, y: 3606 }, // birmingham-walsall
-  9: { x: 2847, y: 4319 }, // birmingham-worcester
-  10: { x: 3258, y: 2578 }, // burton-on-trent-cannock
-  11: { x: 4006, y: 2222 }, // burton-on-trent-derby
-  12: { x: 3015, y: 2160 }, // burton-on-trent-stone
-  13: { x: 3753, y: 2726 }, // burton-on-trent-tamworth
-  14: { x: 3307, y: 2908 }, // burton-on-trent-walsall
-  15: { x: 2862, y: 2567 }, // cannock-stafford
+  3: { x: 3000, y: 3730 }, // birmingham-dudley
+  4: { x: 3840, y: 3615 }, // birmingham-nuneaton
+  5: { x: 3885, y: 4165 }, // birmingham-oxford
+  6: { x: 3520, y: 4140 }, // birmingham-redditch
+  7: { x: 3790, y: 3420 }, // birmingham-tamworth
+  8: { x: 3320, y: 3625 }, // birmingham-walsall
+  9: { x: 2935, y: 4320 }, // birmingham-worcester
+  10: { x: 3315, y: 2645 }, // burton-on-trent-cannock
+  11: { x: 4095, y: 2300 }, // burton-on-trent-derby
+  12: { x: 3015, y: 2200 }, // burton-on-trent-stone
+  13: { x: 3845, y: 2740 }, // burton-on-trent-tamworth
+  14: { x: 3415, y: 2920 }, // burton-on-trent-walsall
+  15: { x: 2890, y: 2570 }, // cannock-stafford
   16: { x: 2462, y: 2801 }, // cannock-farm-north
-  17: { x: 3112, y: 3031 }, // cannock-walsall
+  17: { x: 3170, y: 3045 }, // cannock-walsall
   18: { x: 2514, y: 3024 }, // cannock-wolverhampton
-  19: { x: 1932, y: 3965 }, // coalbrookdale-kidderminster
-  20: { x: 1588, y: 3327 }, // coalbrookdale-shrewsbury
+  19: { x: 2130, y: 3825 }, // coalbrookdale-kidderminster
+  20: { x: 1685, y: 3250 }, // coalbrookdale-shrewsbury
   21: { x: 2102, y: 3284 }, // coalbrookdale-wolverhampton
-  22: { x: 4387, y: 3589 }, // coventry-nuneaton
-  23: { x: 4273, y: 1678 }, // derby-nottingham
-  24: { x: 3649, y: 1932 }, // derby-uttoxeter
+  22: { x: 4460, y: 3615 }, // coventry-nuneaton
+  23: { x: 4430, y: 1910 }, // derby-nottingham
+  24: { x: 3670, y: 2050 }, // derby-uttoxeter
   25: { x: 2340, y: 3984 }, // dudley-kidderminster
-  26: { x: 2433, y: 3577 }, // dudley-wolverhampton
-  27: { x: 2930, y: 4588 }, // gloucester-redditch
-  28: { x: 2641, y: 4892 }, // gloucester-worcester
+  26: { x: 2600, y: 3580 }, // dudley-wolverhampton
+  27: { x: 3040, y: 4640 }, // gloucester-redditch
+  28: { x: 2800, y: 4765 }, // gloucester-worcester
   29: { x: 2460, y: 4445 }, // kidderminster-worcester（含 farm-south 分支；贴印刷走廊与农场岔道交汇点）
-  30: { x: 2857, y: 1271 }, // leek-stoke-on-trent
+  30: { x: 2895, y: 1415 }, // leek-stoke-on-trent
   31: { x: 4095, y: 3048 }, // nuneaton-tamworth
   32: { x: 3566, y: 4427 }, // redditch-oxford
-  33: { x: 2205, y: 2379 }, // stafford-stone
+  33: { x: 2280, y: 2390 }, // stafford-stone
   34: { x: 2445, y: 1842 }, // stoke-on-trent-stone
-  35: { x: 2399, y: 1369 }, // stoke-on-trent-warrington
-  36: { x: 2719, y: 1952 }, // stone-uttoxeter
-  37: { x: 3448, y: 3220 }, // tamworth-walsall
+  35: { x: 2405, y: 1410 }, // stoke-on-trent-warrington
+  36: { x: 2720, y: 2015 }, // stone-uttoxeter
+  37: { x: 3565, y: 3245 }, // tamworth-walsall
   38: { x: 2758, y: 3263 }, // walsall-wolverhampton
 };
 
