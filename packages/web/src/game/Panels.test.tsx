@@ -4,13 +4,23 @@
  * （煤/铁市场格与收入轨已移至 BoardSvg，见其测试。）
  */
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { newGame, tileDef } from '@brass/engine';
 import { filterStateFor } from '@brass/protocol';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import type { Card } from '@brass/engine';
 import { HandBar, LogPanel, PlayerBoard, TurnOrderBar, cardImageSrc } from './Panels';
 import type { LogEntry } from './store';
+
+// 堆叠视图选择持久化在 localStorage:有 localStorage 的环境(CI/浏览器)会跨用例
+// 泄漏视图状态,逐用例清空保证默认版图视图;无 localStorage 的环境直接跳过。
+beforeEach(() => {
+  try {
+    globalThis.localStorage?.clear();
+  } catch {
+    /* ignore */
+  }
+});
 
 function freshState(): FilteredState {
   return filterStateFor(newGame(4, 42), 0);
