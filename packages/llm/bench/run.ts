@@ -112,8 +112,14 @@ function parseArgs(argv: string[]): CliOptions {
 /** agent 工厂：LLM 座位共用一个 AnthropicClient（无状态）；按 spec 构造。 */
 function makeAgents(specs: string[]): { agents: DecidingAgent[]; labels: string[] } {
   const needsLLM = specs.some((s) => s.startsWith('llm:'));
-  if (needsLLM && (process.env['ANTHROPIC_API_KEY'] ?? '') === '') {
-    throw new Error('含 llm 座位须设 ANTHROPIC_API_KEY（纯 heuristic 对局不需要）');
+  // 网关环境可能用 AUTH_TOKEN 而非 API_KEY（SDK 两者皆认）——都放行。
+  const authed =
+    (process.env['ANTHROPIC_API_KEY'] ?? '') !== '' ||
+    (process.env['ANTHROPIC_AUTH_TOKEN'] ?? '') !== '';
+  if (needsLLM && !authed) {
+    throw new Error(
+      '含 llm 座位须设 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN（纯 heuristic 对局不需要）',
+    );
   }
   const client = needsLLM ? new AnthropicClient() : null;
   const agents = specs.map((spec): DecidingAgent => {
@@ -152,6 +158,7 @@ function summarize(records: GameRecord[], labels: string[]): void {
     let marginSum = 0;
     let degraded = 0;
     let decisions = 0;
+    let negative = 0;
     let input = 0;
     let output = 0;
     for (const r of records) {
@@ -164,6 +171,7 @@ function summarize(records: GameRecord[], labels: string[]): void {
         const others = r.vps.filter((_, i) => i !== seat);
         vpSum += vp;
         marginSum += vp - Math.max(...others);
+        if (vp < 0) negative++;
         degraded += r.degraded[seat]!;
         decisions += r.steps / r.seatLabels.length;
         input += r.usage[seat]!.input;
@@ -174,6 +182,7 @@ function summarize(records: GameRecord[], labels: string[]): void {
       `${label}: 胜率 ${((wins / games) * 100).toFixed(1)}% (${wins}/${games})` +
         ` | 平均VP ${(vpSum / games).toFixed(1)}` +
         ` | 平均VP差 ${(marginSum / games).toFixed(1)}` +
+        ` | 负分 ${((negative / games) * 100).toFixed(0)}%` +
         ` | degraded ${((degraded / Math.max(1, decisions)) * 100).toFixed(1)}%` +
         ` | token in=${input} out=${output}`,
     );

@@ -21,7 +21,7 @@ import {
   type PlayerIndex,
 } from '@brass/engine';
 import type { DecidingAgent } from '../src/decision.js';
-import { scoreAction } from '../src/heuristic.js';
+import { prescreen, scoreAction } from '../src/heuristic.js';
 import { describeAction } from '../src/summarize.js';
 
 /** 单步决策记录（games.jsonl 之外另落 decisions.jsonl）。 */
@@ -55,14 +55,22 @@ export interface DrivenGame {
 /** 与 playGame 同一防御上限：正常对局远小于此，超限即引擎死循环。 */
 const MAX_STEPS = 100_000;
 
-/** 所选行动在 scoreAction 降序中的名次（引用比较优先，退化稳定序列化比较）。 */
+/**
+ * 所选行动在"LLM 可见候选集"（prescreen 消毒+去重后）scoreAction 降序中的名次。
+ * 引用比较优先，退化稳定序列化比较。
+ *
+ * 语义：衡量"模型在它看到的候选里选得好不好"。用全量 legal 会把被消毒剔除的
+ * 自杀贷款也算进去——那种贷款模型根本看不到，rank 失真（baseline-llm 实测
+ * 开局的启发式最优常是 0→-3 的贷款，而模型不该被要求选它）。
+ */
 export function rankOf(
   state: GameState,
   player: PlayerIndex,
   legal: Action[],
   chosen: Action,
 ): { rank: number; top: Action } {
-  const scored = legal
+  const candidates = prescreen(state, player, legal, legal.length);
+  const scored = candidates
     .map((action, index) => ({ action, index, score: scoreAction(state, player, action) }))
     .sort((a, b) => b.score - a.score || a.index - b.index);
   let rank = scored.findIndex((x) => x.action === chosen);

@@ -142,7 +142,9 @@ export class LLMAgent implements DecidingAgent {
     const baseReq = {
       system: fullSystem,
       candidates: candidates.length,
-      model: cfg.model,
+      // BRASS_AI_MODEL 覆盖难度默认模型（网关不提供默认模型名时用——如本地网关
+      // 只有 DeepSeek-V4-Flash 没有 claude-sonnet-4-5）。
+      model: process.env['BRASS_AI_MODEL'] ?? cfg.model,
       maxTokens: cfg.maxTokens,
       timeoutMs: cfg.timeoutMs,
     };

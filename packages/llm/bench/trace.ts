@@ -6,7 +6,7 @@
  * （action log 存在 DrivenGame.log，games.jsonl 里不重复存，重放需决策序列
  * 时由 analyze 从 decisions.jsonl 的 chosen 重建或直接重跑 driveGame）。
  */
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivenGame, DecisionTrace } from './drive-game.js';
 
@@ -70,6 +70,15 @@ export class TraceWriter {
     mkdirSync(outDir, { recursive: true });
     this.decisionsPath = join(outDir, 'decisions.jsonl');
     this.gamesPath = join(outDir, 'games.jsonl');
+    // 防污染：目录已存在且 games.jsonl 非空（上次跑批残留）→ 拒绝追加。
+    // R1 迭代曾因复用 --out 目录把两次跑批的 JSONL 混在一起，去重前
+    // 每局出现两次、VP 还不一致，直接导致汇总结论不可信（见 bench/out 历史）。
+    if (existsSync(this.gamesPath) && statSync(this.gamesPath).size > 0) {
+      throw new Error(
+        `拒绝写 ${outDir}：games.jsonl 已非空（上次跑批残留）。` +
+        `换新 --out 目录，或用空目录重试。`,
+      );
+    }
   }
 
   decision(trace: DecisionTrace & { seed: number; mirrored: boolean }): void {
