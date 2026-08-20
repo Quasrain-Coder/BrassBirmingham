@@ -93,6 +93,15 @@ describe('e2e: ws 级完整对局', () => {
             c.nextMessage('snapshot', (m) => m.seq === seq, PER_STEP_TIMEOUT_MS),
           ),
         );
+        // turnHold 协议:被扣住的座位先显式结束回合(同一 seq 的确认后快照随后到达)
+        let confirmed = false;
+        for (let i = 0; i < clients.length; i++) {
+          if (snaps[i]!.turnHold === i) {
+            clients[i]!.send({ type: 'end_turn', protocolVersion: 1, token: tokens[i]! });
+            confirmed = true;
+          }
+        }
+        if (confirmed) continue;
         const actorIdx = snaps.findIndex((s) => (s.legalActions as unknown[]).length > 0);
         if (actorIdx === -1) break; // 终局快照：全员 legalActions 为空
         const legal = snaps[actorIdx]!.legalActions as Record<string, unknown>[];

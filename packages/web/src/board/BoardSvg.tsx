@@ -80,6 +80,8 @@ export interface BoardSvgProps {
   spotlight?: ActionSpotlight | null | undefined;
   /** AI 思考中的座位（顺位轨头像呼吸灯）。 */
   thinkingSeats?: readonly PlayerIndex[] | undefined;
+  /** 建造预览:非贴合预览 token 盖在目标槽位(确认前,切换城市即跟随)。 */
+  buildPreview?: { location: LocationId; slotIndex: number; industry: IndustryType; player: PlayerIndex } | null | undefined;
   onSlotClick?: ((location: LocationId, slotIndex: number) => void) | undefined;
   onLinkClick?: ((linkIndex: number) => void) | undefined;
 }
@@ -146,7 +148,7 @@ function ResourceTokens({ cx, cy, industry, count }: { cx: number; cy: number; i
       industry === 'brewery' ? (
         <image key={i} href="/assets/beer.png" x={x - 26} y={y - 26} width={52} height={52} />
       ) : (
-        <Cube key={i} x={x} y={y} size={44} fill={industry === 'coal' ? '#454c58' : '#c76b2a'} />
+        <Cube key={i} x={x} y={y} size={44} fill={industry === 'coal' ? '#1f2329' : '#c76b2a'} />
       ),
     );
   }
@@ -183,7 +185,7 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
   );
 }
 
-export function BoardSvg({ state, highlights, spotlight, thinkingSeats, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
+export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPreview, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const highlightedLocations = new Set(highlights?.locations ?? []);
@@ -520,7 +522,7 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, onSlotCl
       {/* 煤/铁市场：已填格叠方块 */}
       <g className="board-markets" pointerEvents="none">
         {COAL_MARKET_CELLS.map((p, i) =>
-          i >= coalFilledFrom ? <Cube key={`coal-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#454c58" /> : null,
+          i >= coalFilledFrom ? <Cube key={`coal-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#1f2329" /> : null,
         )}
         {IRON_MARKET_CELLS.map((p, i) =>
           i >= ironFilledFrom ? <Cube key={`iron-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#c76b2a" /> : null,
@@ -529,6 +531,36 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, onSlotCl
 
       {/* 连线 token 顶层渲染（不被板块图遮挡） */}
       <g className="board-link-tokens">{linkTokens}</g>
+
+      {/* 建造预览:确认前把非贴合预览 token 盖在目标槽位(倾斜+半透明) */}
+      {buildPreview
+        ? (() => {
+            const r = SLOT_RECTS[buildPreview.location]?.[buildPreview.slotIndex];
+            const def = state.players[buildPreview.player]?.tiles.find(
+              (t) => t.industry === buildPreview.industry,
+            );
+            if (r === undefined || def === undefined) return null;
+            const cx = r.x + r.w / 2;
+            const cy = r.y + r.h / 2;
+            return (
+              <g
+                className="build-preview"
+                data-testid="build-preview"
+                pointerEvents="none"
+                transform={`rotate(4 ${cx} ${cy})`}
+                opacity={0.85}
+              >
+                <image
+                  href={tileImage(buildPreview.industry, def.level, buildPreview.player, false)}
+                  x={r.x}
+                  y={r.y}
+                  width={r.w}
+                  height={r.h}
+                />
+              </g>
+            );
+          })()
+        : null}
 
       {/* 顺位轨:头像嵌左侧大桶,右侧数字桶上椭圆块放本轮花费(1/5/15 钱币堆) */}
       <g className="board-turn-track" pointerEvents="none">

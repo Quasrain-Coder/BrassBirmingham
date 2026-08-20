@@ -287,28 +287,39 @@ async function driveOneHuman(p: WsPlayer): Promise<void> {
     () => 'over' as const,
     () => 'over-timeout' as const,
   );
+  // turnHold 协议:只在自己刚行动过之后才发 end_turn(别人的 hold 忽略)
+  let justActed = false;
   for (;;) {
-    const turnP = p.client
+    const snapP = p.client
       .nextMessage(
         'snapshot',
-        (m) => (m.legalActions as unknown[]).length > 0,
+        (m) => m.turnHold != null || (m.legalActions as unknown[]).length > 0,
         TURN_TIMEOUT_MS,
       )
       .then(
-        (m) => ({ kind: 'turn' as const, m }),
+        (m) => ({ kind: 'snap' as const, m }),
         () => ({ kind: 'stuck' as const }),
       );
-    const r = await Promise.race([turnP, overP]);
+    const r = await Promise.race([snapP, overP]);
     if (r === 'over') return;
     if (r === 'over-timeout') throw new Error('等 game_over 超时');
     if (r.kind === 'stuck') throw new Error('等自己回合 snapshot 超时（对局卡死）');
-    const legal = r.m.legalActions as Record<string, unknown>[];
+    const m = r.m;
+    if (m.turnHold != null) {
+      if (justActed) {
+        p.client.send({ type: 'end_turn', protocolVersion: PV, token: p.token });
+        justActed = false;
+      }
+      continue;
+    }
+    const legal = m.legalActions as Record<string, unknown>[];
     p.client.send({
       type: 'submit_action',
       protocolVersion: PV,
       token: p.token,
       action: legal[p.rng.nextInt(legal.length)]!,
     });
+    justActed = true;
   }
 }
 
@@ -484,6 +495,13 @@ describe('WS 集成：AI 座位与驱动循环', () => {
           token: human.token,
           action: legal[0]!,
         });
+        // turnHold 协议:回合打满被扣住 → 显式结束回合
+        const post = await human.client
+          .nextMessage('snapshot', (m) => m.turnHold != null, 300)
+          .catch(() => null);
+        if (post !== null) {
+          human.client.send({ type: 'end_turn', protocolVersion: PV, token: human.token });
+        }
       }
       await thinkingP; // AI 决策已悬挂（gate 未开）
       expect(agent.calls).toBe(1);

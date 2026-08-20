@@ -188,6 +188,8 @@ export interface GameStoreState {
   legalActions: Action[];
   /** 最近一次 snapshot 的 seq。 */
   seq: number;
+  /** 被扣住等待"结束回合"的座位（自己的回合打满后 = 本人,可按结束/重置）。 */
+  turnHold: PlayerIndex | null;
   log: LogEntry[];
   /** 正在决策中的 AI 座位（ai_thinking true 加入、false 移除）。 */
   thinkingSeats: PlayerIndex[];
@@ -208,6 +210,7 @@ const INITIAL_STATE: GameStoreState = {
   snapshot: null,
   legalActions: [],
   seq: 0,
+  turnHold: null,
   log: [],
   thinkingSeats: [],
   gameOver: null,
@@ -302,6 +305,17 @@ export class GameStore {
       token: this.requireToken(),
       action,
     });
+    this.patch({ selectedCard: null });
+  }
+
+  /** 结束被扣住的回合（放行下一玩家/AI）。 */
+  endTurn(): void {
+    this.send({ type: 'end_turn', protocolVersion: PROTOCOL_VERSION, token: this.requireToken() });
+  }
+
+  /** 重置被扣住的回合（撤销本轮全部行动，回到回合初）。 */
+  resetTurn(): void {
+    this.send({ type: 'reset_turn', protocolVersion: PROTOCOL_VERSION, token: this.requireToken() });
     this.patch({ selectedCard: null });
   }
 
@@ -478,6 +492,7 @@ export class GameStore {
           snapshot: msg.state,
           legalActions: msg.legalActions,
           seq: msg.seq,
+          turnHold: msg.turnHold ?? null,
         });
         break;
       case 'action_applied': {

@@ -31,6 +31,7 @@ interface GameBoardProps {
   log: LogEntry[];
   thinkingSeats: PlayerIndex[];
   gameOver: GameStoreState['gameOver'];
+  turnHold: PlayerIndex | null;
 }
 
 /** 非本人回合的固定空数组：避免每渲染新引用触发 useActionDraft 的重置 effect 死循环。 */
@@ -46,6 +47,7 @@ function GameBoard({
   log,
   thinkingSeats,
   gameOver,
+  turnHold,
 }: GameBoardProps): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx] ?? seat;
   const myTurn = current === seat && gameOver === null;
@@ -129,6 +131,7 @@ function GameBoard({
           highlights={myTurn ? draft.highlights : undefined}
           spotlight={spotlight}
           thinkingSeats={thinkingSeats}
+          buildPreview={myTurn && draft.buildPreview !== null ? { ...draft.buildPreview, player: seat } : null}
           onSlotClick={myTurn ? draft.clickSlot : undefined}
           onLinkClick={myTurn ? draft.clickLink : undefined}
         />
@@ -160,14 +163,18 @@ function GameBoard({
       />
       <ActionBar
         myTurn={myTurn}
-        waitingFor={playerName(room ?? undefined, current)}
+        waitingFor={playerName(room ?? undefined, turnHold ?? current)}
         selectedCard={myTurn ? selectedCard : null}
         hand={hand}
         draft={draft}
+        turnHold={turnHold}
+        seat={seat}
         onConfirm={() => {
           if (draft.resolved !== null) store.submitAction(draft.resolved);
         }}
         onCancel={draft.reset}
+        onEndTurn={() => store.endTurn()}
+        onResetTurn={() => store.resetTurn()}
       />
       <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} />
       {seatsAfter.length > 0 ? (
@@ -202,6 +209,7 @@ export function GameScreen({ store }: { store: GameStore }): ReactElement {
       log={s.log}
       thinkingSeats={s.thinkingSeats}
       gameOver={s.gameOver}
+      turnHold={s.turnHold}
     />
   );
 }

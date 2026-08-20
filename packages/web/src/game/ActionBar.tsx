@@ -61,6 +61,8 @@ export interface ActionDraft {
   sellTile: SlotRef | null;
   /** 槽位歧义（一槽多产业）时的待选 build。 */
   buildChoices: BuildAction[];
+  /** 建造预览（非贴合的预览 token 盖在目标槽位，切换城市即跟随）。 */
+  buildPreview: { location: LocationId; slotIndex: number; industry: IndustryType } | null;
   /** 唯一匹配到的可提交行动（legalActions 原对象）。 */
   resolved: Action | null;
   clickSlot: (location: LocationId, slotIndex: number) => void;
@@ -85,6 +87,8 @@ export function useActionDraft({
   const [sellTile, setSellTile] = useState<SlotRef | null>(null);
   const [buildChoices, setBuildChoices] = useState<BuildAction[]>([]);
   const [chosen, setChosen] = useState<Action | null>(null);
+  /** 建造预览的目标槽位(点选/歧义选择的城市;切换城市即跟随)。 */
+  const [previewSlot, setPreviewSlot] = useState<SlotRef | null>(null);
 
   const reset = (): void => {
     setPickedLinks([]);
@@ -93,6 +97,7 @@ export function useActionDraft({
     setSellTile(null);
     setBuildChoices([]);
     setChosen(null);
+    setPreviewSlot(null);
   };
 
   // 换牌 / 新快照（legalActions 换引用）→ 已收集参数作废
@@ -139,11 +144,13 @@ export function useActionDraft({
     if (builds.length === 1) {
       setChosen(builds[0]!);
       setBuildChoices([]);
+      setPreviewSlot({ location, slotIndex });
       return;
     }
     if (builds.length > 1) {
       setBuildChoices(builds);
       setChosen(null);
+      setPreviewSlot({ location, slotIndex });
       return;
     }
     const sells = sellCandidatesAt(candidates, location, slotIndex);
@@ -194,7 +201,14 @@ export function useActionDraft({
   const choose = (action: Action): void => {
     setChosen(action);
     setBuildChoices([]);
+    if (action.type !== 'build') setPreviewSlot(null);
   };
+
+  /** 建造预览:已确定产业 + 目标槽位(歧义待选期间为 null,选定产业后出现)。 */
+  const buildPreview =
+    chosen?.type === 'build' && previewSlot !== null
+      ? { location: previewSlot.location, slotIndex: previewSlot.slotIndex, industry: chosen.industry }
+      : null;
 
   return {
     candidates,
@@ -209,6 +223,7 @@ export function useActionDraft({
     sellFullSet: sell.fullSet,
     sellTile,
     buildChoices,
+    buildPreview,
     resolved,
     clickSlot,
     clickLink,
@@ -227,8 +242,13 @@ export interface ActionBarProps {
   /** 本人手牌（scout 弃牌选择用）。 */
   hand: Card[];
   draft: ActionDraft;
+  /** 被扣住待确认的座位（= 本人时显示"结束回合/重置本回合"双按钮）。 */
+  turnHold: PlayerIndex | null;
+  seat: PlayerIndex;
   onConfirm: () => void;
   onCancel: () => void;
+  onEndTurn: () => void;
+  onResetTurn: () => void;
 }
 
 export function ActionBar({
@@ -237,13 +257,35 @@ export function ActionBar({
   selectedCard,
   hand,
   draft,
+  turnHold,
+  seat,
   onConfirm,
   onCancel,
+  onEndTurn,
+  onResetTurn,
 }: ActionBarProps): ReactElement {
+  // 回合打满待确认:显式"结束回合"放行;"重置本回合"撤销重来
+  if (turnHold === seat) {
+    return (
+      <section className="action-bar turn-hold" data-testid="action-bar">
+        <p data-testid="turn-hold-hint">本回合行动已完成。确认后进入下一位玩家;也可以重置本回合重新行动。</p>
+        <div className="action-confirm">
+          <button type="button" data-testid="end-turn" onClick={onEndTurn}>
+            结束回合
+          </button>
+          <button type="button" data-testid="reset-turn" className="btn-ghost" onClick={onResetTurn}>
+            重置本回合
+          </button>
+        </div>
+      </section>
+    );
+  }
   if (!myTurn) {
     return (
       <section className="action-bar" data-testid="action-bar">
-        <p data-testid="waiting">等待 {waitingFor} 行动…</p>
+        <p data-testid="waiting">
+          {turnHold !== null ? `等待 ${waitingFor} 确认回合…` : `等待 ${waitingFor} 行动…`}
+        </p>
       </section>
     );
   }

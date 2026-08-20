@@ -88,6 +88,18 @@ async function playSteps(
     const snaps = await Promise.all(
       clients.map((c) => c.nextMessage('snapshot', (m) => m.seq === seq, PER_STEP_TIMEOUT_MS)),
     );
+    // turnHold 协议:被扣住的座位先显式结束回合(同一 seq 的确认后快照随后到达)
+    let confirmed = false;
+    for (let k = 0; k < clients.length; k++) {
+      if (snaps[k]!.turnHold === k) {
+        clients[k]!.send({ type: 'end_turn', protocolVersion: 1, token: tokens[k]! });
+        confirmed = true;
+      }
+    }
+    if (confirmed) {
+      i--;
+      continue;
+    }
     const actorIdx = snaps.findIndex((s) => (s.legalActions as unknown[]).length > 0);
     expect(actorIdx, `seq ${seq} 应有一方有合法行动`).toBeGreaterThanOrEqual(0);
     const legal = snaps[actorIdx]!.legalActions as Record<string, unknown>[];
@@ -123,6 +135,15 @@ async function playToEnd(
     const snaps = await Promise.all(
       clients.map((c) => c.nextMessage('snapshot', (m) => m.seq === seq, PER_STEP_TIMEOUT_MS)),
     );
+    // turnHold 协议:被扣住的座位先显式结束回合(同一 seq 的确认后快照随后到达)
+    let confirmed = false;
+    for (let k = 0; k < clients.length; k++) {
+      if (snaps[k]!.turnHold === k) {
+        clients[k]!.send({ type: 'end_turn', protocolVersion: 1, token: tokens[k]! });
+        confirmed = true;
+      }
+    }
+    if (confirmed) continue;
     const actorIdx = snaps.findIndex((s) => (s.legalActions as unknown[]).length > 0);
     if (actorIdx === -1) break; // 终局快照：全员 legalActions 为空
     const legal = snaps[actorIdx]!.legalActions as Record<string, unknown>[];

@@ -67,16 +67,25 @@ async function driveHumanUntilGameOver(
     () => ({ kind: 'over-timeout' as const }),
   );
   for (;;) {
-    const turnP = client
-      .nextMessage('snapshot', (m) => (m.legalActions as unknown[]).length > 0, TURN_TIMEOUT_MS)
+    const snapP = client
+      .nextMessage(
+        'snapshot',
+        (m) => m.turnHold != null || (m.legalActions as unknown[]).length > 0,
+        TURN_TIMEOUT_MS,
+      )
       .then(
-        (m) => ({ kind: 'turn' as const, m }),
+        (m) => ({ kind: 'snap' as const, m }),
         () => ({ kind: 'stuck' as const }),
       );
-    const r = await Promise.race([turnP, overP]);
+    const r = await Promise.race([snapP, overP]);
     if (r.kind === 'over') return r.m;
     if (r.kind === 'over-timeout') throw new Error('等 game_over 超时');
     if (r.kind === 'stuck') throw new Error('等自己回合 snapshot 超时（对局卡死）');
+    // turnHold 协议:回合打满被扣住 → 显式结束回合,driveAI 才继续
+    if (r.m.turnHold != null) {
+      client.send({ type: 'end_turn', protocolVersion: PV, token });
+      continue;
+    }
     const legal = r.m.legalActions as Record<string, unknown>[];
     client.send({
       type: 'submit_action',
