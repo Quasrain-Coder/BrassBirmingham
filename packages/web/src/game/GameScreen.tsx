@@ -17,7 +17,7 @@ import { ActionBar, useActionDraft } from './ActionBar';
 import { AIIndicator } from './AIIndicator';
 import { DiscardModal } from './DiscardModal';
 import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
-import { describeAction } from './display';
+import { describeAction, cardName } from './display';
 import { buildabilityFor, reconstructEraLog } from './interactions';
 import { ScoreModal, useScoreHistory } from './ScoreTable';
 import { EraActions, RoundInfo } from './WideLayout';
@@ -301,6 +301,22 @@ function GameBoard({
       }
     />
   );
+  // 宽屏手牌标题条:地图下方一行文字标签(可点选),全屏不滚动也能看到手牌构成
+  const handStripEl = (
+    <div className="hand-strip" data-testid="hand-strip">
+      {hand.map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          className={`hand-strip-chip${selectedCard === c.id ? ' selected' : ''}`}
+          data-testid={`hand-strip-${c.id}`}
+          onClick={myTurn ? () => store.selectCard(c.id === selectedCard ? null : c.id) : undefined}
+        >
+          {cardName(c)}
+        </button>
+      ))}
+    </div>
+  );
   const actionEl = (
     <ActionBar
       myTurn={myTurn}
@@ -393,6 +409,7 @@ function GameBoard({
           <div className="wide-center">
             <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
             {boardEl}
+            {handStripEl}
             {handEl}
             {actionEl}
           </div>

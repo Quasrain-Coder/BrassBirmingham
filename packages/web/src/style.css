@@ -1449,6 +1449,43 @@ body {
 
 /* 手牌（官方卡面 + 中文名） */
 /* 8 张一排、总宽与地图持平:单张宽 = (容器 − 7 个间隔) / 8,随屏幕缩放 */
+/* 宽屏手牌标题条:地图下方一行文字标签(全屏免滚动看手牌构成,可点选) */
+.hand-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.hand-strip-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 3px 8px;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: rgba(23, 26, 31, 0.7);
+  color: #d8cdb4;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+
+.hand-strip-chip:hover:not(:disabled) {
+  border-color: #c9a86a;
+  color: #f3ead4;
+}
+
+.hand-strip-chip.selected {
+  border-color: #e3c58f;
+  background: rgba(201, 168, 106, 0.16);
+  color: #f3ead4;
+}
+
 .own-hand {
   display: flex;
   flex-wrap: nowrap;
@@ -1804,7 +1841,14 @@ body {
 .turn-money,
 .head-money {
   color: #e3c58f;
+  font-size: 1.06rem;
+  font-weight: 700;
   white-space: nowrap;
+}
+
+.head-money .coin-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .turn-vp,

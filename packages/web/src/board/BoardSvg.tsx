@@ -100,7 +100,7 @@ function playerColor(player: PlayerIndex): string {
 }
 
 /** 啤酒立桶全场统一尺寸(酒厂/商人位相同)。 */
-const BEER_TOKEN_SIZE = 76;
+const BEER_TOKEN_SIZE = 84;
 
 /**
  * 立起的啤酒桶（与版图印刷图案区分）：原木琥珀桶身 + 椭圆顶面 + 桶箍两道 +
@@ -117,11 +117,11 @@ function StandingBeer({ cx, cy, size }: { cx: number; cy: number; size: number }
     <g className="board-merchant-beer" pointerEvents="none">
       {/* 底部投影 */}
       <ellipse cx={cx} cy={bottom + ry * 0.8} rx={rx * 1.2} ry={ry} fill="#000" opacity={0.45} />
-      {/* 桶身(原木琥珀) */}
+      {/* 桶身(明亮金黄,与暗色版图底色拉开) */}
       <path
         d={`M ${cx - rx} ${top} L ${cx - rx} ${bottom} A ${rx} ${ry} 0 0 0 ${cx + rx} ${bottom} L ${cx + rx} ${top} Z`}
-        fill="#9c6f30"
-        stroke="#45300c"
+        fill="#c78f2e"
+        stroke="#3d2706"
         strokeWidth={s * 0.045}
       />
       {/* 侧面高光 */}
@@ -147,8 +147,8 @@ function StandingBeer({ cx, cy, size }: { cx: number; cy: number; size: number }
         stroke="#45300c"
         strokeWidth={s * 0.035}
       />
-      {/* 顶面(亮一档的原木色,立体感来源) */}
-      <ellipse cx={cx} cy={top} rx={rx} ry={ry} fill="#c1903f" stroke="#45300c" strokeWidth={s * 0.045} />
+      {/* 顶面(亮金,立体感来源) */}
+      <ellipse cx={cx} cy={top} rx={rx} ry={ry} fill="#e9b94c" stroke="#3d2706" strokeWidth={s * 0.045} />
     </g>
   );
 }

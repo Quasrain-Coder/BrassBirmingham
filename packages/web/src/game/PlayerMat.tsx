@@ -4,8 +4,8 @@
  * 叠加规则(数据来自 players[i].tiles,面板为公开信息):
  * - **每个有剩余的等级框都叠放实物板块 token**(玩家色,逐层偏移,如实体
  *   游戏的板块堆),研发/建造移除后堆叠随之减少;
- * - 当前栈顶(可建的最低级)框:额外加玩家色描边 + 剩余数角标(始终框住
- *   最新可用等级);
+ * - **每个有剩余的等级框右上角都标剩余数**;当前栈顶(可建的最低级)框
+ *   额外加玩家色描边、角标加粗放大;
  * - 已耗尽等级的框:暗色遮罩(该级板块已全部建出/研发移除)。
  */
 import type { ReactElement } from 'react';
@@ -79,42 +79,44 @@ export function PlayerMat({
                 />
               )}
               {isTop ? (
-                <>
-                  <rect
-                    className="mat-slot-top"
-                    x={slot.x - 6}
-                    y={slot.y - 6}
-                    width={slot.w + 12}
-                    height={slot.h + 12}
-                    rx={14}
-                    fill="none"
-                    stroke={playerColor}
-                    strokeWidth={8}
-                  />
-                  <g className="mat-slot-count">
-                    <rect
-                      x={slot.x + slot.w - 76}
-                      y={slot.y - 14}
-                      width={84}
-                      height={52}
-                      rx={12}
-                      fill="#14100a"
-                      opacity={0.9}
-                    />
-                    <text
-                      x={slot.x + slot.w - 34}
-                      y={slot.y + 24}
-                      textAnchor="middle"
-                      fontSize={36}
-                      fill="#f3e9c8"
-                    >
-                      ×{left}
-                    </text>
-                  </g>
-                </>
+                <rect
+                  className="mat-slot-top"
+                  x={slot.x - 6}
+                  y={slot.y - 6}
+                  width={slot.w + 12}
+                  height={slot.h + 12}
+                  rx={14}
+                  fill="none"
+                  stroke={playerColor}
+                  strokeWidth={8}
+                />
               ) : null}
-              {isTop ? (
-                <title>{`${industryName(ind)} Lv${slot.level}（栈顶,剩余 ${left}）`}</title>
+              {left > 0 ? (
+                // 每个有剩余的等级框右上角都标剩余数(栈顶加粗放大,其余小一号)
+                <g className="mat-slot-count">
+                  <rect
+                    x={slot.x + slot.w - 76}
+                    y={slot.y - 14}
+                    width={84}
+                    height={52}
+                    rx={12}
+                    fill="#14100a"
+                    opacity={0.9}
+                  />
+                  <text
+                    x={slot.x + slot.w - 34}
+                    y={slot.y + 24}
+                    textAnchor="middle"
+                    fontSize={isTop ? 36 : 30}
+                    fill="#f3e9c8"
+                    fontWeight={isTop ? 700 : 400}
+                  >
+                    ×{left}
+                  </text>
+                </g>
+              ) : null}
+              {left > 0 ? (
+                <title>{`${industryName(ind)} Lv${slot.level}（剩余 ${left}${isTop ? ',栈顶' : ''}）`}</title>
               ) : null}
             </g>
           );
