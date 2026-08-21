@@ -847,7 +847,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
       <g className="board-tracks" pointerEvents="none">
         {state.players.map((p, i) => {
           const vp = VP_TRACK[p.vp % 100]!;
-          const inc = INCOME_TRACK[Math.max(0, Math.min(99, p.incomeSpace))]!;
+          const inc = INCOME_TRACK[Math.max(0, Math.min(40, p.incomeSpace))]!;
           const dx = (i - 1.5) * 30;
           const r = 36;
           const hex = Array.from({ length: 6 }, (_, k) => {
