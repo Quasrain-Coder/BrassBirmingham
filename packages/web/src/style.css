@@ -2013,6 +2013,25 @@ body {
   gap: 8px;
 }
 
+/* 版图/明细切换旁的"打出"按钮(单人打出记录弹层) */
+.discard-open-btn {
+  padding: 2px 10px;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: transparent;
+  color: #b3a888;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.discard-open-btn:hover {
+  border-color: #c9a86a;
+  color: #f3ead4;
+}
+
 .board-stack-head h4 {
   margin-bottom: 0;
 }

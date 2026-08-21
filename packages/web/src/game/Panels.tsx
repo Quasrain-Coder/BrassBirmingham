@@ -15,6 +15,7 @@ import type { FilteredState, RoomState } from '@brass/protocol';
 import { INDUSTRY_STYLE, PLAYER_COLORS, PLAYER_COLOR_KEYS } from '../board/BoardSvg';
 import { cardFaceKey, cardName, describeAction, industryName, locationName, merchantName } from './display';
 import { INDUSTRY_ORDER } from './interactions';
+import { DiscardModal } from './DiscardModal';
 import { PlayerMat } from './PlayerMat';
 import type { LogEntry } from './store';
 
@@ -217,6 +218,7 @@ export function PlayerBoard({
   compact = false,
   activeTurn = false,
   buildStatus,
+  playedCards,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -231,8 +233,12 @@ export function PlayerBoard({
   activeTurn?: boolean;
   /** 各产业可建性标注(本人回合的本人面板;明细行内显示,如 "✓ 可建造"/"还需 £3")。 */
   buildStatus?: Partial<Record<IndustryType, string>> | undefined;
+  /** 该座位本时代已打出的牌(右上"打出"按钮的单人记录用)。 */
+  playedCards?: Card[] | undefined;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
+  // 单人打出记录弹层开关(版图/明细切换旁的"打出"按钮)
+  const [discardOpen, setDiscardOpen] = useState(false);
   // 堆叠视图:版图(官方玩家面板美术)/明细(#19 列表)——记住玩家选择
   // (jsdom 等环境无 localStorage,降级为会话内状态)
   const storage = typeof localStorage === 'undefined' ? null : localStorage;
@@ -256,6 +262,10 @@ export function PlayerBoard({
     remainingByTile.set(key, (remainingByTile.get(key) ?? 0) + 1);
   }
 
+  // 单人打出记录数据(稀疏数组,按座位号入桶)
+  const playedCardsAll: Card[][] =
+    playedCards !== undefined ? Object.assign([], { [seat]: playedCards }) as Card[][] : [];
+
   if (compact) {
     return (
       <section
@@ -277,6 +287,17 @@ export function PlayerBoard({
         </div>
         <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
           <div className="board-stack-head">
+            {playedCards !== undefined ? (
+              <button
+                type="button"
+                className="discard-open-btn"
+                data-testid={`discard-open-${seat}`}
+                title="查看该玩家本时代打出的牌"
+                onClick={() => setDiscardOpen(true)}
+              >
+                打出
+              </button>
+            ) : null}
             <span className="stack-view-toggle" role="group" aria-label="堆叠视图切换">
               <button
                 type="button"
@@ -344,6 +365,15 @@ export function PlayerBoard({
             ))
           )}
         </div>
+        {discardOpen ? (
+          <DiscardModal
+            state={state}
+            playedCards={playedCardsAll}
+            room={room}
+            onlySeat={seat}
+            onClose={() => setDiscardOpen(false)}
+          />
+        ) : null}
       </section>
     );
   }
@@ -427,6 +457,17 @@ export function PlayerBoard({
           <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
             <div className="board-stack-head">
               <h4>面板堆叠（未建）</h4>
+              {playedCards !== undefined ? (
+                <button
+                  type="button"
+                  className="discard-open-btn"
+                  data-testid={`discard-open-${seat}`}
+                  title="查看该玩家本时代打出的牌"
+                  onClick={() => setDiscardOpen(true)}
+                >
+                  打出
+                </button>
+              ) : null}
               <span className="stack-view-toggle" role="group" aria-label="堆叠视图切换">
                 <button
                   type="button"
@@ -497,6 +538,15 @@ export function PlayerBoard({
             )}
           </div>
         </div>
+      ) : null}
+      {discardOpen ? (
+        <DiscardModal
+          state={state}
+          playedCards={playedCardsAll}
+          room={room}
+          onlySeat={seat}
+          onClose={() => setDiscardOpen(false)}
+        />
       ) : null}
     </section>
   );
