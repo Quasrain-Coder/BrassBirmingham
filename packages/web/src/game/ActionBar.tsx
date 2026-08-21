@@ -346,6 +346,9 @@ export function ActionBar({
   const sells = draft.candidates.filter((a) => a.type === 'sell');
   const loan = draft.candidates.find((a) => a.type === 'loan');
   const pass = draft.candidates.find((a) => a.type === 'pass');
+  // 过:仅当该牌没有任何其他可执行行动时兜底出现(防死锁,例如贷款已不可用)
+  const onlyPass =
+    draft.candidates.length > 0 && draft.candidates.every((a) => a.type === 'pass');
 
   // 啤酒实况:自己的酒厂桶(无需连通)+ 各商人位余桶
   const ownBreweries = Object.entries(state.board.slots)
@@ -484,18 +487,26 @@ export function ActionBar({
             </div>
           ) : null}
 
-          <div className="action-choices">
-            {loan !== undefined ? (
-              <button type="button" data-testid="quick-loan" onClick={() => draft.choose(loan)}>
-                {describeAction(loan)}
-              </button>
-            ) : null}
-            {pass !== undefined ? (
-              <button type="button" data-testid="quick-pass" onClick={() => draft.choose(pass)}>
-                {describeAction(pass)}
-              </button>
-            ) : null}
-          </div>
+          {loan !== undefined || onlyPass ? (
+            <div className="action-choices">
+              {loan !== undefined ? (
+                <>
+                  <span>贷款：</span>
+                  <button type="button" data-testid="quick-loan" onClick={() => draft.choose(loan)}>
+                    £30（收入 −3 级）
+                  </button>
+                </>
+              ) : null}
+              {onlyPass && pass !== undefined ? (
+                <>
+                  <span>其他：</span>
+                  <button type="button" data-testid="quick-pass" onClick={() => draft.choose(pass)}>
+                    {describeAction(pass)}
+                  </button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
 

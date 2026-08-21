@@ -396,6 +396,33 @@ describe('<ActionBar>', () => {
     expect(preview).toHaveTextContent('收入等级 −3');
   });
 
+  it('过:仅兜底出现——有其他行动时不渲染,仅剩过时才显示', () => {
+    const state = filterStateFor(newGame(4, 42), 0);
+    const passAction: Action = { type: 'pass', cardId: 'c1' };
+    const loanAction: Action = { type: 'loan', cardId: 'c1' };
+    const barProps = {
+      myTurn: true,
+      waitingFor: '甲',
+      selectedCard: 'c1',
+      hand: [],
+      state,
+      turnHold: null,
+      seat: 0 as const,
+      canResetTurn: false,
+      onConfirm: () => {},
+      onCancel: () => {},
+      onEndTurn: () => {},
+      onResetTurn: () => {},
+    };
+    const { rerender } = render(
+      <ActionBar {...barProps} draft={draftFixture({ candidates: [loanAction, passAction] })} />,
+    );
+    expect(screen.getByTestId('quick-loan')).toBeInTheDocument();
+    expect(screen.queryByTestId('quick-pass')).toBeNull();
+    rerender(<ActionBar {...barProps} draft={draftFixture({ candidates: [passAction] })} />);
+    expect(screen.getByTestId('quick-pass')).toBeInTheDocument();
+  });
+
   it('有可卖板块但不可售时显示原因提示(需连通收该货的商人)', () => {
     const state = filterStateFor(newGame(4, 42), 0);
     const cotton = tileDef('cotton', 1)!;
