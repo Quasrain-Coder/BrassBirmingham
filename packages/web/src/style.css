@@ -2353,3 +2353,47 @@ body {
   color: #8a8068;
   font-style: normal;
 }
+
+/* 钱数椭圆底(与版图顺位钱数椭圆同款) */
+.money-oval {
+  padding: 2px 12px;
+  border: 1px solid #8a6d3b;
+  border-radius: 999px;
+  background: #14100a;
+  color: #ffd94d;
+}
+
+/* 紧凑面板本回合行动:每动一行,动作后跟开销/收入,再跟出牌文本 */
+.compact-round-acts {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.compact-round-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.compact-round-line:first-child:last-child {
+  color: #8f96a3;
+}
+
+.compact-round-delta {
+  flex: none;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.compact-round-delta.neg {
+  color: #e0705c;
+}
+
+.compact-round-delta.pos {
+  color: #58c47b;
+}

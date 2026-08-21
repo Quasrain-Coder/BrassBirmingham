@@ -150,7 +150,6 @@ describe('<GameScreen>', () => {
     expect(rank1).toHaveTextContent('#1');
     const round1 = screen.getByTestId(`compact-round-${game.turnOrder[0]!}`);
     expect(round1).toHaveTextContent('本回合未行动');
-    expect(round1).toHaveTextContent('开销 £0');
     // 再点一次回到经典布局
     fireEvent.click(screen.getByTestId('toggle-layout'));
     expect(container.querySelector('.wide-grid')).toBeNull();

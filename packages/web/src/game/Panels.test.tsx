@@ -332,11 +332,11 @@ describe('<PlayerBoard> 紧凑面板两行收口', () => {
     expect(head).not.toHaveTextContent('收入等级');
     expect(head).not.toHaveTextContent('分');
     expect(head.querySelector('.coin-icon')).toBeNull();
-    // 第二行:本回合操作 + 开销 + 本回合打出的牌(图)
+    // 第二行:本回合每动一行,动作后跟收入/开销,再跟出牌文本
     const round = screen.getByTestId(`compact-round-${seat}`);
-    expect(round).toHaveTextContent('贷款');
-    expect(round).toHaveTextContent('开销 £4');
-    expect(round.querySelectorAll('.compact-round-cards img')).toHaveLength(1);
+    expect(round).toHaveTextContent('贷款 £30');
+    expect(round).toHaveTextContent('+£30');
+    expect(round).toHaveTextContent('德比');
     // 历史下拉:展开后按轮列出,每行动右侧标出牌名
     fireEvent.click(screen.getByTestId(`history-toggle-${seat}`));
     const history = screen.getByTestId(`compact-history-${seat}`);

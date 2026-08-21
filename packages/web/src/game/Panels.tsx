@@ -17,6 +17,7 @@ import { cardFaceKey, cardFromId, cardName, describeAction, industryName, locati
 import { INDUSTRY_ORDER } from './interactions';
 import { DiscardModal } from './DiscardModal';
 import { PlayerMat } from './PlayerMat';
+import { moneyDelta } from './preview';
 import { roundStartSeq } from './WideLayout';
 import type { LogEntry } from './store';
 
@@ -277,13 +278,11 @@ export function PlayerBoard({
     playedCards !== undefined ? Object.assign([], { [seat]: playedCards }) as Card[][] : [];
 
   if (compact) {
-    // 第一行:顺位 + 名称 + 钱(钱 token/收入等级/分数均已去掉)
+    // 第一行:顺位 + 名称 + 钱(椭圆底);行末"打出"按钮
     const rank = state.turnOrder.indexOf(seat) + 1;
-    // 第二行:本回合操作+开销 + 本回合打出的牌;末尾"打出"按钮 + 历史下拉箭头
+    // 本回合行动:每动一行,动作后跟开销/收入,再跟出牌文本;末尾历史下拉箭头
     const start = roundStartSeq(state, seq ?? 0);
     const acts = log?.filter((e) => e.seq >= start && e.player === seat) ?? [];
-    const actsText = acts.length > 0 ? acts.map((a) => describeAction(a.action)).join('；') : '本回合未行动';
-    const roundCardIds = acts.flatMap((a) => (a.action.type === 'scout' ? [...a.action.cardIds] : [a.action.cardId]));
     // 前几回合动作:eraActions 按回合结构分组(最新轮在前)
     const rounds: { round: number; actions: Action[] }[] = [];
     {
@@ -315,24 +314,7 @@ export function PlayerBoard({
           <ColorDot seat={seat} />
           <span className="player-name">{playerName(room, seat)}</span>
           <AIBadge room={room} seat={seat} />
-          <span className="head-money">£{self.money}</span>
-        </div>
-        <div className="compact-round" data-testid={`compact-round-${seat}`}>
-          <span className="compact-round-acts" title={actsText}>
-            {actsText}
-          </span>
-          <span className="compact-round-spent">开销 £{self.spentThisRound}</span>
-          <span className="compact-round-cards">
-            {roundCardIds.map((id) => {
-              const c = cardFromId(id);
-              return (
-                <span className="discard-cell" key={id}>
-                  <img src={cardImageSrc(c)} alt={cardName(c)} />
-                  <span className="card-tip">{cardName(c)}</span>
-                </span>
-              );
-            })}
-          </span>
+          <span className="head-money money-oval">£{self.money}</span>
           {playedCards !== undefined ? (
             <button
               type="button"
@@ -344,6 +326,28 @@ export function PlayerBoard({
               打出
             </button>
           ) : null}
+        </div>
+        <div className="compact-round" data-testid={`compact-round-${seat}`}>
+          <div className="compact-round-acts">
+            {acts.length === 0 ? (
+              <span className="compact-round-line">本回合未行动</span>
+            ) : (
+              acts.map((a, i) => {
+                const delta = moneyDelta(a.action, state, seat);
+                return (
+                  <span className="compact-round-line" key={i}>
+                    {describeAction(a.action)}
+                    {delta !== 0 ? (
+                      <em className={`compact-round-delta ${delta > 0 ? 'pos' : 'neg'}`}>
+                        {delta > 0 ? `+£${delta}` : `−£${-delta}`}
+                      </em>
+                    ) : null}
+                    <em className="compact-history-card">{actionCardsText(a.action)}</em>
+                  </span>
+                );
+              })
+            )}
+          </div>
           <button
             type="button"
             className="history-toggle"
@@ -375,73 +379,11 @@ export function PlayerBoard({
           </div>
         ) : null}
         <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
-          <div className="board-stack-head">
-            <span className="stack-view-toggle" role="group" aria-label="堆叠视图切换">
-              <button
-                type="button"
-                className={matView ? 'active' : ''}
-                data-testid={`stack-view-mat-${seat}`}
-                onClick={() => setMatView(true)}
-              >
-                版图
-              </button>
-              <button
-                type="button"
-                className={matView ? '' : 'active'}
-                data-testid={`stack-view-list-${seat}`}
-                onClick={() => setMatView(false)}
-              >
-                明细
-              </button>
-            </span>
-          </div>
-          {matView ? (
-            <PlayerMat
-              tiles={self.tiles}
-              playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
-              colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
-            />
-          ) : (
-            INDUSTRY_ORDER.map((ind) => (
-              <div key={ind} className="board-ind">
-                <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
-                  {industryName(ind)}
-                </span>
-                {buildStatus?.[ind] !== undefined ? (
-                  <span
-                    className={`board-ind-status${buildStatus[ind]!.startsWith('✓') ? ' ok' : ''}`}
-                    data-testid={`build-status-${seat}-${ind}`}
-                  >
-                    {buildStatus[ind]}
-                  </span>
-                ) : null}
-                <span className="board-ind-list">
-                  {TILES.filter((t) => t.industry === ind).map((def) => {
-                    const remaining = remainingByTile.get(`${ind}-${def.level}`) ?? 0;
-                    const cost =
-                      `£${def.costMoney}` +
-                      (def.costCoal > 0 ? ` 煤${def.costCoal}` : '') +
-                      (def.costIron > 0 ? ` 铁${def.costIron}` : '');
-                    return (
-                      <span
-                        key={def.level}
-                        className={`stack-tile${remaining === 0 ? ' exhausted' : ''}`}
-                        data-testid={`player-board-stack-${seat}-${ind}-${def.level}`}
-                        title={`${industryName(ind)} Lv${def.level}｜建造成本 ${cost}｜翻面得 ${def.vp} 分、收入 +${def.incomeAdvance} 级`}
-                      >
-                        <img
-                          src={`/assets/tiles/${ind}-${def.level}-${colorKey}.png`}
-                          alt={`${industryName(ind)} Lv${def.level}`}
-                        />
-                        <span className="stack-tile-count">×{remaining}</span>
-                        <span className="stack-tile-sub">Lv{def.level}</span>
-                      </span>
-                    );
-                  })}
-                </span>
-              </div>
-            ))
-          )}
+          <PlayerMat
+            tiles={self.tiles}
+            playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
+            colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
+          />
         </div>
         {discardOpen ? (
           <DiscardModal
