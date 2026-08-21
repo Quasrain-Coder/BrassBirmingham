@@ -247,19 +247,6 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
           const extras = LINK_EXTRA_ENDPOINTS[i] ?? [];
           return (
             <g key={`link-${i}`}>
-              {built ? (
-                <polyline
-                  className="board-link-visual"
-                  points={pts}
-                  fill="none"
-                  stroke={playerColor(builtBy.player)}
-                  strokeWidth={12}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  opacity={0.6}
-                  pointerEvents="none"
-                />
-              ) : null}
               {hl && !built ? (
                 <>
                   <polyline
@@ -312,18 +299,6 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                 const m = mid ?? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
                 return (
                   <g key={`link-${i}-${extra}`}>
-                    {built ? (
-                      <polyline
-                        className="board-link-visual"
-                        points={`${m.x},${m.y} ${e.x},${e.y}`}
-                        fill="none"
-                        stroke={playerColor(builtBy.player)}
-                        strokeWidth={12}
-                        strokeLinecap="round"
-                        opacity={0.6}
-                        pointerEvents="none"
-                      />
-                    ) : null}
                     <line
                       className="board-link-branch"
                       data-link-index={i}

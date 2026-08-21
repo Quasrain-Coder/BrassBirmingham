@@ -80,7 +80,7 @@ describe('<BoardSvg>', () => {
     expect(linkClicks).toEqual([0]);
   });
 
-  it('已建 Link 加 board-link-built 类并画玩家色路径与时代 token，highlights 加 highlighted 类', () => {
+  it('已建 Link 只留中点时代 token(不再画整线玩家色),highlights 加 highlighted 类', () => {
     const state = freshState();
     state.board.links.push({ linkIndex: 0, player: 1, era: 'canal' });
     const { container } = render(
@@ -91,8 +91,8 @@ describe('<BoardSvg>', () => {
     );
     const built = container.querySelector('line[data-link-index="0"]') as SVGLineElement;
     expect(built.classList.contains('board-link-built')).toBe(true);
-    const visual = container.querySelector('polyline.board-link-visual') as SVGPolylineElement;
-    expect(visual.getAttribute('stroke')).toBe(PLAYER_COLORS[1]);
+    // 已建连接不再画整条玩家色路径(避免被误读为残留高亮),归属由中点 token 表达
+    expect(container.querySelector('polyline.board-link-visual')).toBeNull();
     // 运河时代建的 → 驳船 token；高亮连线中点出现 + 提示牌
     const token = container.querySelector('.link-token image');
     expect(token?.getAttribute('href')).toBe('/assets/link-canal.png');
