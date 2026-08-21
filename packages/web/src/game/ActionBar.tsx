@@ -766,7 +766,7 @@ export function ActionBar({
               {!sellRowDisabled ? (
                 <div className="sell-builder" data-testid="sell-builder">
                   <div className="action-choices">
-                    <span>建筑：</span>
+                    <span>板块：</span>
                     {sellableNow.map((t) => (
                       <button
                         key={`${t.location}:${t.slotIndex}`}
