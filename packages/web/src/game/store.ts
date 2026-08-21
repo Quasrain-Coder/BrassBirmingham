@@ -24,12 +24,13 @@ import { useSyncExternalStore } from 'react';
 import { PROTOCOL_VERSION } from '@brass/protocol';
 import type {
   ClientMessage,
+  DraftPreview,
   FilteredState,
   RoomConfig,
   RoomState,
   ServerMessage,
 } from '@brass/protocol';
-import type { Action, PlayerIndex } from '@brass/engine';
+import type { Action, Card, PlayerIndex } from '@brass/engine';
 
 // WebSocket.readyState 数值常量（CONNECTING/OPEN），避免依赖全局 WebSocket。
 const WS_CONNECTING = 0;
@@ -198,6 +199,12 @@ export interface GameStoreState {
   selectedCard: string | null;
   /** 连接被另一标签页（同 token）接管：停止自动重连，等用户 reclaim/leaveRoom。 */
   takenOver: boolean;
+  /** 各座位本时代已打出的牌（快照附带；按打出顺序,Wild 不入列）。 */
+  playedCards: Card[][];
+  /** 其他玩家当前的暂存预览（player_draft 流；座位 → 预览,确认/重置/换回合时清除）。 */
+  remoteDrafts: Partial<Record<PlayerIndex, DraftPreview>>;
+  /** 最近一次"重置本回合"广播（n 单调递增作触发键）。 */
+  resetNotice: { seat: PlayerIndex; n: number } | null;
 }
 
 export const LOG_CAPACITY = 100;
@@ -217,6 +224,9 @@ const INITIAL_STATE: GameStoreState = {
   lastError: null,
   selectedCard: null,
   takenOver: false,
+  playedCards: [],
+  remoteDrafts: {},
+  resetNotice: null,
 };
 
 export interface GameStoreOptions {
@@ -319,6 +329,24 @@ export class GameStore {
     this.patch({ selectedCard: null });
   }
 
+  /**
+   * 暂存预览同步：本人点选/改动暂存时上行（null=清除）。连接抖动时静默丢弃——
+   * 暂存是瞬态信息,丢一帧不影响对局。
+   */
+  sendDraft(draft: DraftPreview | null): void {
+    if (this.state.connection !== 'connected' || this.state.token === null) return;
+    try {
+      this.send({
+        type: 'draft_update',
+        protocolVersion: PROTOCOL_VERSION,
+        token: this.state.token,
+        draft,
+      });
+    } catch {
+      // 连接已坏:丢弃本帧暂存同步
+    }
+  }
+
   selectCard(cardId: string | null): void {
     this.patch({ selectedCard: cardId });
   }
@@ -363,7 +391,7 @@ export class GameStore {
     }
     this.disconnect();
     this.clearSession();
-    this.patch({ log: [], thinkingSeats: [], lastError: null, selectedCard: null });
+    this.patch({ log: [], thinkingSeats: [], lastError: null, selectedCard: null, playedCards: [], remoteDrafts: {}, resetNotice: null });
     this.connect();
   }
 
@@ -487,14 +515,22 @@ export class GameStore {
         this.patch({ token: msg.token, seat: msg.seat });
         this.persistSession();
         break;
-      case 'snapshot':
+      case 'snapshot': {
+        // 换人行动时清空所有暂存预览（上一行动方的暂存已确认/作废）
+        const prev = this.state.snapshot;
+        const prevCurrent = prev?.turnOrder[prev.currentPlayerIdx];
+        const nextCurrent = msg.state.turnOrder[msg.state.currentPlayerIdx];
+        const turnChanged = prev !== null && prevCurrent !== nextCurrent;
         this.patch({
           snapshot: msg.state,
           legalActions: msg.legalActions,
           seq: msg.seq,
           turnHold: msg.turnHold ?? null,
+          playedCards: msg.playedCards ?? this.state.playedCards,
+          ...(turnChanged ? { remoteDrafts: {} } : {}),
         });
         break;
+      }
       case 'action_applied': {
         const entry: LogEntry = {
           seq: msg.seq,
@@ -504,7 +540,30 @@ export class GameStore {
           ...(msg.reason !== undefined ? { reason: msg.reason } : {}),
           ...(msg.degraded !== undefined ? { degraded: msg.degraded } : {}),
         };
-        this.patch({ log: [...this.state.log, entry].slice(-LOG_CAPACITY) });
+        // 行动确认 → 该座位的暂存预览转正,清除
+        const drafts = { ...this.state.remoteDrafts };
+        delete drafts[msg.player];
+        this.patch({
+          log: [...this.state.log, entry].slice(-LOG_CAPACITY),
+          remoteDrafts: drafts,
+        });
+        break;
+      }
+      case 'player_draft': {
+        if (msg.seat === this.state.seat) break; // 自己的回声不处理
+        const drafts = { ...this.state.remoteDrafts };
+        if (msg.draft === null) delete drafts[msg.seat];
+        else drafts[msg.seat] = msg.draft;
+        this.patch({ remoteDrafts: drafts });
+        break;
+      }
+      case 'turn_reset': {
+        const drafts = { ...this.state.remoteDrafts };
+        delete drafts[msg.seat];
+        this.patch({
+          remoteDrafts: drafts,
+          resetNotice: { seat: msg.seat, n: (this.state.resetNotice?.n ?? 0) + 1 },
+        });
         break;
       }
       case 'ai_thinking': {

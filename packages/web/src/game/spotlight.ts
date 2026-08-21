@@ -22,5 +22,5 @@ export function spotlightOf(player: PlayerIndex, action: Action): ActionSpotligh
   }
 }
 
-/** 聚光灯展示时长（ms）：约 5 秒，期间新行动到达则替换并重置计时。 */
+/** 单条播报展示时长（ms）：约 5 秒。行动聚光灯/轮次播报串行播放，后来的排队等播完。 */
 export const SPOTLIGHT_DURATION_MS = 5000;

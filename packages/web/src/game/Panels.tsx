@@ -193,6 +193,7 @@ export function HandBar({
                 >
                   <img className="hand-card-art" src={cardImageSrc(card)} alt={cardName(card)} />
                   <span className="hand-card-name">{cardName(card)}</span>
+                  <span className="card-tip">{cardName(card)}</span>
                   {isWild ? <span className="wild-badge">百搭</span> : null}
                 </button>
               );

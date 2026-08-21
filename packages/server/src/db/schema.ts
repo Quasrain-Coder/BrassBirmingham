@@ -2,7 +2,8 @@ import { integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm
 
 /**
  * 对局表。config/finalState 为 JSON 文本；finalState 在 finishGame 前为 NULL。
- * 声明：服务器重启即丢进行中的对局（内存房间不恢复），本表主要服务复盘/重放（M5）。
+ * status='playing' 的对局在服务器重启后可经 actions 表重放恢复（session restore）；
+ * finalState 服务复盘/重放（M5）。
  */
 export const games = sqliteTable('games', {
   id: text('id').primaryKey(),
@@ -31,6 +32,8 @@ export const actions = sqliteTable(
 /**
  * 座位与恢复令牌。token 全局唯一（跨对局），由 RoomManager 在 join 时签发、
  * startGame 时随 createGame 落库；开局后 resume 走 findSeatByToken 查库。
+ * isAi 标记 AI 座位——服务器重启后重放恢复对局（session restore）时据此重建
+ * agents/tokenSeats（AI token 永不进索引，真人 token 才可 resume/submit）。
  */
 export const seats = sqliteTable(
   'seats',
@@ -39,6 +42,7 @@ export const seats = sqliteTable(
     seat: integer('seat').notNull(),
     nickname: text('nickname').notNull(),
     token: text('token').notNull(),
+    isAi: integer('is_ai', { mode: 'boolean' }).notNull().default(false),
   },
   (t) => [primaryKey({ columns: [t.gameId, t.seat] }), uniqueIndex('seats_token_unique').on(t.token)],
 );

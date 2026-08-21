@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS seats (
   seat INTEGER NOT NULL,
   nickname TEXT NOT NULL,
   token TEXT NOT NULL,
+  is_ai INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (game_id, seat)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS seats_token_unique ON seats (token);
@@ -45,6 +46,13 @@ export function openDb(path: string): Db {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
   sqlite.exec(DDL);
+  // 存量库迁移：seats 缺 is_ai 列时补上（session restore 区分 AI/真人座位用）。
+  // 旧行回填按 AI 自动昵称格式（'AI-N（难度）'）启发判定——仅迁移时执行一次。
+  const seatCols = sqlite.prepare('PRAGMA table_info(seats)').all() as { name: string }[];
+  if (!seatCols.some((c) => c.name === 'is_ai')) {
+    sqlite.exec('ALTER TABLE seats ADD COLUMN is_ai INTEGER NOT NULL DEFAULT 0');
+    sqlite.exec("UPDATE seats SET is_ai = 1 WHERE nickname LIKE 'AI-%（%'");
+  }
   return drizzle(sqlite, { schema });
 }
 
@@ -54,7 +62,7 @@ export interface NewGame {
   playerCount: number;
   seed: number;
   config: RoomConfig;
-  seats: { seat: number; nickname: string; token: string }[];
+  seats: { seat: number; nickname: string; token: string; isAI?: boolean }[];
 }
 
 /** 开局落库：games 行（status='playing'）+ 全部 seats，同事务。 */
@@ -73,7 +81,7 @@ export function createGame(db: Db, game: NewGame): void {
       .run();
     for (const s of game.seats) {
       tx.insert(seats)
-        .values({ gameId: game.id, seat: s.seat, nickname: s.nickname, token: s.token })
+        .values({ gameId: game.id, seat: s.seat, nickname: s.nickname, token: s.token, isAi: s.isAI ?? false })
         .run();
     }
   });
@@ -130,6 +138,52 @@ export function findSeatByToken(db: Db, token: string): { gameId: string; seat: 
     .where(eq(seats.token, token))
     .get();
   return row ?? null;
+}
+
+export interface PersistedGame {
+  id: string;
+  roomCode: string;
+  playerCount: number;
+  seed: number;
+  config: RoomConfig;
+  status: 'playing' | 'finished';
+}
+
+/** session restore：按 id 取对局行（config 解析为 RoomConfig）；未命中返回 null。 */
+export function findGameById(db: Db, gameId: string): PersistedGame | null {
+  const row = db.select().from(games).where(eq(games.id, gameId)).get();
+  if (row === undefined) return null;
+  return {
+    id: row.id,
+    roomCode: row.roomCode,
+    playerCount: row.playerCount,
+    seed: row.seed,
+    config: JSON.parse(row.config) as RoomConfig,
+    status: row.status,
+  };
+}
+
+export interface PersistedSeat {
+  seat: number;
+  nickname: string;
+  token: string;
+  isAI: boolean;
+}
+
+/** session restore：取某对局全部座位（含 AI 标记，按座位号升序）。 */
+export function listSeats(db: Db, gameId: string): PersistedSeat[] {
+  const rows = db
+    .select({
+      seat: seats.seat,
+      nickname: seats.nickname,
+      token: seats.token,
+      isAi: seats.isAi,
+    })
+    .from(seats)
+    .where(eq(seats.gameId, gameId))
+    .orderBy(asc(seats.seat))
+    .all();
+  return rows.map((r) => ({ seat: r.seat, nickname: r.nickname, token: r.token, isAI: r.isAi }));
 }
 
 /** 按 seq 升序取某对局全部行动（Task 5 重放校验用）。 */

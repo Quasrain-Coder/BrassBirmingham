@@ -3,7 +3,7 @@
  * FakeWebSocket 注入；snapshot 帧由 engine newGame + filterStateFor + enumerateActions 生成。
  */
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PROTOCOL_VERSION } from '@brass/protocol';
 import type { ServerMessage } from '@brass/protocol';
 import { enumerateActions, newGame } from '@brass/engine';
@@ -94,16 +94,22 @@ describe('<GameScreen>', () => {
     const confirm = screen.getByTestId('confirm-action');
     expect(confirm).toBeEnabled();
     expect(confirm).toHaveTextContent('贷款');
+    // 暂存同步:点选后上行一帧 draft_update(含播报文案)
+    const lastDraft = JSON.parse(ws.sent[ws.sent.length - 1]!) as {
+      type: string;
+      draft: { text: string } | null;
+    };
+    expect(lastDraft.type).toBe('draft_update');
+    expect(lastDraft.draft?.text).toContain('贷款');
     fireEvent.click(confirm);
 
-    const frame = JSON.parse(ws.sent[ws.sent.length - 1]!) as {
-      type: string;
-      token: string;
-      action: Action;
-    };
-    expect(frame.type).toBe('submit_action');
+    // 确认后:submit_action 帧(提交的就是枚举项本身),随后一帧 draft_update 清除暂存
+    const frames = ws.sent.map((s) => JSON.parse(s) as { type: string; token?: string; action?: Action });
+    const frame = frames.filter((f) => f.type === 'submit_action').at(-1)!;
     expect(frame.token).toBe('tok');
-    expect(frame.action).toEqual(loan); // 提交的就是枚举项本身
+    expect(frame.action).toEqual(loan);
+    const lastFrame = frames[frames.length - 1]!;
+    expect(lastFrame.type).toBe('draft_update'); // 暂存清除帧
     expect(store.getState().selectedCard).toBeNull(); // 提交后清选牌
     expect(seat).toBe(store.getState().seat);
   });
@@ -138,6 +144,110 @@ describe('<GameScreen>', () => {
     fireEvent.click(screen.getByTestId('toggle-layout'));
     expect(container.querySelector('.wide-grid')).toBeNull();
     void ws;
+  });
+
+  it('播报串行:行动聚光灯播完(5s)后才播新一轮播报', () => {
+    vi.useFakeTimers();
+    try {
+      const { store, ws, game, seat } = setup(true);
+      render(<GameScreen store={store} />);
+      // 一条行动 → 聚光灯出现
+      act(() => {
+        ws.emit({
+          type: 'action_applied',
+          protocolVersion: PROTOCOL_VERSION,
+          seq: 1,
+          player: seat,
+          action: { type: 'loan', cardId: 'c0' },
+          events: [],
+        });
+      });
+      expect(screen.getByTestId('action-spotlight')).toHaveTextContent('贷款');
+      // 同瞬间进入第 2 轮(快照 round=2)→ 轮次播报必须排队,不能与聚光灯同屏
+      act(() => {
+        ws.emit({
+          type: 'snapshot',
+          protocolVersion: PROTOCOL_VERSION,
+          seq: 2,
+          state: filterStateFor({ ...game, round: 2 }, seat),
+          legalActions: [],
+        });
+      });
+      expect(screen.queryByTestId('round-banner')).toBeNull();
+      expect(screen.getByTestId('action-spotlight')).toBeInTheDocument();
+      // 聚光灯播完 → 轮次播报上场
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.queryByTestId('action-spotlight')).toBeNull();
+      expect(screen.getByTestId('round-banner')).toHaveTextContent('第 2 轮');
+      // 轮次播报同样播足 5 秒后消失
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.queryByTestId('round-banner')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('他人暂存:暂存播报同步(改动替换/清除撤下),重置本回合全场播报', () => {
+    vi.useFakeTimers();
+    try {
+      const { store, ws, game, seat } = setup(false); // 非本人回合:当前玩家是别人
+      const otherSeat = game.turnOrder[game.currentPlayerIdx]!;
+      expect(otherSeat).not.toBe(seat);
+      render(<GameScreen store={store} />);
+
+      // 他人暂存 → 暂存播报出现(虚线"暂存"样式)
+      act(() => {
+        ws.emit({
+          type: 'player_draft',
+          protocolVersion: PROTOCOL_VERSION,
+          seat: otherSeat,
+          draft: { text: '建造伯明翰棉纺厂' },
+        });
+      });
+      expect(screen.getByTestId('draft-spotlight')).toHaveTextContent('建造伯明翰棉纺厂');
+      // 改动 → 直接替换为新播报
+      act(() => {
+        ws.emit({
+          type: 'player_draft',
+          protocolVersion: PROTOCOL_VERSION,
+          seat: otherSeat,
+          draft: { text: '贷款 £30（收入 −3 级）' },
+        });
+      });
+      expect(screen.getByTestId('draft-spotlight')).toHaveTextContent('贷款');
+      // 清除 → 撤下
+      act(() => {
+        ws.emit({
+          type: 'player_draft',
+          protocolVersion: PROTOCOL_VERSION,
+          seat: otherSeat,
+          draft: null,
+        });
+      });
+      expect(screen.queryByTestId('draft-spotlight')).toBeNull();
+
+      // 再暂存 → 重置本回合:暂存撤下 + 全场播报"已重置本回合"
+      act(() => {
+        ws.emit({
+          type: 'player_draft',
+          protocolVersion: PROTOCOL_VERSION,
+          seat: otherSeat,
+          draft: { text: '建造斯托克煤矿' },
+        });
+      });
+      expect(screen.getByTestId('draft-spotlight')).toBeInTheDocument();
+      act(() => {
+        ws.emit({ type: 'turn_reset', protocolVersion: PROTOCOL_VERSION, seat: otherSeat });
+      });
+      expect(screen.queryByTestId('draft-spotlight')).toBeNull();
+      expect(screen.getByTestId('round-banner')).toHaveTextContent('已重置本回合');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('离开对局：点按钮 → 发 leave 帧并回到大厅态', () => {

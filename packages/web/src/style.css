@@ -83,10 +83,16 @@ body {
   justify-content: flex-end;
 }
 
-.hand-bar .own-hand {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+/* 手牌行横向内边距归零(8 张牌与地图同宽对齐),标题/对手手牌保留缩进 */
+.hand-bar {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.hand-bar > h3,
+.hand-bar > .opponent-hands {
+  margin-right: 18px;
+  margin-left: 18px;
 }
 
 .action-confirm {
@@ -118,6 +124,14 @@ body {
   background: transparent;
   color: #9aa4b2;
   cursor: pointer;
+}
+
+/* 行动条内的 ghost 钮(重置本回合)与确认/取消同规格 */
+.action-bar .btn-ghost {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: inherit;
+  letter-spacing: normal;
 }
 
 .game-over {
@@ -946,11 +960,10 @@ body {
   position: relative;
 }
 
-/* 行动条:啤酒实况行/收益预览行/不可执行原因提示 */
+/* 行动条:啤酒实况行/收益预览行/不可执行原因提示(字号继承面板基准) */
 .beer-status {
   margin: 4px 0 6px;
   color: #c9b98a;
-  font-size: 0.82rem;
 }
 
 .action-preview {
@@ -959,7 +972,6 @@ body {
   border-left: 3px solid #58c47b;
   background: rgba(88, 196, 123, 0.08);
   color: #a8d8b8;
-  font-size: 0.85rem;
 }
 
 .action-blocked-hint {
@@ -968,7 +980,6 @@ body {
   border-left: 3px solid #c9a86a;
   background: rgba(201, 168, 106, 0.08);
   color: #c9b98a;
-  font-size: 0.85rem;
 }
 
 /* 行动聚光灯：顶部横幅（约 5 秒淡出）+ 棋盘玩家色脉冲高亮 */
@@ -998,6 +1009,14 @@ body {
   border-radius: 50%;
   border: 2px solid #14100a;
   flex: none;
+}
+
+/* 他人暂存播报:与行动播报同位,虚线边框 + 斜体示意"未定" */
+.action-spotlight-banner.draft-banner {
+  border-style: dashed;
+  border-color: #8a8068;
+  font-style: italic;
+  color: #d8cdb4;
 }
 
 /* 新一轮/新时代播报:红字横幅(约 5 秒淡出,与行动横幅错位下排) */
@@ -1225,6 +1244,97 @@ body {
   color: #f3ead4;
 }
 
+/* 打出记录弹层:按玩家分列,卡面按打出顺序排列(运河时代首张为暗置卡背) */
+.discard-modal {
+  width: min(92vw, 1100px);
+}
+
+.discard-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.discard-col {
+  border: 1px solid #3a3226;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(23, 26, 31, 0.55);
+}
+
+.discard-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #e3d3a8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.discard-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 40px;
+}
+
+.discard-card {
+  width: 56px;
+  height: auto;
+  border-radius: 5px;
+  border: 1px solid #4a3f2c;
+  display: block;
+}
+
+.discard-card-back {
+  opacity: 0.85;
+  border-style: dashed;
+}
+
+/* 自绘即时浮层(原生 title 有 ~1s 延迟):手牌/打出记录卡面悬停即出 */
+.card-tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  padding: 3px 10px;
+  border: 1px solid #6b5b3e;
+  border-radius: 6px;
+  background: rgba(20, 16, 10, 0.95);
+  color: #f3ead4;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.08s ease;
+}
+
+.hand-card:hover .card-tip,
+.discard-cell:hover .card-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.discard-cell {
+  position: relative;
+  display: inline-block;
+}
+
+/* 弹层有 overflow-y:auto,向上浮层会被裁——打出记录的浮层改为向下 */
+.discard-cell .card-tip {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
 .score-table {
   width: 100%;
   margin: 10px 0;
@@ -1279,14 +1389,18 @@ body {
 }
 
 /* 手牌（官方卡面 + 中文名） */
+/* 8 张一排、总宽与地图持平:单张宽 = (容器 − 7 个间隔) / 8,随屏幕缩放 */
 .own-hand {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .hand-card {
   position: relative;
+  box-sizing: border-box;
+  flex: none;
+  width: calc((100% - 42px) / 8);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1307,15 +1421,19 @@ body {
 }
 
 .hand-card-art {
-  width: 88px;
+  width: 100%;
   height: auto;
   border-radius: 6px;
   display: block;
 }
 
 .hand-card-name {
+  max-width: 100%;
+  overflow: hidden;
   letter-spacing: 0.03em;
   text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hand-card:hover:not([disabled]) {
@@ -1364,11 +1482,23 @@ body {
 }
 
 /* 行动条 */
+/* 行动条:统一字号体系——面板内文字/按钮同一基准字号,颜色区分层级 */
 .action-bar {
   border: 1px solid #3a3226;
   border-radius: 12px;
   padding: 14px 18px;
   background: linear-gradient(180deg, rgba(38, 34, 27, 0.82), rgba(26, 29, 35, 0.9));
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* 按钮 UA 默认字体与正文不一致(字号/字形杂乱的根源),统一继承 */
+.action-bar button {
+  font: inherit;
+}
+
+.action-bar > p {
+  margin: 4px 0;
 }
 
 .action-bar h3 {
@@ -1378,7 +1508,6 @@ body {
 .action-hint {
   color: #b3a888;
   margin: 4px 0;
-  font-size: 0.85rem;
 }
 
 .action-choices {
@@ -1389,6 +1518,11 @@ body {
   margin: 8px 0;
 }
 
+/* 行首标签(研发:/侦察:/出售:…):弱化色,与按钮同字号 */
+.action-choices > span:first-child {
+  color: #b3a888;
+}
+
 .action-choices button {
   padding: 5px 12px;
   border: 1px solid #6b5b3e;
@@ -1396,7 +1530,6 @@ body {
   background: rgba(23, 26, 31, 0.7);
   color: #d8cdb4;
   cursor: pointer;
-  font-size: 0.85rem;
   transition:
     border-color 0.12s ease,
     background 0.12s ease,
@@ -1422,8 +1555,15 @@ body {
 
 .action-confirm {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* 提示/收益预览段落独占一行,按钮行齐整 */
+.action-confirm > p {
+  flex-basis: 100%;
 }
 
 /* 行动日志：打字机字体 */

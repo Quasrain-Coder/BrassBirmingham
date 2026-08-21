@@ -7,8 +7,9 @@
  *
  * 广播安全：room_state 一律走 toRoomState（无 token、config 无 seed 值）；credentials
  * （seat+token）仅 create/join/resume 时单发本人。submit_action 以 token → seat 映射校验
- * 身份（防代打）。resume：开局后查库 findSeatByToken 再对内存 session（进程重启丢对局，
- * 库有记录而内存无 session 回 'session-lost'）；开局前走 RoomManager 内存索引。
+ * 身份（防代打）。resume：开局后查库 findSeatByToken 再对内存 session；进程重启后内存
+ * session 丢失时按库（games + actions 表）重放恢复（GameSession.restore），仅已终局或
+ * 重放失败才回 'session-lost'；开局前走 RoomManager 内存索引。
  *
  * 心跳：interval（默认 30s）server 发 ws 控制帧 ping；超过 timeout（默认 60s）未收 pong
  * 即 terminate。应用层 'ping' 消息另回 'pong' JSON（协议消息，与控制帧无关）。
@@ -29,13 +30,13 @@ import { readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import { PROTOCOL_VERSION } from '@brass/protocol';
-import type { ClientMessage, ServerMessage } from '@brass/protocol';
+import type { ClientMessage, DraftPreview, ServerMessage } from '@brass/protocol';
 import { enumerateActions } from '@brass/engine';
 import type { Action, PlayerIndex } from '@brass/engine';
 import { HeuristicAgent, type DecidingAgent, type Difficulty } from '@brass/llm';
 import { RoomError, RoomManager, toRoomState, type Room, type Seat } from './rooms.js';
 import { GameSession, SessionError, type SessionSeat } from './session.js';
-import { findSeatByToken, openDb, type Db } from './db/repo.js';
+import { findGameById, findSeatByToken, listSeats, openDb, type Db } from './db/repo.js';
 
 export interface GameServerOptions {
   port: number;
@@ -206,6 +207,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         state: snap.state,
         legalActions: snap.legalActions,
         turnHold: entry.turnHold,
+        playedCards: snap.playedCards,
       });
     }
   }
@@ -276,7 +278,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     const difficulty: Difficulty = room.config.aiSeats?.difficulty ?? 'normal';
     for (const s of room.seats) {
       if (s === null) throw new Error('unreachable: startGame 校验后仍有空座位');
-      seats.push({ seat: s.seat, nickname: s.nickname, token: s.token });
+      seats.push({ seat: s.seat, nickname: s.nickname, token: s.token, isAI: s.isAI });
       if (s.isAI) agents.set(s.seat, makeAgent(s.seat, difficulty));
     }
     if (room.seed === null) throw new Error('unreachable: startGame 后 seed 未落地');
@@ -307,6 +309,57 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
   function makeAgent(seat: PlayerIndex, difficulty: Difficulty): DecidingAgent {
     if (options.aiAgentFactory !== undefined) return options.aiAgentFactory(seat, difficulty);
     return new HeuristicAgent();
+  }
+
+  /**
+   * 服务器重启后的对局恢复：库中 status='playing' 的对局重放重建 session，
+   * 并按 seats 表重建 Room（adopt 回 RoomManager）与 tokenSeats/agents 索引。
+   * 返回 undefined = 不可恢复（对局不存在/已终局/重放失败）。
+   * turnHold 不恢复（重启前被扣住的回合视为已放行，对局继续推进，不会卡死）。
+   */
+  function restoreSessionEntry(gameId: string): SessionEntry | undefined {
+    const session = GameSession.restore(db, gameId);
+    if (session === null) return undefined;
+    const game = findGameById(db, gameId);
+    if (game === null) return undefined;
+    const seatRows = listSeats(db, gameId);
+    const difficulty: Difficulty = game.config.aiSeats?.difficulty ?? 'normal';
+    const roomSeats: (Seat | null)[] = Array.from({ length: game.playerCount }, () => null);
+    const agents = new Map<PlayerIndex, DecidingAgent>();
+    const tokenSeats = new Map<string, PlayerIndex>();
+    for (const s of seatRows) {
+      roomSeats[s.seat] = {
+        seat: s.seat as PlayerIndex,
+        nickname: s.nickname,
+        token: s.token,
+        connected: s.isAI, // AI 恒在线；真人等 resume 置 true
+        isAI: s.isAI,
+      };
+      if (s.isAI) agents.set(s.seat as PlayerIndex, makeAgent(s.seat as PlayerIndex, difficulty));
+      else tokenSeats.set(s.token, s.seat as PlayerIndex);
+    }
+    const room: Room = {
+      code: game.roomCode,
+      config: game.config,
+      seats: roomSeats,
+      started: true,
+      seed: game.seed,
+      customSeed: game.config.seed !== undefined,
+    };
+    rooms.adopt(room);
+    const entry: SessionEntry = {
+      session,
+      room,
+      tokenSeats,
+      agents,
+      driving: false,
+      turnHold: null,
+      usage: { decisions: 0, input: 0, output: 0 },
+    };
+    sessionsByGameId.set(gameId, entry);
+    for (const token of tokenSeats.keys()) sessionByToken.set(token, entry);
+    console.log(`[session] 对局 ${gameId} 已经库重放恢复（seq=${session.currentSeq}）`);
+    return entry;
   }
 
   /** AI 行动落库 + 广播（action_applied 带 reason/degraded；终局则补 game_over）。 */
@@ -515,6 +568,30 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     }
     entry.turnHold = null;
     broadcastSnapshots(entry);
+    // 全场播报"X 已重置本回合"（他人的暂存预览/播报由 client 据此清除）
+    broadcast(entry.room, { type: 'turn_reset', protocolVersion: PROTOCOL_VERSION, seat });
+  }
+
+  /**
+   * 暂存预览同步（多玩家）：当前行动方点选/改动暂存时上行，服务器校验身份后
+   * 广播 player_draft 给同房**其他**连接（发送方本地已自渲染）。draft=null=清除。
+   * 纯转发不落库——暂存是瞬态信息,断线/恢复不补发。
+   */
+  function handleDraftUpdate(conn: Conn, msg: { token: string; draft: DraftPreview | null }): void {
+    if (typeof msg.token !== 'string') throw new WsError('bad-message', 'draft_update 需要 token');
+    const entry = sessionByToken.get(msg.token);
+    if (entry === undefined) throw new WsError('invalid-token', 'token 不属于任何进行中对局');
+    const seat = entry.tokenSeats.get(msg.token);
+    if (seat === undefined) throw new WsError('invalid-token', 'token 无效');
+    for (const other of conns) {
+      if (other === conn || other.roomCode !== entry.room.code) continue;
+      send(other, {
+        type: 'player_draft',
+        protocolVersion: PROTOCOL_VERSION,
+        seat,
+        draft: msg.draft ?? null,
+      });
+    }
   }
 
   /**
@@ -564,9 +641,10 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     // 开局后：seats 表查 token → gameId，再对内存 session
     const persisted = findSeatByToken(db, msg.token);
     if (persisted !== null) {
-      const entry = sessionsByGameId.get(persisted.gameId);
+      // 内存无 session（服务器重启）→ 按库重放恢复；已终局/重放失败才 session-lost
+      const entry = sessionsByGameId.get(persisted.gameId) ?? restoreSessionEntry(persisted.gameId);
       if (entry === undefined) {
-        throw new WsError('session-lost', '对局已随服务器重启丢失（M2 不恢复进行中对局）');
+        throw new WsError('session-lost', '对局已结束或无法恢复');
       }
       const seat = entry.tokenSeats.get(msg.token);
       if (seat === undefined) throw new WsError('invalid-token', 'token 与对局座位不一致');
@@ -582,6 +660,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         state: snap.state,
         legalActions: snap.legalActions,
         turnHold: entry.turnHold,
+        playedCards: snap.playedCards,
       });
       broadcastRoomState(entry.room);
       // resume 重触发 driveAI（幂等，守卫防重入）——对局若停在 AI 回合则被唤醒
@@ -622,6 +701,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         break;
       case 'reset_turn':
         handleResetTurn(msg);
+        break;
+      case 'draft_update':
+        handleDraftUpdate(conn, msg);
         break;
       case 'resume':
         handleResume(conn, msg);
