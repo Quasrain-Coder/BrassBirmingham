@@ -2510,13 +2510,14 @@ body {
   gap: 8px;
 }
 
-/* 手牌叠在地图下缘:只露牌顶,悬停/选中整张浮出 */
+/* 手牌固定在视口底部:无论页面怎么滚,始终露约 1/3 牌顶;
+   悬停提起(已有选中牌时其余牌不再提起),被选中的牌固定提起 */
 .hand-bar.overlay {
-  position: absolute;
+  position: fixed;
   right: 0;
   bottom: 0;
   left: 0;
-  z-index: 4;
+  z-index: 30;
   padding: 0 10px;
   border: none;
   background: transparent;
@@ -2530,24 +2531,20 @@ body {
 
 .hand-bar.overlay .hand-card {
   pointer-events: auto;
-  transform: translateY(58%);
+  transform: translateY(62%);
   transition: transform 0.15s ease;
 }
 
-.hand-bar.overlay .hand-card:hover,
+.hand-bar.overlay:not(.no-raise) .hand-card:hover,
 .hand-bar.overlay .hand-card.selected {
   transform: translateY(0);
 }
 
-/* 面板拖拽建造/研发:跟随指针的板块 ghost */
+/* 面板拖拽建造/研发:跟随指针的板块 ghost(与被拖 token 本体同尺寸,贴光标中心) */
 .tile-drag-ghost {
   position: fixed;
   z-index: 50;
-  width: 72px;
-  height: auto;
   border-radius: 8px;
-  opacity: 0.85;
+  opacity: 0.92;
   pointer-events: none;
-  transform: rotate(3deg);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }

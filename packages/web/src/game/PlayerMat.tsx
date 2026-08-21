@@ -25,6 +25,7 @@ export function PlayerMat({
   playerColor,
   colorKey,
   onTileDragStart,
+  hiddenTopInd,
 }: {
   /** 该玩家面板剩余堆叠(TileDef 按产业分组、等级升序)。 */
   tiles: TileDef[];
@@ -33,6 +34,8 @@ export function PlayerMat({
   colorKey: 'purple' | 'yellow' | 'orange' | 'teal';
   /** 按下某产业栈顶(最低级)板块开始拖拽(宽屏拖拽建造/研发)。 */
   onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<SVGElement>) => void) | undefined;
+  /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失,如同已被拿起)。 */
+  hiddenTopInd?: IndustryType | null | undefined;
 }): ReactElement {
   // 每产业每等级剩余数;栈顶 = 剩余数 >0 的最低级
   const remaining = new Map<string, number>();
@@ -58,9 +61,10 @@ export function PlayerMat({
           return (
             <g key={`${ind}-${slot.level}`} data-mat-slot={`${ind}-${slot.level}`}>
               {left > 0 ? (
-                // 实物堆叠:每个有剩余的等级框都放玩家色板块 token(逐层偏移)
+                // 实物堆叠:每个有剩余的等级框都放玩家色板块 token(逐层偏移);
+                // 拖拽中的栈顶 token 从版图上即时消失(如同已被拿起)
                 <g className="mat-pile">
-                  {Array.from({ length: left }, (_, i) => (
+                  {Array.from({ length: isTop && hiddenTopInd === ind ? left - 1 : left }, (_, i) => (
                     <image
                       key={i}
                       href={`/assets/tiles/${ind}-${slot.level}-${colorKey}.png`}

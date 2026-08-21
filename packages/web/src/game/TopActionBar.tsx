@@ -32,6 +32,13 @@ export interface TopActionBarProps {
   onCancel: () => void;
   onEndTurn: () => void;
   onResetTurn: () => void;
+  /** 房间号与顶部工具按钮(集中在最右侧,行动按钮居中,节省一整行高度)。 */
+  roomCode: string | null;
+  onToggleLayout: () => void;
+  onOpenScore: () => void;
+  onOpenDiscard: () => void;
+  onOpenLog: () => void;
+  onLeave: () => void;
 }
 
 export function TopActionBar({
@@ -50,7 +57,33 @@ export function TopActionBar({
   onCancel,
   onEndTurn,
   onResetTurn,
+  roomCode,
+  onToggleLayout,
+  onOpenScore,
+  onOpenDiscard,
+  onOpenLog,
+  onLeave,
 }: TopActionBarProps): ReactElement {
+  // 顶部工具按钮组(集中最右)
+  const utilButtons = (
+    <span className="top-util-group">
+      <button type="button" className="btn-ghost" data-testid="toggle-layout" onClick={onToggleLayout}>
+        经典布局
+      </button>
+      <button type="button" className="btn-ghost" data-testid="open-score-modal" onClick={onOpenScore}>
+        分数构成
+      </button>
+      <button type="button" className="btn-ghost" data-testid="open-discard-modal" onClick={onOpenDiscard}>
+        打出记录
+      </button>
+      <button type="button" className="btn-ghost" data-testid="open-log-modal" onClick={onOpenLog}>
+        行动日志
+      </button>
+      <button type="button" className="btn-ghost" data-testid="leave-game" onClick={onLeave}>
+        离开对局
+      </button>
+    </span>
+  );
   // 现金实时标记:显眼处常驻;暂存行动时预览结算后的现金(取消/重置即恢复)
   const money = state.players[seat]?.money ?? 0;
   const projected =
@@ -71,6 +104,9 @@ export function TopActionBar({
     return (
       <section className="action-bar top-action-bar turn-hold" data-testid="action-bar">
         <div className="top-action-row">
+          {roomCode !== null ? (
+            <span className="game-room-code" data-testid="game-room-code">房间 {roomCode}</span>
+          ) : null}
           <span className="top-action-hint" data-testid="turn-hold-hint">
             本回合行动已完成,确认后进入下一位玩家;也可以重置本回合重新行动。
           </span>
@@ -81,6 +117,7 @@ export function TopActionBar({
             重置本回合
           </button>
           <span className="top-action-money">{moneyChip}</span>
+          {utilButtons}
         </div>
       </section>
     );
@@ -89,10 +126,14 @@ export function TopActionBar({
     return (
       <section className="action-bar top-action-bar" data-testid="action-bar">
         <div className="top-action-row">
+          {roomCode !== null ? (
+            <span className="game-room-code" data-testid="game-room-code">房间 {roomCode}</span>
+          ) : null}
           <span className="top-action-hint" data-testid="waiting">
             {turnHold !== null ? `等待 ${waitingFor} 确认回合…` : `等待 ${waitingFor} 行动…`}
           </span>
           <span className="top-action-money">{moneyChip}</span>
+          {utilButtons}
         </div>
       </section>
     );
@@ -126,6 +167,10 @@ export function TopActionBar({
   return (
     <section className="action-bar top-action-bar" data-testid="action-bar">
       <div className="top-action-row">
+        {roomCode !== null ? (
+          <span className="game-room-code" data-testid="game-room-code">房间 {roomCode}</span>
+        ) : null}
+        <span className="top-action-spacer" />
         <button
           type="button"
           data-testid="top-act-build"
@@ -201,6 +246,7 @@ export function TopActionBar({
           重置
         </button>
         <span className="top-action-money">{moneyChip}</span>
+        {utilButtons}
       </div>
 
       {active === 'build' ? (

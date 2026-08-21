@@ -176,8 +176,15 @@ export function HandBar({
   scoutMode?: { picks: string[]; onToggle: (cardId: string) => void } | null | undefined;
 }): ReactElement {
   const self = state.players[seat];
+  // 已有选定(行动牌或搜寻弃牌)时,其余牌悬停不再提起;被选中的牌保持提起(固定悬浮)
+  const noRaise =
+    overlay === true &&
+    scoutMode !== null &&
+    scoutMode !== undefined
+      ? scoutMode.picks.length > 0
+      : overlay === true && selectedCard !== null && selectedCard !== undefined;
   return (
-    <section className={`hand-bar${overlay ? ' overlay' : ''}`}>
+    <section className={`hand-bar${overlay ? ' overlay' : ''}${noRaise ? ' no-raise' : ''}`}>
       <div className="own-hand">
         {self?.hand.kind === 'full'
           ? self.hand.cards.map((card) => {
@@ -230,6 +237,7 @@ export function PlayerBoard({
   playedCards,
   eraActions,
   onTileDragStart,
+  hiddenTopInd,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -250,6 +258,8 @@ export function PlayerBoard({
   eraActions?: { action: Action; moneyDelta: number }[] | undefined;
   /** 按下产业栈顶板块开始拖拽(宽屏拖拽建造/研发,仅紧凑面板用)。 */
   onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<SVGElement>) => void) | undefined;
+  /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失)。 */
+  hiddenTopInd?: IndustryType | null | undefined;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
   // 单人打出记录弹层开关(版图/明细切换旁的"打出"按钮)
@@ -386,6 +396,7 @@ export function PlayerBoard({
             playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
             colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
             onTileDragStart={onTileDragStart}
+            hiddenTopInd={hiddenTopInd}
           />
         </div>
         {discardOpen ? (

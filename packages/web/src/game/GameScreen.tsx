@@ -252,7 +252,7 @@ function GameBoard({
   useEffect(() => setTopAction(null), [selectedCard]);
 
   // 拖拽建造/研发(宽屏):从个人版图栈顶拖出板块,落地图城市=建造,落其他区域=研发
-  const [dragTile, setDragTile] = useState<{ ind: IndustryType; x: number; y: number } | null>(null);
+  const [dragTile, setDragTile] = useState<{ ind: IndustryType; x: number; y: number; w: number; h: number } | null>(null);
   const boardWrapRef = useRef<HTMLDivElement>(null);
   const handleTileDrop = (ind: IndustryType, x: number, y: number): void => {
     const wrap = boardWrapRef.current;
@@ -292,7 +292,9 @@ function GameBoard({
   const onTileDragStart = (ind: IndustryType, e: React.PointerEvent<SVGElement>): void => {
     if (!myTurn || selectedCard === null) return;
     e.preventDefault();
-    setDragTile({ ind, x: e.clientX, y: e.clientY });
+    // ghost 就用被拖 token 本体(原尺寸,贴在光标正中心),不再用放大的投影
+    const rect = (e.target as SVGElement).getBoundingClientRect();
+    setDragTile({ ind, x: e.clientX, y: e.clientY, w: rect.width, h: rect.height });
   };
   useEffect(() => {
     if (dragTile === null) return;
@@ -413,6 +415,7 @@ function GameBoard({
 
   return (
     <div className={`game-screen${layoutWide ? ' wide' : ''}`}>
+      {layoutWide ? null : (
       <header className="game-screen-head">
         {room !== null ? (
           <span className="game-room-code" data-testid="game-room-code">
@@ -438,16 +441,6 @@ function GameBoard({
         >
           打出记录
         </button>
-        {layoutWide ? (
-          <button
-            type="button"
-            className="btn-ghost"
-            data-testid="open-log-modal"
-            onClick={() => setLogOpen(true)}
-          >
-            行动日志
-          </button>
-        ) : null}
         <button
           type="button"
           className="btn-ghost"
@@ -457,12 +450,18 @@ function GameBoard({
           离开对局
         </button>
       </header>
+      )}
       {dragTile !== null && dragDef !== undefined ? (
         <img
           className="tile-drag-ghost"
           src={`/assets/tiles/${dragTile.ind}-${dragDef.level}-${['purple', 'yellow', 'orange', 'teal'][seat] ?? 'purple'}.png`}
           alt=""
-          style={{ left: dragTile.x + 12, top: dragTile.y + 12 }}
+          style={{
+            left: dragTile.x - dragTile.w / 2,
+            top: dragTile.y - dragTile.h / 2,
+            width: dragTile.w,
+            height: dragTile.h,
+          }}
         />
       ) : null}
       {scoreHistory.open ? (
@@ -495,7 +494,7 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} />
               </div>
             ))}
           </aside>
@@ -513,6 +512,12 @@ function GameBoard({
               canResetTurn={myTurn && state.actionsThisTurn > 0}
               active={topAction}
               onActiveChange={setTopAction}
+              roomCode={room?.code ?? null}
+              onToggleLayout={toggleLayout}
+              onOpenScore={() => scoreHistory.setOpen(true)}
+              onOpenDiscard={() => setDiscardOpen(true)}
+              onOpenLog={() => setLogOpen(true)}
+              onLeave={() => store.leaveRoom()}
               onConfirm={() => {
                 if (draft.resolved !== null) store.submitAction(draft.resolved);
               }}
@@ -525,7 +530,7 @@ function GameBoard({
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} />
               </div>
             ))}
           </aside>
