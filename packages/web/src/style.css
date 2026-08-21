@@ -83,10 +83,16 @@ body {
   justify-content: flex-end;
 }
 
-.hand-bar .own-hand {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+/* 手牌行横向内边距归零(8 张牌与地图同宽对齐),标题/对手手牌保留缩进 */
+.hand-bar {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.hand-bar > h3,
+.hand-bar > .opponent-hands {
+  margin-right: 18px;
+  margin-left: 18px;
 }
 
 .action-confirm {
@@ -1279,14 +1285,18 @@ body {
 }
 
 /* 手牌（官方卡面 + 中文名） */
+/* 8 张一排、总宽与地图持平:单张宽 = (容器 − 7 个间隔) / 8,随屏幕缩放 */
 .own-hand {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .hand-card {
   position: relative;
+  box-sizing: border-box;
+  flex: none;
+  width: calc((100% - 42px) / 8);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1307,15 +1317,19 @@ body {
 }
 
 .hand-card-art {
-  width: 88px;
+  width: 100%;
   height: auto;
   border-radius: 6px;
   display: block;
 }
 
 .hand-card-name {
+  max-width: 100%;
+  overflow: hidden;
   letter-spacing: 0.03em;
   text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hand-card:hover:not([disabled]) {
