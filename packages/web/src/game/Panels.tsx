@@ -189,6 +189,7 @@ export function HandBar({
                   type="button"
                   data-testid={`hand-card-${card.id}`}
                   className={classes}
+                  title={cardName(card)}
                   onClick={() => onSelect?.(card.id)}
                 >
                   <img className="hand-card-art" src={cardImageSrc(card)} alt={cardName(card)} />
