@@ -854,19 +854,26 @@ body {
   gap: 8px;
 }
 
-/* 宽屏布局(27 寸全屏):地图居中,左右两列玩家面板(铺开+缩放适配),面板下本回合信息行 */
+/* 宽屏布局(27 寸全屏):1:2:1 全局比例缩放——侧列面板与地图按视口等比放大 */
 .game-screen.wide .wide-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr) minmax(280px, 360px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
 
-/* 地图按视口高度比例缩放:方形版图宽 ≈ min(中列宽, 76vh),不再随宽屏无限拉伸 */
+/* 中列内容(地图/手牌/行动条)填满中列并同宽对齐 */
+.game-screen.wide .wide-center-inner {
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .game-screen.wide .wide-center .board-svg {
   display: block;
-  margin: 0 auto;
-  width: min(100%, 76vh);
+  width: 100%;
 }
 
 .wide-col {
