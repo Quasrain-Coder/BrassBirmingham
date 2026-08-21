@@ -77,36 +77,61 @@ function GameBoard({
   // 分数构成:时代切换时自动弹出(手动关闭),头部按钮随时查阅
   const scoreHistory = useScoreHistory(state);
 
-  // 行动聚光灯：最新一条 action_applied → 棋盘高亮 + 横幅，约 5 秒后自动清除；
-  // 新行动到达即替换并重置计时（以 seq 为触发键，lastEntry 由 seq 唯一确定）。
+  // 播报舞台：行动聚光灯与轮次/时代播报**串行**播放——同一时刻只播一条，
+  // 每条 5 秒；播报中到达的新条目排队，等上一条播完再播（修复"最后一动
+  // 的聚光灯与新一轮播报同时出现"）。
+  type StageItem = (ActionSpotlight & { kind: 'action'; text: string }) | { kind: 'round'; text: string };
+  const [stage, setStage] = useState<StageItem | null>(null);
+  const stageQueueRef = useRef<StageItem[]>([]);
+  const stageBusyRef = useRef(false);
+  useEffect(() => {
+    if (stage === null) return;
+    const t = setTimeout(() => {
+      const next = stageQueueRef.current.shift() ?? null;
+      if (next === null) stageBusyRef.current = false;
+      setStage(next);
+    }, SPOTLIGHT_DURATION_MS);
+    return () => clearTimeout(t);
+  }, [stage]);
+  const pushStage = (item: StageItem): void => {
+    if (!stageBusyRef.current) {
+      stageBusyRef.current = true;
+      setStage(item);
+    } else {
+      stageQueueRef.current.push(item);
+    }
+  };
+
+  // 最新一条 action_applied → 行动聚光灯入队
   const lastEntry = log[log.length - 1];
   const lastSeq = lastEntry?.seq;
-  const [spotlight, setSpotlight] = useState<(ActionSpotlight & { text: string }) | null>(null);
   useEffect(() => {
     if (lastEntry === undefined) return;
-    setSpotlight({ ...spotlightOf(lastEntry.player, lastEntry.action), text: describeAction(lastEntry.action) });
-    const t = setTimeout(() => setSpotlight(null), SPOTLIGHT_DURATION_MS);
-    return () => clearTimeout(t);
+    pushStage({
+      kind: 'action',
+      ...spotlightOf(lastEntry.player, lastEntry.action),
+      text: describeAction(lastEntry.action),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastSeq]);
 
-  // 新一轮/新时代红字播报（约 5 秒）：round 递增或 era 切换时触发;首帧不播
-  const [roundBanner, setRoundBanner] = useState<string | null>(null);
+  // 新一轮/新时代红字播放入队：round 递增或 era 切换时触发;首帧不播
   const prevRoundRef = useRef<{ era: string; round: number } | null>(null);
   useEffect(() => {
     const prev = prevRoundRef.current;
     prevRoundRef.current = { era: state.era, round: state.round };
     if (prev === null) return;
     if (prev.era !== state.era) {
-      setRoundBanner('进入铁路时代！');
+      pushStage({ kind: 'round', text: '进入铁路时代！' });
     } else if (state.round > prev.round) {
-      setRoundBanner(`第 ${state.round} 轮`);
-    } else {
-      return;
+      pushStage({ kind: 'round', text: `第 ${state.round} 轮` });
     }
-    const t = setTimeout(() => setRoundBanner(null), SPOTLIGHT_DURATION_MS);
-    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.era, state.round]);
+
+  const spotlight: (ActionSpotlight & { text: string }) | null =
+    stage?.kind === 'action' ? stage : null;
+  const roundBanner: string | null = stage?.kind === 'round' ? stage.text : null;
 
   // 布局模式:经典 / 宽屏(27 寸全屏,地图居中,左右两列面板全部铺开)
   const storage = typeof localStorage === 'undefined' ? null : localStorage;

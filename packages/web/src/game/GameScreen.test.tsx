@@ -3,7 +3,7 @@
  * FakeWebSocket 注入；snapshot 帧由 engine newGame + filterStateFor + enumerateActions 生成。
  */
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PROTOCOL_VERSION } from '@brass/protocol';
 import type { ServerMessage } from '@brass/protocol';
 import { enumerateActions, newGame } from '@brass/engine';
@@ -138,6 +138,51 @@ describe('<GameScreen>', () => {
     fireEvent.click(screen.getByTestId('toggle-layout'));
     expect(container.querySelector('.wide-grid')).toBeNull();
     void ws;
+  });
+
+  it('播报串行:行动聚光灯播完(5s)后才播新一轮播报', () => {
+    vi.useFakeTimers();
+    try {
+      const { store, ws, game, seat } = setup(true);
+      render(<GameScreen store={store} />);
+      // 一条行动 → 聚光灯出现
+      act(() => {
+        ws.emit({
+          type: 'action_applied',
+          protocolVersion: PROTOCOL_VERSION,
+          seq: 1,
+          player: seat,
+          action: { type: 'loan', cardId: 'c0' },
+          events: [],
+        });
+      });
+      expect(screen.getByTestId('action-spotlight')).toHaveTextContent('贷款');
+      // 同瞬间进入第 2 轮(快照 round=2)→ 轮次播报必须排队,不能与聚光灯同屏
+      act(() => {
+        ws.emit({
+          type: 'snapshot',
+          protocolVersion: PROTOCOL_VERSION,
+          seq: 2,
+          state: filterStateFor({ ...game, round: 2 }, seat),
+          legalActions: [],
+        });
+      });
+      expect(screen.queryByTestId('round-banner')).toBeNull();
+      expect(screen.getByTestId('action-spotlight')).toBeInTheDocument();
+      // 聚光灯播完 → 轮次播报上场
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.queryByTestId('action-spotlight')).toBeNull();
+      expect(screen.getByTestId('round-banner')).toHaveTextContent('第 2 轮');
+      // 轮次播报同样播足 5 秒后消失
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.queryByTestId('round-banner')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('离开对局：点按钮 → 发 leave 帧并回到大厅态', () => {
