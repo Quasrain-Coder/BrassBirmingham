@@ -249,6 +249,7 @@ function GameBoard({
         linkPreview={ghostLinks}
         onSlotClick={myTurn ? draft.clickSlot : undefined}
         onLinkClick={myTurn ? draft.clickLink : undefined}
+        onMerchantClick={myTurn ? draft.clickMerchant : undefined}
       />
       {spotlight !== null ? (
         <div className="action-spotlight-banner" data-testid="action-spotlight">

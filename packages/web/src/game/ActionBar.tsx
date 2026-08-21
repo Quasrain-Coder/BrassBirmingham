@@ -16,11 +16,12 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
-import type { Action, Card, IndustryType, LocationId, MerchantId, PlayerIndex } from '@brass/engine';
+import type { Action, BeerSourceRef, Card, IndustryType, LocationId, MerchantId, PlayerIndex } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { BoardHighlights, SlotRef } from '../board/BoardSvg';
 import {
   actionsForCard,
+  beerSourcesFor,
   buildCandidatesAt,
   buildSlotTargets,
   describeAction,
@@ -31,10 +32,12 @@ import {
   matchDevelop,
   matchNetwork,
   matchScout,
+  merchantsForTile,
   resolveBuildSlot,
   sellCandidatesAt,
   sellOptions,
   sellSlotTargets,
+  sellableTilesFor,
   targetsFor,
 } from './interactions';
 import type { BuildAction, SellAction } from './interactions';
@@ -65,6 +68,24 @@ export interface ActionDraft {
   sellFullSet: SellAction | null;
   /** 棋盘点选的 sell 板块（过滤单卖列表）。 */
   sellTile: SlotRef | null;
+  /** 分组卖出：已完成的组(建筑+贸易商+逐桶啤酒源)。 */
+  sellGroups: { tile: SlotRef; merchant: MerchantId; beer: BeerSourceRef[] }[];
+  /** 当前组的贸易商与已选啤酒。 */
+  sellMerchant: MerchantId | null;
+  sellBeer: BeerSourceRef[];
+  /** 选/改本组建筑(再点同一板块取消;切换清空贸易商与啤酒)。 */
+  pickSellTile: (ref: SlotRef) => void;
+  /** 选/改本组贸易商(再点同一商人取消;切换清商人桶)。 */
+  pickSellMerchant: (id: MerchantId) => void;
+  /** 切换商人桶(至多 1 桶;须先选贸易商)。 */
+  toggleSellMerchantBarrel: () => void;
+  /** 设定某酒厂已用桶数(0..barrels;点第 i 个桶按钮 = 用 i 桶)。 */
+  setSellBreweryCount: (ref: SlotRef, count: number) => void;
+  /** 组完整(建筑+贸易商+啤酒够数)时收下本组,开始下一组。 */
+  commitSellGroup: () => void;
+  removeSellGroup: (i: number) => void;
+  /** 图上点贸易商位:未选建筑无效;未选贸易商=选定;同商人再点=切商人桶;不同=换。 */
+  clickMerchant: (id: MerchantId) => void;
   /** 槽位歧义（一槽多产业）时的待选 build。 */
   buildChoices: BuildAction[];
   /** 建造预览（非贴合的预览 token 盖在目标槽位，切换城市即跟随）。 */
@@ -97,6 +118,9 @@ export function useActionDraft({
   const [developPicks, setDevelopPicks] = useState<IndustryType[]>([]);
   const [scoutPicks, setScoutPicks] = useState<string[]>([]);
   const [sellTile, setSellTile] = useState<SlotRef | null>(null);
+  const [sellMerchant, setSellMerchant] = useState<MerchantId | null>(null);
+  const [sellBeer, setSellBeer] = useState<BeerSourceRef[]>([]);
+  const [sellGroups, setSellGroups] = useState<{ tile: SlotRef; merchant: MerchantId; beer: BeerSourceRef[] }[]>([]);
   const [buildChoices, setBuildChoices] = useState<BuildAction[]>([]);
   /** 槽位歧义待选时记住所点槽位(choose 时附显式 slotIndex)。 */
   const [choicesSlot, setChoicesSlot] = useState<SlotRef | null>(null);
@@ -108,6 +132,9 @@ export function useActionDraft({
     setDevelopPicks([]);
     setScoutPicks([]);
     setSellTile(null);
+    setSellMerchant(null);
+    setSellBeer([]);
+    setSellGroups([]);
     setBuildChoices([]);
     setChoicesSlot(null);
     setBuildIndustry(null);
@@ -172,17 +199,120 @@ export function useActionDraft({
       ? sell.singles
       : sellCandidatesAt(candidates, sellTile.location, sellTile.slotIndex);
 
-  // resolved 优先级：显式选定 > 槽位歧义待选（阻断）> network 序列 > develop > scout。
+  // 分组卖出拼成的自定义行动(组非空且当前组已清空):组合式校验,不必命中枚举集
+  const sellAction = useMemo((): Action | null => {
+    if (sellGroups.length === 0 || sellTile !== null) return null;
+    const cardId = candidates.find((a) => a.type === 'sell')?.cardId ?? selectedCard;
+    if (cardId === null) return null;
+    return {
+      type: 'sell',
+      cardId,
+      sales: sellGroups.map((g) => ({
+        location: g.tile.location,
+        slotIndex: g.tile.slotIndex,
+        merchant: g.merchant,
+        useMerchantBeer: g.beer.some((b) => b.kind === 'merchant'),
+        beerSources: g.beer,
+      })),
+    };
+  }, [sellGroups, sellTile, candidates, selectedCard]);
+
+  // resolved 优先级：显式选定 > 槽位歧义待选（阻断）> 分组卖出 > network 序列 > develop > scout。
   // 多类型同时收集了参数时按此序取其一，确认钮文案可见所提交内容。
   const resolved: Action | null =
     chosen ??
     (buildChoices.length > 0
       ? null
-      : (pickedLinks.length > 0 ? networkMatch.exact : null) ??
+      : sellAction ??
+        (pickedLinks.length > 0 ? networkMatch.exact : null) ??
         matchDevelop(candidates, developPicks) ??
         matchScout(legalActions, hand, scoutPicks));
 
+  const pickSellTile = (ref: SlotRef): void => {
+    setSellTile((prev) =>
+      prev !== null && prev.location === ref.location && prev.slotIndex === ref.slotIndex
+        ? null
+        : ref,
+    );
+    setSellMerchant(null);
+    setSellBeer([]);
+  };
+
+  const pickSellMerchant = (id: MerchantId): void => {
+    setSellMerchant((prev) => (prev === id ? null : id));
+    setSellBeer((prev) => prev.filter((b) => b.kind !== 'merchant'));
+  };
+
+  const toggleSellMerchantBarrel = (): void => {
+    setSellBeer((prev) =>
+      prev.some((b) => b.kind === 'merchant')
+        ? prev.filter((b) => b.kind !== 'merchant')
+        : [...prev, { kind: 'merchant' }],
+    );
+  };
+
+  const setSellBreweryCount = (ref: SlotRef, count: number): void => {
+    setSellBeer((prev) => {
+      const rest = prev.filter(
+        (b) => !(b.kind === 'brewery' && b.location === ref.location && b.slotIndex === ref.slotIndex),
+      );
+      const adds: BeerSourceRef[] = Array.from({ length: Math.max(0, count) }, () => ({
+        kind: 'brewery',
+        location: ref.location,
+        slotIndex: ref.slotIndex,
+      }));
+      return [...rest, ...adds];
+    });
+  };
+
+  const commitSellGroup = (): void => {
+    if (sellTile === null || sellMerchant === null) return;
+    const placed = state.board.slots[sellTile.location]?.[sellTile.slotIndex];
+    if (placed == null || sellBeer.length !== placed.tile.beerToFlip) return;
+    setSellGroups((prev) => [...prev, { tile: sellTile, merchant: sellMerchant, beer: sellBeer }]);
+    setSellTile(null);
+    setSellMerchant(null);
+    setSellBeer([]);
+  };
+
+  const removeSellGroup = (i: number): void => {
+    setSellGroups((prev) => prev.filter((_, idx) => idx !== i));
+  };
+
+  const clickMerchant = (id: MerchantId): void => {
+    if (!candidates.some((a) => a.type === 'sell')) return;
+    if (sellTile === null) return; // 顺序约束:先选建筑,否则无效
+    if (sellMerchant === null) {
+      pickSellMerchant(id);
+      return;
+    }
+    if (sellMerchant === id) toggleSellMerchantBarrel();
+    else pickSellMerchant(id);
+  };
+
   const clickSlot = (location: LocationId, slotIndex: number): void => {
+    // 卖出流图上点选(顺序约束同按钮行):自己可卖板块 = 选本组建筑;
+    // 酒厂 = 加一桶啤酒(须已选建筑+贸易商,先点酒厂无效)
+    const placedT = state.board.slots[location]?.[slotIndex];
+    const sellFlow = candidates.some((a) => a.type === 'sell');
+    if (sellFlow && placedT && !placedT.flipped) {
+      if (placedT.player === seat && placedT.tile.sellable) {
+        pickSellTile({ location, slotIndex });
+        return;
+      }
+      if (
+        placedT.tile.industry === 'brewery' &&
+        placedT.resources > 0 &&
+        sellTile !== null &&
+        sellMerchant !== null
+      ) {
+        const used = sellBeer.filter(
+          (b) => b.kind === 'brewery' && b.location === location && b.slotIndex === slotIndex,
+        ).length;
+        if (used < placedT.resources) setSellBreweryCount({ location, slotIndex }, used + 1);
+        return;
+      }
+    }
     let builds = buildCandidatesAt(candidates, location, slotIndex);
     // 产业预选:只在该产业内解析(槽位多产业歧义被预选消解)
     if (buildIndustry !== null) {
@@ -202,10 +332,6 @@ export function useActionDraft({
       setChoicesSlot({ location, slotIndex });
       setChosen(null);
       return;
-    }
-    const sells = sellCandidatesAt(candidates, location, slotIndex);
-    if (sells.length > 0) {
-      setSellTile({ location, slotIndex });
     }
   };
 
@@ -281,8 +407,17 @@ export function useActionDraft({
     return { location: target.location, slotIndex: target.slotIndex, industry: chosen.industry };
   }, [chosen, state, seat]);
 
-  /** 啤酒匹配线:resolved 为卖货时,每笔销售的啤酒来源 → 卖货地点(match 效果)。 */
+  /** 啤酒匹配线:分组卖出按显式来源画(已收组+当前组已选);否则沿用规范化(resolved 为卖货时)。 */
   const beerMatches = useMemo(() => {
+    const out: { from: LocationId | MerchantId; to: LocationId }[] = [];
+    const pushGroup = (tile: SlotRef, merchant: MerchantId, beer: BeerSourceRef[]): void => {
+      for (const b of beer) {
+        out.push({ from: b.kind === 'merchant' ? merchant : b.location, to: tile.location });
+      }
+    };
+    for (const g of sellGroups) pushGroup(g.tile, g.merchant, g.beer);
+    if (sellTile !== null && sellMerchant !== null) pushGroup(sellTile, sellMerchant, sellBeer);
+    if (out.length > 0) return out;
     if (resolved?.type !== 'sell') return [];
     // 与 consumeBeer 规范化同序:自有酒厂按 LocationId 字典序取首个有余量者
     const ownBreweries = Object.entries(state.board.slots)
@@ -302,7 +437,7 @@ export function useActionDraft({
       ownIdx += 1;
       return { from: from ?? sale.location, to: sale.location };
     });
-  }, [resolved, state.board.slots, seat]);
+  }, [resolved, state.board.slots, seat, sellGroups, sellTile, sellMerchant, sellBeer]);
 
   return {
     candidates,
@@ -316,6 +451,16 @@ export function useActionDraft({
     sellSingles: visibleSellSingles,
     sellFullSet: sell.fullSet,
     sellTile,
+    sellGroups,
+    sellMerchant,
+    sellBeer,
+    pickSellTile,
+    pickSellMerchant,
+    toggleSellMerchantBarrel,
+    setSellBreweryCount,
+    commitSellGroup,
+    removeSellGroup,
+    clickMerchant,
     buildChoices,
     buildPreview,
     buildIndustry,
@@ -555,34 +700,156 @@ export function ActionBar({
           )}
         </div>
 
-        <div className={`action-choices${draft.sellSingles.length === 0 && draft.sellFullSet === null ? ' row-disabled' : ''}`} data-testid="sell-options">
-          <span>出售：</span>
-          {draft.sellSingles.length === 0 && draft.sellFullSet === null ? (
-            <span className="action-row-none">—</span>
-          ) : (
+        {(() => {
+          const sellRowDisabled = draft.sellSingles.length === 0 && draft.sellFullSet === null && draft.sellGroups.length === 0;
+          const sellableNow = sellableTilesFor(state, seat).filter(
+            (t) => !draft.sellGroups.some((g) => g.tile.location === t.location && g.tile.slotIndex === t.slotIndex),
+          );
+          const curPlaced = draft.sellTile !== null ? state.board.slots[draft.sellTile.location]?.[draft.sellTile.slotIndex] : null;
+          const curNeed = curPlaced?.tile.beerToFlip ?? 0;
+          const curMerchants =
+            draft.sellTile !== null
+              ? merchantsForTile(state, draft.sellTile).filter((id) => {
+                  // 啤酒可行性:商人桶(≤1)+自家酒厂+连通对手酒厂 ≥ 需求
+                  const src = beerSourcesFor(state, seat, id);
+                  const total = (src.merchantBarrel ? 1 : 0) + src.own.reduce((s, b) => s + b.barrels, 0) + src.opponent.reduce((s, b) => s + b.barrels, 0);
+                  return total >= curNeed;
+                })
+              : [];
+          const curBeerSources = draft.sellMerchant !== null ? beerSourcesFor(state, seat, draft.sellMerchant) : null;
+          const breweryUsed = new Map<string, number>();
+          for (const b of draft.sellBeer) {
+            if (b.kind !== 'brewery') continue;
+            const k = `${b.location}:${b.slotIndex}`;
+            breweryUsed.set(k, (breweryUsed.get(k) ?? 0) + 1);
+          }
+          const BARREL_NUM = ['①', '②', '③', '④', '⑤'];
+          return (
             <>
-              {draft.sellSingles.map((a, i) => (
-                <button
-                  key={describeAction(a)}
-                  type="button"
-                  data-testid={`sell-single-${i}`}
-                  onClick={() => draft.choose(a)}
-                >
-                  {describeAction(a)}
-                </button>
-              ))}
-              {draft.sellFullSet !== null ? (
-                <button
-                  type="button"
-                  data-testid="sell-full-set"
-                  onClick={() => draft.choose(draft.sellFullSet!)}
-                >
-                  {describeAction(draft.sellFullSet)}
-                </button>
+              <div className={`action-choices${sellRowDisabled ? ' row-disabled' : ''}`} data-testid="sell-options">
+                <span>出售：</span>
+                {sellRowDisabled ? (
+                  <span className="action-row-none">—</span>
+                ) : (
+                  <>
+                    {draft.sellGroups.map((g, i) => {
+                      const placed = state.board.slots[g.tile.location]?.[g.tile.slotIndex];
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          data-testid={`sell-group-${i}`}
+                          title="点击移除本组"
+                          onClick={() => draft.removeSellGroup(i)}
+                        >
+                          {locationName(g.tile.location)}
+                          {placed !== null && placed !== undefined ? industryName(placed.tile.industry) : ''}→{merchantName(g.merchant)}（酒×{g.beer.length}）✕
+                        </button>
+                      );
+                    })}
+                    {draft.sellFullSet !== null && draft.sellGroups.length === 0 ? (
+                      <button
+                        type="button"
+                        data-testid="sell-full-set"
+                        onClick={() => draft.choose(draft.sellFullSet!)}
+                      >
+                        一键：{describeAction(draft.sellFullSet)}
+                      </button>
+                    ) : null}
+                  </>
+                )}
+              </div>
+              {!sellRowDisabled ? (
+                <div className="sell-builder" data-testid="sell-builder">
+                  <div className="action-choices">
+                    <span>建筑：</span>
+                    {sellableNow.map((t) => (
+                      <button
+                        key={`${t.location}:${t.slotIndex}`}
+                        type="button"
+                        data-testid={`sell-tile-${t.location}-${t.slotIndex}`}
+                        className={
+                          draft.sellTile?.location === t.location && draft.sellTile.slotIndex === t.slotIndex
+                            ? 'selected'
+                            : undefined
+                        }
+                        onClick={() => draft.pickSellTile(t)}
+                      >
+                        {locationName(t.location)}{industryName(t.industry)} L{t.level}
+                        {t.beerToFlip > 0 ? `（酒×${t.beerToFlip}）` : ''}
+                      </button>
+                    ))}
+                  </div>
+                  {draft.sellTile !== null ? (
+                    <div className="action-choices">
+                      <span>贸易商：</span>
+                      {curMerchants.length === 0 ? (
+                        <span className="action-row-none">无可达且收货的商人（或啤酒不足）</span>
+                      ) : (
+                        curMerchants.map((id) => (
+                          <button
+                            key={id}
+                            type="button"
+                            data-testid={`sell-merchant-${id}`}
+                            className={draft.sellMerchant === id ? 'selected' : undefined}
+                            onClick={() => draft.pickSellMerchant(id)}
+                          >
+                            {merchantName(id)}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
+                  {draft.sellTile !== null && draft.sellMerchant !== null && curBeerSources !== null && curNeed > 0 ? (
+                    <div className="action-choices">
+                      <span>酒（还需 {curNeed - draft.sellBeer.length}）：</span>
+                      {curBeerSources.merchantBarrel ? (
+                        <button
+                          type="button"
+                          data-testid="sell-beer-merchant"
+                          className={draft.sellBeer.some((b) => b.kind === 'merchant') ? 'selected' : undefined}
+                          disabled={!draft.sellBeer.some((b) => b.kind === 'merchant') && draft.sellBeer.length >= curNeed}
+                          onClick={() => draft.toggleSellMerchantBarrel()}
+                        >
+                          {merchantName(draft.sellMerchant)}桶
+                        </button>
+                      ) : null}
+                      {[
+                        ...curBeerSources.own.map((b) => ({ ...b, own: true })),
+                        ...curBeerSources.opponent.map((b) => ({ ...b, own: false })),
+                      ].map((b) => {
+                        const k = `${b.location}:${b.slotIndex}`;
+                        const used = breweryUsed.get(k) ?? 0;
+                        return Array.from({ length: b.barrels }, (_, i) => {
+                          const selected = used > i;
+                          return (
+                            <button
+                              key={`${k}-${i}`}
+                              type="button"
+                              data-testid={`sell-beer-${b.location}-${b.slotIndex}-${i}`}
+                              className={selected ? 'selected' : undefined}
+                              disabled={!selected && draft.sellBeer.length >= curNeed}
+                              onClick={() => draft.setSellBreweryCount(b, selected ? i : i + 1)}
+                            >
+                              {b.own ? '自家' : '对手'}·{locationName(b.location)}{BARREL_NUM[i] ?? `${i + 1}`}
+                            </button>
+                          );
+                        });
+                      })}
+                    </div>
+                  ) : null}
+                  {draft.sellTile !== null && draft.sellMerchant !== null && draft.sellBeer.length === curNeed ? (
+                    <div className="action-choices">
+                      <button type="button" data-testid="sell-commit-group" onClick={() => draft.commitSellGroup()}>
+                        收下本组，选下一组
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
             </>
-          )}
-        </div>
+          );
+        })()}
 
         <div className={`action-choices${draft.scoutAvailable ? '' : ' row-disabled'}`} data-testid="scout-options">
           <span>侦察{draft.scoutAvailable ? `：选 3 张弃牌（已选 ${draft.scoutPicks.length}/3）` : '：'}</span>

@@ -13,8 +13,16 @@
  * - network：双轨 links 为有序对（放置顺序），两种顺序分别枚举——点击顺序即放置顺序。
  * - sell：单块全枚举 + "可卖全集"至多一个（sales.length >= 2）。
  */
-import { LINKS, LOCATIONS } from '@brass/engine';
-import type { Action, Card, IndustryType, LocationId, PlayerIndex } from '@brass/engine';
+import { LINKS, LOCATIONS, MERCHANTS, reachableFrom } from '@brass/engine';
+import type {
+  Action,
+  BeerSourceRef,
+  Card,
+  IndustryType,
+  LocationId,
+  MerchantId,
+  PlayerIndex,
+} from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { SlotRef } from '../board/BoardSvg';
 import {
@@ -463,4 +471,92 @@ export function explicitBuildSlot(
   );
   if (singleIconEmpty) return undefined;
   return clicked.slotIndex;
+}
+
+// ---------------------------------------------------------------------------
+// Sell 分组选择器(2026-08-21):建筑 → 贸易商 → 逐桶啤酒源,一组组拼自定义 sales
+// ---------------------------------------------------------------------------
+
+export interface SellableTileRef extends SlotRef {
+  industry: IndustryType;
+  level: number;
+  beerToFlip: number;
+}
+
+/** 本人场上未翻面的可卖板块(棉/制造/陶),按地点字典序+槽位序。 */
+export function sellableTilesFor(state: FilteredState, seat: PlayerIndex): SellableTileRef[] {
+  const out: SellableTileRef[] = [];
+  for (const [loc, slots] of Object.entries(state.board.slots)) {
+    for (let i = 0; i < slots.length; i++) {
+      const t = slots[i];
+      if (t && t.player === seat && !t.flipped && t.tile.sellable) {
+        out.push({
+          location: loc as LocationId,
+          slotIndex: i,
+          industry: t.tile.industry,
+          level: t.tile.level,
+          beerToFlip: t.tile.beerToFlip,
+        });
+      }
+    }
+  }
+  out.sort((a, b) => (a.location < b.location ? -1 : a.location > b.location ? 1 : 0) || a.slotIndex - b.slotIndex);
+  return out;
+}
+
+/** 该板块可卖向的商人位:可达(当前时代已建边)且图标匹配('any' 收任意;'blank' 不算)。 */
+export function merchantsForTile(state: FilteredState, tile: SlotRef): MerchantId[] {
+  const reach = reachableFrom(state as unknown as import('@brass/engine').GameState, [tile.location]);
+  const placed = state.board.slots[tile.location]?.[tile.slotIndex];
+  if (placed == null) return [];
+  return (Object.keys(MERCHANTS) as MerchantId[]).filter((id) => {
+    if (!reach.has(id)) return false;
+    const m = state.merchants[id];
+    return m.tiles.some((t) => t === 'any' || t === placed.tile.industry);
+  });
+}
+
+export interface BreweryRef extends SlotRef {
+  player: PlayerIndex;
+  barrels: number;
+}
+
+/** 啤酒源候选:商人桶(有桶时至多 1)+ 自家酒厂(无需连通)+ 对手酒厂(须连通用酒处)。 */
+export function beerSourcesFor(
+  state: FilteredState,
+  seat: PlayerIndex,
+  merchant: MerchantId,
+): { merchantBarrel: boolean; own: BreweryRef[]; opponent: BreweryRef[] } {
+  const reach = reachableFrom(state as unknown as import('@brass/engine').GameState, [merchant]);
+  const own: BreweryRef[] = [];
+  const opponent: BreweryRef[] = [];
+  for (const [loc, slots] of Object.entries(state.board.slots)) {
+    for (let i = 0; i < slots.length; i++) {
+      const t = slots[i];
+      if (!t || t.flipped || t.tile.industry !== 'brewery' || t.resources <= 0) continue;
+      const ref: BreweryRef = { location: loc as LocationId, slotIndex: i, player: t.player, barrels: t.resources };
+      if (t.player === seat) own.push(ref);
+      else if (reach.has(loc as LocationId)) opponent.push(ref);
+    }
+  }
+  return { merchantBarrel: state.merchants[merchant].beer > 0, own, opponent };
+}
+
+/** 按已选 beerSources 计算还剩多少桶可用(组内连续消耗同一酒厂不能超过其桶数)。 */
+export function beerRemaining(
+  sources: { own: BreweryRef[]; opponent: BreweryRef[] },
+  picked: BeerSourceRef[],
+): Map<string, number> {
+  const used = new Map<string, number>();
+  for (const p of picked) {
+    if (p.kind !== 'brewery') continue;
+    const k = `${p.location}:${p.slotIndex}`;
+    used.set(k, (used.get(k) ?? 0) + 1);
+  }
+  const remaining = new Map<string, number>();
+  for (const b of [...sources.own, ...sources.opponent]) {
+    const k = `${b.location}:${b.slotIndex}`;
+    remaining.set(k, b.barrels - (used.get(k) ?? 0));
+  }
+  return remaining;
 }

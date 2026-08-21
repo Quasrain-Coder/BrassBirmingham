@@ -36,6 +36,7 @@ import {
   locationAnchor,
   merchantAnchor,
 } from './geometry';
+import type { SlotRect } from './geometry';
 import { LOCATION_ZH } from '../game/display';
 
 /** 官方玩家色：P0 紫 / P1 黄 / P2 橙 / P3 青（与官方板块底色一致）。 */
@@ -90,10 +91,55 @@ export interface BoardSvgProps {
   linkPreview?: { links: number[]; player: PlayerIndex; era: 'canal' | 'rail' } | null | undefined;
   onSlotClick?: ((location: LocationId, slotIndex: number) => void) | undefined;
   onLinkClick?: ((linkIndex: number) => void) | undefined;
+  /** 点贸易商位(卖出流:选贸易商/切商人桶;顺序约束由 ActionDraft 裁决)。 */
+  onMerchantClick?: ((merchant: MerchantId) => void) | undefined;
 }
 
 function playerColor(player: PlayerIndex): string {
   return PLAYER_COLORS[player] ?? '#7f8c8d';
+}
+
+/**
+ * 立起的啤酒桶（替代平贴图,与版图印刷图案区分）：偏黄的桶身 + 椭圆顶面 +
+ * 桶箍两道 + 底部投影,营造"立起来"的立体感。
+ */
+function StandingBeer({ r }: { r: SlotRect }): ReactElement {
+  const cx = r.x + r.w / 2;
+  const top = r.y + r.h * 0.12;
+  const bodyH = r.h * 0.68;
+  const rx = r.w * 0.32;
+  const ry = r.h * 0.09;
+  const bottom = top + bodyH;
+  return (
+    <g className="board-merchant-beer" pointerEvents="none">
+      {/* 底部投影 */}
+      <ellipse cx={cx} cy={bottom + ry * 0.7} rx={rx * 1.2} ry={ry} fill="#000" opacity={0.45} />
+      {/* 桶身(侧面,到底部椭圆弧) */}
+      <path
+        d={`M ${cx - rx} ${top} L ${cx - rx} ${bottom} A ${rx} ${ry} 0 0 0 ${cx + rx} ${bottom} L ${cx + rx} ${top} Z`}
+        fill="#d99a22"
+        stroke="#4a2f08"
+        strokeWidth={4}
+      />
+      {/* 侧面高光 */}
+      <rect x={cx - rx * 0.58} y={top + 6} width={rx * 0.3} height={bodyH - 12} rx={6} fill="#f7dc7e" opacity={0.5} />
+      {/* 桶箍两道(沿桶身弧度的细弧) */}
+      <path
+        d={`M ${cx - rx} ${top + bodyH * 0.35} A ${rx} ${ry} 0 0 0 ${cx + rx} ${top + bodyH * 0.35}`}
+        fill="none"
+        stroke="#4a2f08"
+        strokeWidth={3}
+      />
+      <path
+        d={`M ${cx - rx} ${top + bodyH * 0.68} A ${rx} ${ry} 0 0 0 ${cx + rx} ${top + bodyH * 0.68}`}
+        fill="none"
+        stroke="#4a2f08"
+        strokeWidth={3}
+      />
+      {/* 顶面(亮黄椭圆,立体感的来源) */}
+      <ellipse cx={cx} cy={top} rx={rx} ry={ry} fill="#f4c84f" stroke="#4a2f08" strokeWidth={4} />
+    </g>
+  );
 }
 
 /** 版图有效区域（6144 扫描件四边有大片暗边，viewBox 只取版图本体）。 */
@@ -191,7 +237,7 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
   );
 }
 
-export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinkingSeats, buildPreview, beerMatches, linkPreview, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
+export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinkingSeats, buildPreview, beerMatches, linkPreview, onSlotClick, onLinkClick, onMerchantClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const highlightedLocations = new Set(highlights?.locations ?? []);
@@ -464,13 +510,19 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
         })}
       </g>
 
-      {/* 商人位：官方商人板块贴框 + 啤酒桶格(有桶贴桶 + 剩余数 token) */}
+      {/* 商人位：官方商人板块贴框 + 啤酒桶格(立桶 + 剩余数 token);卖出流可点选 */}
       <g className="board-merchants">
         {(Object.keys(MERCHANTS) as MerchantId[]).map((id) => {
           const geom = MERCHANT_GEOM[id];
           const m = state.merchants[id];
           return (
-            <g className="board-merchant-group" data-merchant={id} key={id}>
+            <g
+              className="board-merchant-group"
+              data-merchant={id}
+              key={id}
+              style={onMerchantClick ? { cursor: 'pointer' } : undefined}
+              onClick={onMerchantClick ? () => onMerchantClick(id) : undefined}
+            >
               {geom.tiles.map((r, ti) => {
                 const type = m?.tiles[ti];
                 if (type === undefined) return null;
@@ -487,20 +539,10 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                 );
               })}
               {geom.beer.map((r, bi) => {
-                // 啤酒格:有桶贴桶(空的格保持印刷空框);非 blank 板块旁才会放桶
+                // 啤酒格:有桶画"立桶"(空的格保持印刷空框);非 blank 板块旁才会放桶
                 const filled = bi < (m?.beer ?? 0);
                 if (!filled) return null;
-                return (
-                  <image
-                    key={`${id}-beer-${bi}`}
-                    className="board-merchant-beer"
-                    href="/assets/beer.png"
-                    x={r.x}
-                    y={r.y}
-                    width={r.w}
-                    height={r.h}
-                  />
-                );
+                return <StandingBeer key={`${id}-beer-${bi}`} r={r} />;
               })}
               {/* 剩余酒数 token(该商人位总桶数) */}
               {(m?.beer ?? 0) > 0 && geom.beer.length > 0 ? (

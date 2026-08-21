@@ -30,6 +30,7 @@ import {
 } from './network.js';
 import type { GameState, PlacedTile, PlayerState } from './state.js';
 import type {
+  BeerSourceRef,
   FlipEvent,
   LocationId,
   MerchantBonusEvent,
@@ -42,6 +43,12 @@ export interface ConsumeBeerOpts {
   at: LocationId | MerchantId;
   /** 仅 Sell 传 true：允许消耗 at 所涉商人的啤酒桶并触发该商人奖励。 */
   useMerchantBeer: boolean;
+  /**
+   * 显式啤酒来源（Sell 分组自选）：逐桶指定,长度须等于 n;提供时按此结算,
+   * 忽略"商人桶→自家酒厂→对手酒厂"的自动解析顺序。{kind:'merchant'} 自身即
+   * 授权用商人桶(不再要求 useMerchantBeer 标志位,至多 1 桶,用了发奖励)。
+   */
+  explicit?: BeerSourceRef[];
 }
 
 export interface ConsumeResult {
@@ -272,6 +279,96 @@ function isMerchantId(x: string): x is MerchantId {
   return Object.prototype.hasOwnProperty.call(MERCHANTS, x);
 }
 
+/** 取 1 桶商人啤酒：扣桶 + 结算商人奖励（vp/money/income 直接落；develop 由 Sell 层处理）。 */
+function takeMerchantBarrel(
+  state: GameState,
+  player: PlayerIndex,
+  merchantId: MerchantId,
+): { state: GameState; bonus: MerchantBonusEvent } {
+  const m = state.merchants[merchantId];
+  if (m.beer <= 0) {
+    throw new IllegalActionError(
+      'insufficient-beer',
+      `insufficient-beer: merchant ${merchantId} has no barrel`,
+    );
+  }
+  let next: GameState = {
+    ...state,
+    merchants: { ...state.merchants, [merchantId]: { ...m, beer: m.beer - 1 } },
+  };
+  const bonus = MERCHANTS[merchantId].bonus;
+  const ps = next.players[player]!;
+  if (bonus.type === 'vp') {
+    next = withPlayer(next, player, { ...ps, vp: ps.vp + bonus.amount });
+  } else if (bonus.type === 'money') {
+    next = withPlayer(next, player, { ...ps, money: ps.money + bonus.amount });
+  } else if (bonus.type === 'income') {
+    next = withPlayer(next, player, {
+      ...ps,
+      incomeSpace: advanceIncomeSpace(ps.incomeSpace, bonus.amount),
+    });
+  }
+  // bonus.type === 'develop'：不在此结算，仅发事件
+  return { state: next, bonus: { kind: 'merchant-bonus', player, merchant: merchantId } };
+}
+
+/**
+ * 显式啤酒来源结算：逐桶校验并按给定顺序消耗——
+ * merchant：至多 1 桶,须 at 恰为该商人位且有桶(用了发奖励);
+ * brewery：须未翻面有余量;自己的无需连通,对手的须连通"用酒处" at。
+ * 长度不等于 n 或任一桶非法 → 抛错(不产生部分结算)。
+ */
+function consumeBeerExplicit(
+  state: GameState,
+  player: PlayerIndex,
+  n: number,
+  opts: ConsumeBeerOpts,
+): ConsumeBeerResult {
+  const sources = opts.explicit!;
+  if (sources.length !== n) {
+    throw new IllegalActionError(
+      'illegal-beer-sources',
+      `illegal-beer-sources: need exactly ${n} source(s), got ${sources.length}`,
+    );
+  }
+  const merchantId = isMerchantId(opts.at) ? opts.at : null;
+  const reach = reachableFrom(state, [opts.at]);
+  const flipped: FlipEvent[] = [];
+  let next = state;
+  let merchantBonus: MerchantBonusEvent | undefined;
+  let merchantTaken = false;
+  for (const src of sources) {
+    if (src.kind === 'merchant') {
+      if (merchantTaken || merchantId === null) {
+        throw new IllegalActionError(
+          'illegal-beer-sources',
+          `illegal-beer-sources: merchant barrel requires selling to a merchant (at most 1)`,
+        );
+      }
+      merchantTaken = true;
+      const r = takeMerchantBarrel(next, player, merchantId);
+      next = r.state;
+      merchantBonus = r.bonus;
+      continue;
+    }
+    const t = next.board.slots[src.location]?.[src.slotIndex];
+    if (t === null || t === undefined || t.tile.industry !== 'brewery' || t.flipped || t.resources <= 0) {
+      throw new IllegalActionError(
+        'illegal-beer-sources',
+        `illegal-beer-sources: no unflipped brewery with barrels at ${src.location} slot ${src.slotIndex}`,
+      );
+    }
+    if (t.player !== player && !reach.has(src.location)) {
+      throw new IllegalActionError(
+        'beer-not-connected',
+        `beer-not-connected: opponent brewery at ${src.location} is not connected to ${opts.at}`,
+      );
+    }
+    next = drain(next, src.location, src.slotIndex, 1, flipped);
+  }
+  return { state: next, flipped, ...(merchantBonus ? { merchantBonus } : {}) };
+}
+
 /**
  * 消耗 n 桶啤酒（§6.5/§9.3）。来源自动解析（规范化顺序）：
  * ① useMerchantBeer 且 at 为商人位 → 该商人的桶（每次调用至多 1 桶），
@@ -287,8 +384,9 @@ export function consumeBeer(
   n: number,
   opts: ConsumeBeerOpts,
 ): ConsumeBeerResult {
+  if (n <= 0 && opts.explicit === undefined) return { state, flipped: [] };
+  if (opts.explicit !== undefined) return consumeBeerExplicit(state, player, n, opts);
   const flipped: FlipEvent[] = [];
-  if (n <= 0) return { state, flipped };
 
   const merchantId = isMerchantId(opts.at) ? opts.at : null;
   const merchantAvailable = opts.useMerchantBeer && merchantId ? state.merchants[merchantId].beer : 0;
@@ -327,23 +425,10 @@ export function consumeBeer(
   let merchantBonus: MerchantBonusEvent | undefined;
 
   if (merchantTake > 0 && merchantId) {
-    const m = next.merchants[merchantId];
-    next = { ...next, merchants: { ...next.merchants, [merchantId]: { ...m, beer: m.beer - 1 } } };
     need -= 1;
-    const bonus = MERCHANTS[merchantId].bonus;
-    const ps = next.players[player]!;
-    if (bonus.type === 'vp') {
-      next = withPlayer(next, player, { ...ps, vp: ps.vp + bonus.amount });
-    } else if (bonus.type === 'money') {
-      next = withPlayer(next, player, { ...ps, money: ps.money + bonus.amount });
-    } else if (bonus.type === 'income') {
-      next = withPlayer(next, player, {
-        ...ps,
-        incomeSpace: advanceIncomeSpace(ps.incomeSpace, bonus.amount),
-      });
-    }
-    // bonus.type === 'develop'：不在此结算，仅发事件
-    merchantBonus = { kind: 'merchant-bonus', player, merchant: merchantId };
+    const r = takeMerchantBarrel(next, player, merchantId);
+    next = r.state;
+    merchantBonus = r.bonus;
   }
 
   for (const src of [...own, ...opponent]) {

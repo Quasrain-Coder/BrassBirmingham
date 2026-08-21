@@ -270,6 +270,52 @@ describe('useActionDraft', () => {
     expect(result.current.buildPreview?.slotIndex).toBe(2); // 规范化到单图标槽
   });
 
+  it('分组卖出:建筑→贸易商→啤酒逐桶,收组后 resolved 为带 beerSources 的自定义 sell', () => {
+    const f = freshFixture();
+    // 摆:自己 birmingham 棉 L1(需 1 酒)、derby 自家酒厂 1 桶;oxford 商人 1 桶
+    const cotton = tileDef('cotton', 1)!;
+    const brew = tileDef('brewery', 1)!;
+    f.state.board.slots['birmingham']![0] = { tile: cotton, player: 0, flipped: false, resources: 0 };
+    f.state.board.slots['derby']![0] = { tile: brew, player: 0, flipped: false, resources: 1 };
+    f.state.board.links.push({ linkIndex: 5, player: 0, era: 'canal' }); // birmingham-oxford
+    f.state.merchants.oxford = { tiles: ['any'], beer: 1 };
+    const legal: Action[] = [
+      {
+        type: 'sell',
+        cardId: 'c1',
+        sales: [{ location: 'birmingham', slotIndex: 0, merchant: 'oxford', useMerchantBeer: true }],
+      },
+    ];
+    const { result } = renderDraft(f, 'c1', legal);
+
+    // 顺序约束:先点酒厂无效(未选建筑)
+    act(() => result.current.clickSlot('derby', 0));
+    expect(result.current.sellBeer).toEqual([]);
+
+    // 图上点自己可卖板块 = 选本组建筑
+    act(() => result.current.clickSlot('birmingham', 0));
+    expect(result.current.sellTile).toEqual({ location: 'birmingham', slotIndex: 0 });
+    // 选贸易商 → 商人桶切选 → 酒厂桶计数
+    act(() => result.current.pickSellMerchant('oxford'));
+    act(() => result.current.toggleSellMerchantBarrel());
+    expect(result.current.sellBeer).toEqual([{ kind: 'merchant' }]);
+    // 需求 1 酒:换成自家酒厂桶
+    act(() => result.current.toggleSellMerchantBarrel()); // 撤商人桶
+    act(() => result.current.setSellBreweryCount({ location: 'derby', slotIndex: 0 }, 1));
+    expect(result.current.sellBeer).toEqual([{ kind: 'brewery', location: 'derby', slotIndex: 0 }]);
+    // 收下本组 → resolved 为自定义 sell(带 beerSources)
+    act(() => result.current.commitSellGroup());
+    expect(result.current.sellGroups).toHaveLength(1);
+    const resolved = result.current.resolved as Extract<Action, { type: 'sell' }>;
+    expect(resolved.type).toBe('sell');
+    expect(resolved.sales).toHaveLength(1);
+    expect(resolved.sales[0]!.beerSources).toEqual([{ kind: 'brewery', location: 'derby', slotIndex: 0 }]);
+    expect(resolved.sales[0]!.useMerchantBeer).toBe(false);
+    // 下一组可选剩余板块;移除组后 resolved 清空
+    act(() => result.current.removeSellGroup(0));
+    expect(result.current.resolved).toBeNull();
+  });
+
   it('loan/pass 无参数：choose 即 resolved', () => {    const f = freshFixture();
     const card = locationCard(f);
     const { result } = renderDraft(f, card.id);
@@ -307,6 +353,16 @@ function draftFixture(overrides: Partial<ActionDraft> = {}): ActionDraft {
     sellSingles: [],
     sellFullSet: null,
     sellTile: null,
+    sellGroups: [],
+    sellMerchant: null,
+    sellBeer: [],
+    pickSellTile: () => {},
+    pickSellMerchant: () => {},
+    toggleSellMerchantBarrel: () => {},
+    setSellBreweryCount: () => {},
+    commitSellGroup: () => {},
+    removeSellGroup: () => {},
+    clickMerchant: () => {},
     buildChoices: [],
     buildPreview: null,
     buildIndustry: null,
