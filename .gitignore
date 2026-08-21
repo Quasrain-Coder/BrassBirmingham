@@ -6,6 +6,8 @@ dist/
 !.env.example
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 .DS_Store
 coverage/
 tmp_rules/
@@ -13,8 +15,7 @@ tmp_rules/
 # 官方游戏素材随仓库分发（个人非商用）；raw/ 为下载缓存，可用 fetch-assets 重建
 packages/web/public/assets/raw/
 
-# bench 临时跑批输出（含被污染的 R1 目录）；有意义的基线数据手动保留提交
-packages/llm/bench/out/*
-!packages/llm/bench/out/base-h100/
-!packages/llm/bench/out/base-llm20/
-!packages/llm/bench/out/baseline-llm/
+# bench 跑批输出（decisions.jsonl / games.jsonl）——跑批生成的临时日志，
+# 不入库。迭代结论沉淀在 bench/docs/ITERATION.md；如需留档基线数据，写
+# 汇总（分析后的指标/结论）而非原始 trace 日志。
+packages/llm/bench/out/
