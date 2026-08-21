@@ -1011,6 +1011,14 @@ body {
   flex: none;
 }
 
+/* 他人暂存播报:与行动播报同位,虚线边框 + 斜体示意"未定" */
+.action-spotlight-banner.draft-banner {
+  border-style: dashed;
+  border-color: #8a8068;
+  font-style: italic;
+  color: #d8cdb4;
+}
+
 /* 新一轮/新时代播报:红字横幅(约 5 秒淡出,与行动横幅错位下排) */
 .round-banner {
   position: absolute;
@@ -1234,6 +1242,57 @@ body {
 .score-modal-head h3 {
   margin: 0;
   color: #f3ead4;
+}
+
+/* 打出记录弹层:按玩家分列,卡面按打出顺序排列(运河时代首张为暗置卡背) */
+.discard-modal {
+  width: min(92vw, 1100px);
+}
+
+.discard-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.discard-col {
+  border: 1px solid #3a3226;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(23, 26, 31, 0.55);
+}
+
+.discard-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #e3d3a8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.discard-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 40px;
+}
+
+.discard-card {
+  width: 56px;
+  height: auto;
+  border-radius: 5px;
+  border: 1px solid #4a3f2c;
+  display: block;
+}
+
+.discard-card-back {
+  opacity: 0.85;
+  border-style: dashed;
 }
 
 .score-table {

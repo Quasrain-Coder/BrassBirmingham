@@ -105,6 +105,42 @@ describe('WebSocket 传输层', () => {
     }
   });
 
+  it('draft_update:暂存预览广播给同房其他人(发送方不回声)', async () => {
+    const server = await startTestServer();
+    const { a, b, credA } = await setupTwoPlayerGame(server.port);
+    const draft = { build: { location: 'birmingham', slotIndex: 1, industry: 'cotton' }, text: '建造伯明翰棉纺厂' };
+    a.send({ type: 'draft_update', protocolVersion: 1, token: credA.token, draft });
+    const msg = await b.nextMessage('player_draft');
+    expect(msg.seat).toBe(0);
+    expect(msg.draft.text).toBe('建造伯明翰棉纺厂');
+    // 清除帧:draft=null 透传
+    a.send({ type: 'draft_update', protocolVersion: 1, token: credA.token, draft: null });
+    const cleared = await b.nextMessage('player_draft', (m) => m.draft === null);
+    expect(cleared.seat).toBe(0);
+    // 发送方自己收不到回声
+    expect(a.received.some((m) => m.type === 'player_draft')).toBe(false);
+  });
+
+  it('快照带 playedCards:行动消耗的牌入列(该座位)', async () => {
+    const server = await startTestServer();
+    const { a, b, credA, credB, snapA, snapB } = await setupTwoPlayerGame(server.port);
+    const aFirst = (snapA.legalActions as unknown[]).length > 0;
+    const actor = aFirst ? a : b;
+    const actorSeat = aFirst ? 0 : 1;
+    const actorToken = (aFirst ? credA.token : credB.token) as string;
+    const snap = aFirst ? snapA : snapB;
+    // 用 loan 行动(一定合法):消耗的牌 = action.cardId
+    const loan = (snap.legalActions as { type: string; cardId?: string }[]).find(
+      (x) => x.type === 'loan',
+    )!;
+    actor.send({ type: 'submit_action', protocolVersion: 1, token: actorToken, action: loan });
+    await actor.nextMessage('action_applied');
+    const after = await actor.nextMessage('snapshot');
+    const played = after.playedCards as { id: string }[][];
+    expect(played[actorSeat]!.map((c) => c.id)).toEqual([loan.cardId]);
+    expect(played[1 - actorSeat]).toEqual([]);
+  });
+
   it('resume returns seat and snapshot after disconnect（开局后）', async () => {
     const server = await startTestServer();
     const { a, b, credA } = await setupTwoPlayerGame(server.port);

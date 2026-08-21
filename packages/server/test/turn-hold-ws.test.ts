@@ -83,7 +83,6 @@ describe('WS turnHold(回合扣住)', () => {
 
   it('reset_turn 回滚:seq/手牌/现金复原,可重新行动', async () => {
     const { actor, other, actorToken, actorSeat, actorHandCount, firstAction } = await setup();
-    void other;
     actor.send({ type: 'submit_action', protocolVersion: PV, token: actorToken, action: firstAction });
     await actor.nextMessage('action_applied');
     await actor.nextMessage('snapshot', (m) => m.turnHold != null);
@@ -95,6 +94,9 @@ describe('WS turnHold(回合扣住)', () => {
     expect(handBack.kind === 'full' ? handBack.cards!.length : -1).toBe(actorHandCount);
     // 回到回合初,可重新行动(legalActions 非空)
     expect((back.legalActions as unknown[]).length).toBeGreaterThan(0);
+    // 全场广播 turn_reset(他人据以撤下暂存预览并播报"已重置本回合")
+    const notice = await other.nextMessage('turn_reset');
+    expect(notice.seat).toBe(actorSeat);
   });
 
   it('回合进行中撤回:第 1 动后 reset_turn 回到回合初(无需等回合打满)', async () => {

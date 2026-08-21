@@ -30,7 +30,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import { PROTOCOL_VERSION } from '@brass/protocol';
-import type { ClientMessage, ServerMessage } from '@brass/protocol';
+import type { ClientMessage, DraftPreview, ServerMessage } from '@brass/protocol';
 import { enumerateActions } from '@brass/engine';
 import type { Action, PlayerIndex } from '@brass/engine';
 import { HeuristicAgent, type DecidingAgent, type Difficulty } from '@brass/llm';
@@ -207,6 +207,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         state: snap.state,
         legalActions: snap.legalActions,
         turnHold: entry.turnHold,
+        playedCards: snap.playedCards,
       });
     }
   }
@@ -567,6 +568,30 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     }
     entry.turnHold = null;
     broadcastSnapshots(entry);
+    // 全场播报"X 已重置本回合"（他人的暂存预览/播报由 client 据此清除）
+    broadcast(entry.room, { type: 'turn_reset', protocolVersion: PROTOCOL_VERSION, seat });
+  }
+
+  /**
+   * 暂存预览同步（多玩家）：当前行动方点选/改动暂存时上行，服务器校验身份后
+   * 广播 player_draft 给同房**其他**连接（发送方本地已自渲染）。draft=null=清除。
+   * 纯转发不落库——暂存是瞬态信息,断线/恢复不补发。
+   */
+  function handleDraftUpdate(conn: Conn, msg: { token: string; draft: DraftPreview | null }): void {
+    if (typeof msg.token !== 'string') throw new WsError('bad-message', 'draft_update 需要 token');
+    const entry = sessionByToken.get(msg.token);
+    if (entry === undefined) throw new WsError('invalid-token', 'token 不属于任何进行中对局');
+    const seat = entry.tokenSeats.get(msg.token);
+    if (seat === undefined) throw new WsError('invalid-token', 'token 无效');
+    for (const other of conns) {
+      if (other === conn || other.roomCode !== entry.room.code) continue;
+      send(other, {
+        type: 'player_draft',
+        protocolVersion: PROTOCOL_VERSION,
+        seat,
+        draft: msg.draft ?? null,
+      });
+    }
   }
 
   /**
@@ -635,6 +660,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         state: snap.state,
         legalActions: snap.legalActions,
         turnHold: entry.turnHold,
+        playedCards: snap.playedCards,
       });
       broadcastRoomState(entry.room);
       // resume 重触发 driveAI（幂等，守卫防重入）——对局若停在 AI 回合则被唤醒
@@ -675,6 +701,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         break;
       case 'reset_turn':
         handleResetTurn(msg);
+        break;
+      case 'draft_update':
+        handleDraftUpdate(conn, msg);
         break;
       case 'resume':
         handleResume(conn, msg);
