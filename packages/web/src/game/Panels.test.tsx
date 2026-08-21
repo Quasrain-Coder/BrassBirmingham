@@ -297,3 +297,51 @@ describe('<LogPanel>', () => {
     expect(screen.getByTestId('log-empty')).toBeInTheDocument();
   });
 });
+
+describe('<PlayerBoard> 紧凑面板两行收口', () => {
+  it('第一行顺位+名称+钱(无收入等级/分数/钱 icon);第二行本回合操作+开销+出牌;历史下拉标出牌名', () => {
+    const state = freshState();
+    state.currentPlayerIdx = 1; // 与 seq=1 自洽:首位玩家已行动
+    state.players[1]!.money = 23;
+    state.players[1]!.spentThisRound = 4;
+    const seat = 1;
+    const log: LogEntry[] = [
+      { seq: 0, player: seat, action: { type: 'loan', cardId: 'loc-derby-0' }, events: [] },
+    ];
+    const eraActions = [
+      { type: 'loan' as const, cardId: 'loc-derby-0' },
+      { type: 'build' as const, cardId: 'loc-birmingham-1', location: 'birmingham' as const, industry: 'cotton' as const },
+    ];
+    render(
+      <PlayerBoard
+        state={state}
+        seat={seat}
+        room={roomFixture()}
+        compact
+        playedCards={[]}
+        log={log}
+        eraActions={eraActions}
+        seq={1}
+      />,
+    );
+    // 第一行:顺位 + 名称 + 钱;无收入等级/分数
+    expect(screen.getByTestId(`compact-rank-${seat}`)).toHaveTextContent('#');
+    const head = screen.getByTestId(`player-board-${seat}`).querySelector('.compact-head')!;
+    expect(head).toHaveTextContent('乙');
+    expect(head).toHaveTextContent('£23');
+    expect(head).not.toHaveTextContent('收入等级');
+    expect(head).not.toHaveTextContent('分');
+    expect(head.querySelector('.coin-icon')).toBeNull();
+    // 第二行:本回合操作 + 开销 + 本回合打出的牌(图)
+    const round = screen.getByTestId(`compact-round-${seat}`);
+    expect(round).toHaveTextContent('贷款');
+    expect(round).toHaveTextContent('开销 £4');
+    expect(round.querySelectorAll('.compact-round-cards img')).toHaveLength(1);
+    // 历史下拉:展开后按轮列出,每行动右侧标出牌名
+    fireEvent.click(screen.getByTestId(`history-toggle-${seat}`));
+    const history = screen.getByTestId(`compact-history-${seat}`);
+    expect(history).toHaveTextContent('第 1 轮');
+    expect(history).toHaveTextContent('贷款');
+    expect(history).toHaveTextContent('德比');
+  });
+});

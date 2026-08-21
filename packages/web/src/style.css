@@ -2244,3 +2244,112 @@ body {
   color: #5d5a50;
   font-size: 0.8rem;
 }
+
+/* 紧凑面板第一行:顺位圆牌(与 RoundInfo 同款) */
+.compact-rank {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 26px;
+  height: 26px;
+  border: 2px solid #7f8c8d;
+  border-radius: 50%;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #e3d3a8;
+}
+
+/* 紧凑面板第二行:本回合操作+开销+出牌+打出/历史按钮 */
+.compact-round {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid #3a3226;
+  border-radius: 8px;
+  background: rgba(23, 26, 31, 0.55);
+  font-size: 0.78rem;
+  color: #9aa4b2;
+  white-space: nowrap;
+}
+
+.compact-round-acts {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #8f96a3;
+}
+
+.compact-round-spent {
+  flex: none;
+  color: #b3a888;
+}
+
+.compact-round-cards {
+  display: inline-flex;
+  flex: none;
+  gap: 3px;
+}
+
+.compact-round-cards img {
+  width: 22px;
+  height: auto;
+  border-radius: 3px;
+  border: 1px solid #4a3f2c;
+  display: block;
+}
+
+.history-toggle {
+  flex: none;
+  padding: 1px 7px;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: transparent;
+  color: #b3a888;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.history-toggle:hover {
+  border-color: #c9a86a;
+  color: #f3ead4;
+}
+
+/* 前几回合动作下拉:滚轮查看,每行动右侧标出牌名 */
+.compact-history {
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid #3a3226;
+  border-radius: 8px;
+  background: rgba(23, 26, 31, 0.55);
+  padding: 6px 10px;
+  font-size: 0.76rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.compact-history-round {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.compact-history-label {
+  color: #b3a888;
+  font-weight: 600;
+}
+
+.compact-history-act {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #d8cdb4;
+}
+
+.compact-history-card {
+  flex: none;
+  color: #8a8068;
+  font-style: normal;
+}

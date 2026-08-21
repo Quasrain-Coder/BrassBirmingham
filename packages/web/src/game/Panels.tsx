@@ -13,10 +13,11 @@ import { INCOME_LEVEL_SPACES, MERCHANTS, TILES, incomeLevelAt } from '@brass/eng
 import type { Action, Card, IndustryType, MerchantId, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { INDUSTRY_STYLE, PLAYER_COLORS, PLAYER_COLOR_KEYS } from '../board/BoardSvg';
-import { cardFaceKey, cardName, describeAction, industryName, locationName, merchantName } from './display';
+import { cardFaceKey, cardFromId, cardName, describeAction, industryName, locationName, merchantName } from './display';
 import { INDUSTRY_ORDER } from './interactions';
 import { DiscardModal } from './DiscardModal';
 import { PlayerMat } from './PlayerMat';
+import { roundStartSeq } from './WideLayout';
 import type { LogEntry } from './store';
 
 /** 座位显示名：有房间信息用昵称，否则 玩家{seat+1}。 */
@@ -219,6 +220,9 @@ export function PlayerBoard({
   activeTurn = false,
   buildStatus,
   playedCards,
+  log,
+  eraActions,
+  seq,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -235,10 +239,16 @@ export function PlayerBoard({
   buildStatus?: Partial<Record<IndustryType, string>> | undefined;
   /** 该座位本时代已打出的牌(右上"打出"按钮的单人记录用)。 */
   playedCards?: Card[] | undefined;
+  /** 本回合操作行(宽屏紧凑面板第二行):行动日志/本时代行动/当前 seq。 */
+  log?: LogEntry[] | undefined;
+  eraActions?: Action[] | undefined;
+  seq?: number | undefined;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
   // 单人打出记录弹层开关(版图/明细切换旁的"打出"按钮)
   const [discardOpen, setDiscardOpen] = useState(false);
+  // 前几回合动作下拉(第二行末尾箭头)
+  const [historyOpen, setHistoryOpen] = useState(false);
   // 堆叠视图:版图(官方玩家面板美术)/明细(#19 列表)——记住玩家选择
   // (jsdom 等环境无 localStorage,降级为会话内状态)
   const storage = typeof localStorage === 'undefined' ? null : localStorage;
@@ -267,6 +277,31 @@ export function PlayerBoard({
     playedCards !== undefined ? Object.assign([], { [seat]: playedCards }) as Card[][] : [];
 
   if (compact) {
+    // 第一行:顺位 + 名称 + 钱(钱 token/收入等级/分数均已去掉)
+    const rank = state.turnOrder.indexOf(seat) + 1;
+    // 第二行:本回合操作+开销 + 本回合打出的牌;末尾"打出"按钮 + 历史下拉箭头
+    const start = roundStartSeq(state, seq ?? 0);
+    const acts = log?.filter((e) => e.seq >= start && e.player === seat) ?? [];
+    const actsText = acts.length > 0 ? acts.map((a) => describeAction(a.action)).join('；') : '本回合未行动';
+    const roundCardIds = acts.flatMap((a) => (a.action.type === 'scout' ? [...a.action.cardIds] : [a.action.cardId]));
+    // 前几回合动作:eraActions 按回合结构分组(最新轮在前)
+    const rounds: { round: number; actions: Action[] }[] = [];
+    {
+      const ea = eraActions ?? [];
+      const apr = (r: number): number => (state.era === 'canal' && r === 1 ? 1 : 2);
+      let i = 0;
+      for (let r = 1; i < ea.length; r += 1) {
+        const slice = ea.slice(i, i + apr(r));
+        if (slice.length === 0) break;
+        rounds.push({ round: r, actions: slice });
+        i += apr(r);
+      }
+      rounds.reverse();
+    }
+    const actionCardsText = (a: Action): string =>
+      a.type === 'scout'
+        ? a.cardIds.map((id) => cardName(cardFromId(id))).join('+')
+        : cardName(cardFromId(a.cardId));
     return (
       <section
         className={`player-board compact${pulse ? ' pulse' : ''}${activeTurn ? ' active-turn' : ''}`}
@@ -274,30 +309,73 @@ export function PlayerBoard({
         style={pulse || activeTurn ? ({ '--pulse-color': PLAYER_COLORS[seat] ?? '#f0c964' } as CSSProperties) : undefined}
       >
         <div className="compact-head">
+          <span className="compact-rank" style={{ borderColor: PLAYER_COLORS[seat] }} data-testid={`compact-rank-${seat}`}>
+            {rank > 0 ? `#${rank}` : '—'}
+          </span>
           <ColorDot seat={seat} />
           <span className="player-name">{playerName(room, seat)}</span>
           <AIBadge room={room} seat={seat} />
-          <span className={`level-chip${seat === state.turnOrder[state.currentPlayerIdx] ? ' current' : ''}`}>
-            收入等级 {level}
-          </span>
-          <span className="head-money">
-            <img className="coin-icon" src="/assets/coins/1.png" alt="" />£{self.money}
-          </span>
-          <span className="head-vp">{self.vp} 分</span>
+          <span className="head-money">£{self.money}</span>
         </div>
+        <div className="compact-round" data-testid={`compact-round-${seat}`}>
+          <span className="compact-round-acts" title={actsText}>
+            {actsText}
+          </span>
+          <span className="compact-round-spent">开销 £{self.spentThisRound}</span>
+          <span className="compact-round-cards">
+            {roundCardIds.map((id) => {
+              const c = cardFromId(id);
+              return (
+                <span className="discard-cell" key={id}>
+                  <img src={cardImageSrc(c)} alt={cardName(c)} />
+                  <span className="card-tip">{cardName(c)}</span>
+                </span>
+              );
+            })}
+          </span>
+          {playedCards !== undefined ? (
+            <button
+              type="button"
+              className="discard-open-btn"
+              data-testid={`discard-open-${seat}`}
+              title="按顺序查看该玩家本时代打出的全部牌"
+              onClick={() => setDiscardOpen(true)}
+            >
+              打出
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="history-toggle"
+            data-testid={`history-toggle-${seat}`}
+            aria-expanded={historyOpen}
+            title="展开前几回合的动作"
+            onClick={() => setHistoryOpen(!historyOpen)}
+          >
+            {historyOpen ? '▾' : '▸'}
+          </button>
+        </div>
+        {historyOpen ? (
+          <div className="compact-history" data-testid={`compact-history-${seat}`}>
+            {rounds.length === 0 ? (
+              <p className="era-actions-empty">本时代尚未行动</p>
+            ) : (
+              rounds.map((r) => (
+                <div key={r.round} className="compact-history-round">
+                  <span className="compact-history-label">第 {r.round} 轮</span>
+                  {r.actions.map((a, i) => (
+                    <span key={i} className="compact-history-act">
+                      {describeAction(a)}
+                      <em className="compact-history-card">{actionCardsText(a)}</em>
+                    </span>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        ) : null}
         <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
           <div className="board-stack-head">
-            {playedCards !== undefined ? (
-              <button
-                type="button"
-                className="discard-open-btn"
-                data-testid={`discard-open-${seat}`}
-                title="查看该玩家本时代打出的牌"
-                onClick={() => setDiscardOpen(true)}
-              >
-                打出
-              </button>
-            ) : null}
             <span className="stack-view-toggle" role="group" aria-label="堆叠视图切换">
               <button
                 type="button"

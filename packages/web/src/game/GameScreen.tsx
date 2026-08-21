@@ -20,7 +20,6 @@ import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
 import { describeAction, cardName } from './display';
 import { buildabilityFor, reconstructEraLog } from './interactions';
 import { ScoreModal, useScoreHistory } from './ScoreTable';
-import { EraActions, RoundInfo } from './WideLayout';
 import { SPOTLIGHT_DURATION_MS, spotlightOf } from './spotlight';
 import type { GameStore, GameStoreState, LogEntry } from './store';
 import { useGameStore } from './store';
@@ -400,9 +399,7 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} />
-                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} active={highlightSeat === i} />
-                <EraActions seat={i} actions={eraActions[i] ?? []} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} log={log} eraActions={eraActions[i] ?? []} seq={seq} />
               </div>
             ))}
           </aside>
@@ -416,9 +413,7 @@ function GameBoard({
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} />
-                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} active={highlightSeat === i} />
-                <EraActions seat={i} actions={eraActions[i] ?? []} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} log={log} eraActions={eraActions[i] ?? []} seq={seq} />
               </div>
             ))}
           </aside>

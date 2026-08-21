@@ -4,7 +4,7 @@
  * 引擎数据里的英文名（LOCATIONS[].name、产业 key、MerchantId）仅供规则与 LLM 提示词使用；
  * web 一律经本模块取中文名。消除原先 Panels/interactions/ActionBar 三处重复映射。
  */
-import type { Action, IndustryType, LocationId, MerchantId } from '@brass/engine';
+import type { Action, Card, IndustryType, LocationId, MerchantId } from '@brass/engine';
 import { LOCATIONS } from '@brass/engine';
 
 /** 城市/地点中文名（含 2 个农场酒厂）。 */
@@ -67,6 +67,19 @@ export function industryName(ind: string): string {
 /** 节点（城市或商人位）显示名。 */
 export function nodeName(id: string): string {
   return LOCATION_ZH[id] ?? MERCHANT_ZH[id as MerchantId] ?? id;
+}
+
+/**
+ * cardId → Card 还原（id 即牌面 key + 副本序号:`loc-x-1`/`ind-x-y-2`/`wild-location-0`）。
+ * 行动记录里只有 cardId,画卡面/写牌名都要先还原。
+ */
+export function cardFromId(id: string): Card {
+  if (id.startsWith('wild-location')) return { id, kind: 'wild-location' };
+  if (id.startsWith('wild-industry')) return { id, kind: 'wild-industry' };
+  if (id.startsWith('loc-')) {
+    return { id, kind: 'location', location: id.slice(4, id.lastIndexOf('-')) as LocationId };
+  }
+  return { id, kind: 'industry', industries: id.slice(4, id.lastIndexOf('-')).split('-') as IndustryType[] };
 }
 
 /** 卡牌显示名（loc-x→城市中文名，ind-x→产业中文名，wild→百搭）。 */
