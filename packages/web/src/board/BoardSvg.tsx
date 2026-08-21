@@ -772,7 +772,8 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                   strokeWidth={11}
                 />
               ) : null}
-              {spent > 0 ? (
+              {/* 本轮已行动(含 0 开销的纯贷款)即显示钱数椭圆;未行动不显示 */}
+              {spent > 0 || rank < state.currentPlayerIdx || (rank === state.currentPlayerIdx && state.actionsThisTurn > 0) ? (
                 <g className="turn-money-oval" data-testid={`turn-spent-${seat}`}>
                   <ellipse cx={m.x} cy={m.y} rx={108} ry={56} fill="#14100a" opacity={0.88} stroke="#8a6d3b" strokeWidth={3} />
                   {/* 钱数:黄色加大居中(深色描边保证可读;不再叠钱币堆) */}
