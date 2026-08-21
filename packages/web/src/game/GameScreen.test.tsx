@@ -76,7 +76,7 @@ describe('<GameScreen>', () => {
   });
 
   it('本人回合：选牌 → 棋盘高亮；贷款 → 确认提交 submit_action 帧', () => {
-    const { store, ws, seat } = setup(true);
+    const { store, ws, game, seat } = setup(true);
     const { container } = render(<GameScreen store={store} />);
     expect(screen.getByTestId('select-card-hint')).toBeInTheDocument();
 
@@ -103,6 +103,16 @@ describe('<GameScreen>', () => {
     expect(lastDraft.draft?.text).toContain('贷款');
     fireEvent.click(confirm);
 
+    // 服务端接受后回快照(seq 推进)→ 清选牌,暂存清除帧收尾
+    act(() => {
+      ws.emit({
+        type: 'snapshot',
+        protocolVersion: PROTOCOL_VERSION,
+        seq: 2,
+        state: filterStateFor(game, seat),
+        legalActions: [],
+      });
+    });
     // 确认后:submit_action 帧(提交的就是枚举项本身),随后一帧 draft_update 清除暂存
     const frames = ws.sent.map((s) => JSON.parse(s) as { type: string; token?: string; action?: Action });
     const frame = frames.filter((f) => f.type === 'submit_action').at(-1)!;
@@ -110,7 +120,7 @@ describe('<GameScreen>', () => {
     expect(frame.action).toEqual(loan);
     const lastFrame = frames[frames.length - 1]!;
     expect(lastFrame.type).toBe('draft_update'); // 暂存清除帧
-    expect(store.getState().selectedCard).toBeNull(); // 提交后清选牌
+    expect(store.getState().selectedCard).toBeNull(); // 快照推进后清选牌
     expect(seat).toBe(store.getState().seat);
   });
 

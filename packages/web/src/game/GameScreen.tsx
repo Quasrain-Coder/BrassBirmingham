@@ -69,7 +69,9 @@ function GameBoard({
   eraActions,
 }: GameBoardProps): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx] ?? seat;
-  const myTurn = current === seat && gameOver === null;
+  // 上家回合仍被扣住(turnHold)时,即使轮到自己也不能行动——服务端会拒
+  // (awaiting-turn-confirm);此时按"等待确认"显示,避免误以为行动被退回
+  const myTurn = current === seat && gameOver === null && turnHold === null;
   // 宽屏四个侧列面板按**初始顺位**固定位置(不随每轮顺位重排而换位);
   // 信息行里的顺位徽标仍按当前轮顺位显示。
   const fixedSeatsRef = useRef<PlayerIndex[] | null>(null);

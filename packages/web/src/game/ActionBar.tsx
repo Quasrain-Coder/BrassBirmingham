@@ -155,8 +155,10 @@ export function useActionDraft({
   }, [state, seat]);
 
   const highlights = useMemo<BoardHighlights>(() => {
+    // 已进入卖出选择(选了板块或已有组):去掉建造/连接高亮,只留可卖板块与啤酒源
+    const selling = sellTile !== null || sellGroups.length > 0;
     const targets = targetsFor(selectedCard, legalActions);
-    let buildSlots = buildSlotTargets(targets, state.board.slots);
+    let buildSlots = selling ? [] : buildSlotTargets(targets, state.board.slots);
     // 产业预选:高亮只留能落该产业的槽位
     if (buildIndustry !== null) {
       const ind = buildIndustry;

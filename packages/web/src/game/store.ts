@@ -310,7 +310,8 @@ export class GameStore {
     });
   }
 
-  /** 提交行动并清空选牌（行动消耗一张卡）。 */
+  /** 提交行动。选牌在下一个快照(行动被接受、seq 前进)时清空——被拒(如
+   *  等待上家确认回合)时保留暂存,玩家修正后可直接重试,不会"退回"。 */
   submitAction(action: Action): void {
     this.send({
       type: 'submit_action',
@@ -318,7 +319,6 @@ export class GameStore {
       token: this.requireToken(),
       action,
     });
-    this.patch({ selectedCard: null });
   }
 
   /** 结束被扣住的回合（放行下一玩家/AI）。 */
@@ -537,6 +537,8 @@ export class GameStore {
           eraActions: msg.eraActions ?? this.state.eraActions,
           ...(trimmedLog !== this.state.log ? { log: trimmedLog } : {}),
           ...(turnChanged ? { remoteDrafts: {} } : {}),
+          // 快照推进(seq 变化)= 行动已被接受,清选牌;被拒(seq 不变)保留暂存
+          ...(msg.seq !== this.state.seq ? { selectedCard: null } : {}),
         });
         break;
       }
