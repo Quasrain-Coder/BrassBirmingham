@@ -303,6 +303,9 @@ describe('useActionDraft', () => {
     act(() => result.current.toggleSellMerchantBarrel()); // 撤商人桶
     act(() => result.current.setSellBreweryCount({ location: 'derby', slotIndex: 0 }, 1));
     expect(result.current.sellBeer).toEqual([{ kind: 'brewery', location: 'derby', slotIndex: 0 }]);
+    // 当前组选齐(未收组):确认也已可亮——resolved 直接含当前组
+    expect(result.current.resolved?.type).toBe('sell');
+    expect((result.current.resolved as Extract<Action, { type: 'sell' }>).sales).toHaveLength(1);
     // 收下本组 → resolved 为自定义 sell(带 beerSources)
     act(() => result.current.commitSellGroup());
     expect(result.current.sellGroups).toHaveLength(1);

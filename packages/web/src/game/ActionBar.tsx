@@ -199,15 +199,23 @@ export function useActionDraft({
       ? sell.singles
       : sellCandidatesAt(candidates, sellTile.location, sellTile.slotIndex);
 
-  // 分组卖出拼成的自定义行动(组非空且当前组已清空):组合式校验,不必命中枚举集
+  // 分组卖出拼成的自定义行动:已收组 + 当前组(若已选齐)——选齐任意组确认即亮,
+  // 玩家可随时"就卖当前这些";组合式校验,不必命中枚举集
   const sellAction = useMemo((): Action | null => {
-    if (sellGroups.length === 0 || sellTile !== null) return null;
+    const curPlaced = sellTile !== null ? state.board.slots[sellTile.location]?.[sellTile.slotIndex] : null;
+    const currentComplete =
+      sellTile !== null && sellMerchant !== null && curPlaced != null && sellBeer.length === curPlaced.tile.beerToFlip;
+    if (sellGroups.length === 0 && !currentComplete) return null;
     const cardId = candidates.find((a) => a.type === 'sell')?.cardId ?? selectedCard;
     if (cardId === null) return null;
+    const groups = [...sellGroups];
+    if (currentComplete && sellTile !== null && sellMerchant !== null) {
+      groups.push({ tile: sellTile, merchant: sellMerchant, beer: sellBeer });
+    }
     return {
       type: 'sell',
       cardId,
-      sales: sellGroups.map((g) => ({
+      sales: groups.map((g) => ({
         location: g.tile.location,
         slotIndex: g.tile.slotIndex,
         merchant: g.merchant,
@@ -215,7 +223,7 @@ export function useActionDraft({
         beerSources: g.beer,
       })),
     };
-  }, [sellGroups, sellTile, candidates, selectedCard]);
+  }, [sellGroups, sellTile, sellMerchant, sellBeer, candidates, selectedCard, state.board.slots]);
 
   // resolved 优先级：显式选定 > 槽位歧义待选（阻断）> 分组卖出 > network 序列 > develop > scout。
   // 多类型同时收集了参数时按此序取其一，确认钮文案可见所提交内容。
@@ -842,7 +850,7 @@ export function ActionBar({
                       })}
                     </div>
                   ) : null}
-                  {draft.sellTile !== null && draft.sellMerchant !== null && draft.sellBeer.length === curNeed ? (
+                  {draft.sellTile !== null && draft.sellMerchant !== null && draft.sellBeer.length === curNeed && sellableNow.length > 1 ? (
                     <div className="action-choices">
                       <button type="button" data-testid="sell-commit-group" onClick={() => draft.commitSellGroup()}>
                         收下本组，选下一组
