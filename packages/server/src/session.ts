@@ -27,7 +27,7 @@ import {
 import type { Action, GameState, PlayerIndex } from '@brass/engine';
 import { filterStateFor } from '@brass/protocol';
 import type { FilteredState } from '@brass/protocol';
-import { appendAction, createGame, deleteActionsFrom, finishGame, type Db } from './db/repo.js';
+import { appendAction, createGame, deleteActionsFrom, findGameById, finishGame, listActions, listSeats, type Db } from './db/repo.js';
 
 /**
  * SessionError.code：'game-finished' / 'invalid-seat' / 'invalid-seats' / 'not-your-turn'
@@ -48,6 +48,8 @@ export interface SessionSeat {
   seat: PlayerIndex;
   nickname: string;
   token: string;
+  /** AI 座位标记（落库 seats.is_ai；恢复对局时重建 agents 用）。缺省 false。 */
+  isAI?: boolean;
 }
 
 export interface Snapshot {
@@ -80,6 +82,7 @@ export class GameSession {
     seed: number,
     seats: SessionSeat[],
     roomCode?: string,
+    opts?: { persist?: boolean },
   ) {
     const expected = new Set(Array.from({ length: playerCount }, (_, i) => i as PlayerIndex));
     if (
@@ -96,14 +99,53 @@ export class GameSession {
     this.gameId = gameId ?? generateGameId();
     this.seats = new Set(seats.map((s) => s.seat));
     this.gameState = newGame(playerCount, seed);
-    createGame(db, {
-      id: this.gameId,
-      roomCode: roomCode ?? this.gameId,
+    if (opts?.persist !== false) {
+      createGame(db, {
+        id: this.gameId,
+        roomCode: roomCode ?? this.gameId,
+        playerCount,
+        seed,
+        config: { playerCount, seed },
+        seats,
+      });
+    }
+  }
+
+  /**
+   * 服务器重启后的对局恢复：库中 status='playing' 的对局按 actions 表重放重建
+   * （engine 确定性：newGame(seed) + 逐条 applyAction）。返回 null = 不可恢复
+   * （对局不存在/已终局/重放校验失败），WS 层回 'session-lost'。
+   * 注意：turnBackup 不恢复——恢复后当前回合的"重置本回合"不可用（下回合起正常）。
+   */
+  static restore(db: Db, gameId: string): GameSession | null {
+    const game = findGameById(db, gameId);
+    if (game === null || game.status !== 'playing') return null;
+    const playerCount = game.playerCount;
+    if (playerCount !== 2 && playerCount !== 3 && playerCount !== 4) return null;
+    const seatRows = listSeats(db, gameId);
+    const session = new GameSession(
+      db,
+      gameId,
       playerCount,
-      seed,
-      config: { playerCount, seed },
-      seats,
-    });
+      game.seed,
+      seatRows.map((s) => ({
+        seat: s.seat as PlayerIndex,
+        nickname: s.nickname,
+        token: s.token,
+        isAI: s.isAI,
+      })),
+      game.roomCode,
+      { persist: false },
+    );
+    try {
+      for (const { action } of listActions(db, gameId)) {
+        session.gameState = applyAction(session.gameState, action);
+        session.seq += 1;
+      }
+    } catch {
+      return null; // 重放失败（库脏数据/引擎语义漂移）——按不可恢复处理
+    }
+    return session;
   }
 
   /** 终局（engine phase==='game-over'，此刻 final_state 已落库）。 */

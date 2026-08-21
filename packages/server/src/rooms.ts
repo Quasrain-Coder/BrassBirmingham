@@ -192,6 +192,15 @@ export class RoomManager {
     return this.rooms.get(code.toUpperCase()) ?? null;
   }
 
+  /**
+   * 收留一个重建的房间（session restore：重启后内存房间丢失，按库记录重建
+   * Room 后注册回索引，leave/broadcast 等按码查房的路径才不断裂）。
+   * 不登记 tokenIndex——恢复的对局只能经库表 findSeatByToken resume。
+   */
+  adopt(room: Room): void {
+    this.rooms.set(room.code, room);
+  }
+
   /** token → {room, seat}。开局前 resume 走此内存索引；开局后由 WS 层查库 findSeatByToken。 */
   findByToken(token: string): { room: Room; seat: Seat } | null {
     const room = this.tokenIndex.get(token);
