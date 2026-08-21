@@ -3,7 +3,10 @@
  *
  * 核心规则：**提交的行动必须是 legalActions 中匹配到的条目本身**（draft.resolved 恒为
  * 入参数组原对象，由测试断言 toContain），绝不新构造 Action——engine 对 scout cardIds
- * 有序逐元素比较、sell 只枚举单块/全集。参数收集 = 逐步缩小 legalActions 子集：
+ * 有序逐元素比较、sell 只枚举单块/全集。**唯一例外**：build 的显式槽位选择
+ * （双-双图标槽自由选,bug2）会附 slotIndex 产生新对象——engine 按内容重新校验
+ * （三元组合法 + illegal-build-slot 槽位规则），不依赖引用相等。
+ * 参数收集 = 逐步缩小 legalActions 子集：
  * - build：点棋盘槽位 → buildCandidatesAt（多产业槽歧义时列出待选）
  * - network：按放置顺序点边（双轨有序对），matchNetwork 前缀收窄；点末条撤销
  * - develop：点 1-2 个产业按钮，normalizeRemovals 后精确匹配
@@ -23,6 +26,7 @@ import {
   describeAction,
   developDoubles,
   developOptions,
+  explicitBuildSlot,
   extendableLinks,
   matchDevelop,
   matchNetwork,
@@ -94,6 +98,8 @@ export function useActionDraft({
   const [scoutPicks, setScoutPicks] = useState<string[]>([]);
   const [sellTile, setSellTile] = useState<SlotRef | null>(null);
   const [buildChoices, setBuildChoices] = useState<BuildAction[]>([]);
+  /** 槽位歧义待选时记住所点槽位(choose 时附显式 slotIndex)。 */
+  const [choicesSlot, setChoicesSlot] = useState<SlotRef | null>(null);
   const [buildIndustry, setBuildIndustry] = useState<IndustryType | null>(null);
   const [chosen, setChosen] = useState<Action | null>(null);
 
@@ -103,6 +109,7 @@ export function useActionDraft({
     setScoutPicks([]);
     setSellTile(null);
     setBuildChoices([]);
+    setChoicesSlot(null);
     setBuildIndustry(null);
     setChosen(null);
   };
@@ -182,12 +189,17 @@ export function useActionDraft({
       builds = builds.filter((a) => a.industry === buildIndustry);
     }
     if (builds.length === 1) {
-      setChosen(builds[0]!);
+      const b = builds[0]!;
+      // 双-双图标槽:玩家点的就是想建的槽位 → 附显式 slotIndex(engine 校验同规则)
+      const explicit = explicitBuildSlot(state, seat, b, { location, slotIndex });
+      setChosen(explicit !== undefined ? { ...b, slotIndex: explicit } : b);
       setBuildChoices([]);
+      setChoicesSlot(null);
       return;
     }
     if (builds.length > 1) {
       setBuildChoices(builds);
+      setChoicesSlot({ location, slotIndex });
       setChosen(null);
       return;
     }
@@ -201,6 +213,7 @@ export function useActionDraft({
   const pickIndustry = (ind: IndustryType): void => {
     setBuildIndustry((prev) => (prev === ind ? null : ind));
     setBuildChoices([]);
+    setChoicesSlot(null);
     setChosen((prev) => (prev?.type === 'build' && prev.industry !== ind ? null : prev));
   };
 
@@ -244,13 +257,23 @@ export function useActionDraft({
   };
 
   const choose = (action: Action): void => {
-    setChosen(action);
+    // 槽位歧义待选后选定:同样附显式 slotIndex(若该产业允许双-双自选)
+    if (action.type === 'build' && choicesSlot !== null) {
+      const explicit = explicitBuildSlot(state, seat, action, choicesSlot);
+      setChosen(explicit !== undefined ? { ...action, slotIndex: explicit } : action);
+    } else {
+      setChosen(action);
+    }
     setBuildChoices([]);
+    setChoicesSlot(null);
   };
 
-  /** 建造预览:落槽按引擎规范化(单图标槽优先等,resolveBuildSlot)——与实际结算一致。 */
+  /** 建造预览:显式槽位直接落所点槽;否则按引擎规范化(单图标槽优先等)。 */
   const buildPreview = useMemo(() => {
     if (chosen?.type !== 'build') return null;
+    if (chosen.slotIndex !== undefined) {
+      return { location: chosen.location, slotIndex: chosen.slotIndex, industry: chosen.industry };
+    }
     const def = state.players[seat]?.tiles.find((t) => t.industry === chosen.industry);
     if (def === undefined) return null;
     const target = resolveBuildSlot(state, seat, chosen.location, chosen.industry, def.level);
@@ -363,7 +386,7 @@ export function ActionBar({
   if (!myTurn) {
     return (
       <section className="action-bar" data-testid="action-bar">
-        <p data-testid="waiting">
+        <p data-testid="waiting" className={turnHold !== null ? 'waiting-hold' : undefined}>
           {turnHold !== null ? `等待 ${waitingFor} 确认回合…` : `等待 ${waitingFor} 行动…`}
         </p>
       </section>

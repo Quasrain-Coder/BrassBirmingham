@@ -43,7 +43,10 @@ export type GameEvent = FlipEvent | MerchantBonusEvent;
  * applyAction 按 type 分派到各行动模块。
  */
 export type Action =
-  | { type: 'build'; cardId: string; industry: IndustryType; location: LocationId }
+  // slotIndex(可选):同地有多个合法空槽时玩家的显式选择(仅"无空单图标槽"时
+  // 允许在空双图标槽间自选;单图标槽优先规则仍强制,见 applyBuild)。
+  // 缺省 = 规范化解析(对手 overbuild → 单图标空槽 → 双图标空槽 → 己方 overbuild)。
+  | { type: 'build'; cardId: string; industry: IndustryType; location: LocationId; slotIndex?: number }
   | { type: 'network'; cardId: string; links: number[]; beerFromOpponentBrewery?: LocationId } // links = LINKS 下标，len 1|2
   | { type: 'develop'; cardId: string; removals: IndustryType[] } // len 1|2
   | { type: 'sell'; cardId: string; sales: { location: LocationId; slotIndex: number; merchant: MerchantId; useMerchantBeer: boolean }[] }

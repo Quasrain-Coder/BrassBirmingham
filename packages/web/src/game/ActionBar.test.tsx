@@ -239,6 +239,37 @@ describe('useActionDraft', () => {
     expect(result.current.buildIndustry).toBeNull();
   });
 
+  it('双-双图标槽:点右槽附显式 slotIndex,预览落右槽', () => {
+    const f = freshFixture();
+    const legal: Action[] = [
+      { type: 'build', cardId: 'c1', industry: 'brewery', location: 'uttoxeter' },
+    ];
+    const { result } = renderDraft(f, 'c1', legal);
+    // 乌托科斯特 [manufacturer+brewery, cotton+brewery]:无双图标优先级约束,可自选
+    act(() => result.current.clickSlot('uttoxeter', 1));
+    const chosen = result.current.resolved as Extract<Action, { type: 'build' }>;
+    expect(chosen.slotIndex).toBe(1);
+    expect(result.current.buildPreview?.slotIndex).toBe(1);
+    // 点规范化槽(左,0)则不附显式,保持 legalActions 原对象
+    act(() => result.current.reset());
+    act(() => result.current.clickSlot('uttoxeter', 0));
+    expect(result.current.resolved).toBe(legal[0]);
+    expect((result.current.resolved as { slotIndex?: number }).slotIndex).toBeUndefined();
+    expect(result.current.buildPreview?.slotIndex).toBe(0);
+  });
+
+  it('单图标优先:点双图标槽不附显式,预览规范化到单图标槽', () => {
+    const f = freshFixture();
+    const legal: Action[] = [
+      { type: 'build', cardId: 'c1', industry: 'manufacturer', location: 'stoke-on-trent' },
+    ];
+    const { result } = renderDraft(f, 'c1', legal);
+    // 斯托克 [cotton+manufacturer(双0), pottery+iron, manufacturer(单2)]
+    act(() => result.current.clickSlot('stoke-on-trent', 0));
+    expect(result.current.resolved).toBe(legal[0]); // 原对象,无显式 slotIndex
+    expect(result.current.buildPreview?.slotIndex).toBe(2); // 规范化到单图标槽
+  });
+
   it('loan/pass 无参数：choose 即 resolved', () => {    const f = freshFixture();
     const card = locationCard(f);
     const { result } = renderDraft(f, card.id);

@@ -1506,7 +1506,39 @@ body {
   transform: translateY(-4px);
 }
 
-/* 行动条 */
+/* 回合待确认(该点"结束回合"):红色提醒底色 + 实心红按钮,区别于普通灰底 */
+.action-bar.turn-hold {
+  border-color: rgba(192, 57, 43, 0.65);
+  background: linear-gradient(180deg, rgba(120, 30, 22, 0.38), rgba(60, 18, 14, 0.48));
+}
+
+.action-bar.turn-hold [data-testid='turn-hold-hint'] {
+  margin: 4px 0;
+  color: #f0b4a8;
+  font-weight: 600;
+}
+
+.action-bar.turn-hold button[data-testid='end-turn'] {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #c0392b;
+  color: #fdf0ec;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.action-bar.turn-hold button[data-testid='end-turn']:hover {
+  background: #d24637;
+}
+
+/* 等待他人确认回合的提示同样带红色 */
+.action-bar .waiting-hold {
+  color: #f0b4a8;
+  font-weight: 600;
+}
+
 /* 行动条:统一字号体系——面板内文字/按钮同一基准字号,颜色区分层级 */
 .action-bar {
   border: 1px solid #3a3226;

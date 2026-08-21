@@ -595,3 +595,122 @@ describe('applyBuild execution', () => {
     expect(JSON.stringify(s)).toBe(snapshot);
   });
 });
+
+describe('bug1 回归:研发掉 L1 制造厂后,L2 制造厂@斯托克可建(铁市场 £6 兜底,无需连通)', () => {
+  function setup(ironMarket: number): { s: GameState; player: PlayerIndex } {
+    const s = newGame(4, 42);
+    const ps = s.players[0]!;
+    // 模拟研发掉 L1 制造厂(面板顶变为 L2,costIron 1)
+    ps.tiles = ps.tiles.filter((t) => !(t.industry === 'manufacturer' && t.level === 1));
+    setHand(s, 0, [locCard('stoke-on-trent')]);
+    s.ironMarket = ironMarket; // 场上无铁厂(newGame)
+    return { s, player: 0 };
+  }
+
+  it('铁市场有方:枚举含 制造厂@斯托克', () => {
+    const { s, player } = setup(5);
+    expect(
+      enumerateBuilds(s, player).some(
+        (a) => a.type === 'build' && a.industry === 'manufacturer' && a.location === 'stoke-on-trent',
+      ),
+    ).toBe(true);
+  });
+
+  it('铁市场空:仍可枚举——按规则空市场以最贵兜底价(铁 £6)购买', () => {
+    const { s, player } = setup(0);
+    const legal = enumerateBuilds(s, player).some(
+      (a) => a.type === 'build' && a.industry === 'manufacturer' && a.location === 'stoke-on-trent',
+    );
+    expect(legal).toBe(true);
+    // 执行:L2 制造厂 £10 + 兜底铁 £6 = £16,余 £1
+    const r = applyBuild(s, player, {
+      type: 'build',
+      cardId: 'loc-stoke-on-trent-test',
+      industry: 'manufacturer',
+      location: 'stoke-on-trent',
+    });
+    expect(r.state.players[0]!.money).toBe(1);
+    const placed = r.state.board.slots['stoke-on-trent']!.find((t) => t?.tile.industry === 'manufacturer');
+    expect(placed?.tile.level).toBe(2);
+  });
+});
+
+describe('bug2:同地多个合法空槽时,玩家可显式选择槽位(Action.slotIndex)', () => {
+  // 乌托科斯特:[manufacturer+brewery, cotton+brewery]——两个双图标槽都可放酒厂
+  it('双-双图标槽:显式选择右侧槽位被接受', () => {
+    const s = newGame(4, 7);
+    setHand(s, 0, [locCard('uttoxeter')]);
+    const r = applyBuild(s, 0, {
+      type: 'build',
+      cardId: 'loc-uttoxeter-test',
+      industry: 'brewery',
+      location: 'uttoxeter',
+      slotIndex: 1,
+    });
+    expect(r.state.board.slots['uttoxeter']![1]?.tile.industry).toBe('brewery');
+    expect(r.state.board.slots['uttoxeter']![0]).toBeNull();
+  });
+
+  it('缺省(不带 slotIndex):规范化落首个空槽(左侧)', () => {
+    const s = newGame(4, 7);
+    setHand(s, 0, [locCard('uttoxeter')]);
+    const r = applyBuild(s, 0, {
+      type: 'build',
+      cardId: 'loc-uttoxeter-test',
+      industry: 'brewery',
+      location: 'uttoxeter',
+    });
+    expect(r.state.board.slots['uttoxeter']![0]?.tile.industry).toBe('brewery');
+  });
+
+  it('单图标优先仍强制:有空单图标槽时显式选双图标槽 → illegal-build-slot', () => {
+    // 斯托克:[cotton+manufacturer(双), pottery+iron, manufacturer(单)]
+    // 制造厂 L1 £8+1煤:对手在 leek 的煤矿经 link31(leek-stoke)免费供煤
+    const s = newGame(4, 7);
+    withLink(s, 30, 1); // link30 = leek-stoke(board.ts 注释为 1 基编号)
+    withTile(s, 1, 'leek', 'coal', { slot: 1, resources: 2 });
+    setHand(s, 0, [locCard('stoke-on-trent')]);
+    expect(() =>
+      applyBuild(s, 0, {
+        type: 'build',
+        cardId: 'loc-stoke-on-trent-test',
+        industry: 'manufacturer',
+        location: 'stoke-on-trent',
+        slotIndex: 0, // 双图标槽,但单图标槽(2)空着 → 显式选择非法
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'illegal-build-slot' }) as Error);
+    // 显式选单图标槽(与规范化一致)合法
+    const r = applyBuild(s, 0, {
+      type: 'build',
+      cardId: 'loc-stoke-on-trent-test',
+      industry: 'manufacturer',
+      location: 'stoke-on-trent',
+      slotIndex: 2,
+    });
+    expect(r.state.board.slots['stoke-on-trent']![2]?.tile.industry).toBe('manufacturer');
+  });
+
+  it('显式选择被占/不接收该产业的槽位 → illegal-build-slot', () => {
+    const s = newGame(4, 7);
+    withTile(s, 1, 'uttoxeter', 'manufacturer', { slot: 0 }); // 对手占左槽
+    setHand(s, 0, [locCard('uttoxeter')]);
+    // 选被占槽(0) → 非法;酒厂只能落右槽(1)
+    expect(() =>
+      applyBuild(s, 0, {
+        type: 'build',
+        cardId: 'loc-uttoxeter-test',
+        industry: 'brewery',
+        location: 'uttoxeter',
+        slotIndex: 0,
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'illegal-build-slot' }) as Error);
+    const r = applyBuild(s, 0, {
+      type: 'build',
+      cardId: 'loc-uttoxeter-test',
+      industry: 'brewery',
+      location: 'uttoxeter',
+      slotIndex: 1,
+    });
+    expect(r.state.board.slots['uttoxeter']![1]?.tile.industry).toBe('brewery');
+  });
+});

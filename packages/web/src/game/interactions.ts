@@ -429,3 +429,38 @@ export function buildabilityFor(
   }
   return out;
 }
+
+/**
+ * 显式槽位选择（bug2）：同地没有可放该产业的**空单图标槽**时，允许玩家在空双图标
+ * 槽之间自选（与 engine applyBuild 的 illegal-build-slot 校验同规则；单图标槽优先
+ * 仍强制）。返回应附到 build Action 的 slotIndex；无需/不可显式时返回 undefined。
+ */
+export function explicitBuildSlot(
+  state: FilteredState,
+  seat: PlayerIndex,
+  action: BuildAction,
+  clicked: SlotRef,
+): number | undefined {
+  if (clicked.location !== action.location) return undefined;
+  const def = state.players[seat]?.tiles.find((t) => t.industry === action.industry);
+  if (def === undefined) return undefined;
+  const resolved = resolveBuildSlot(state, seat, action.location, action.industry, def.level);
+  // 点击的已是规范化落槽 → 无需显式
+  if (resolved === null || resolved.slotIndex === clicked.slotIndex) return undefined;
+  const slotDefs = LOCATIONS[action.location]?.slots;
+  const placed = state.board.slots[action.location];
+  if (!slotDefs || !placed) return undefined;
+  // 规范化落点须为空槽放置（overbuild 情形不允许显式改槽）
+  if (placed[resolved.slotIndex] !== null) return undefined;
+  // 点击槽须为空且接收该产业
+  const clickedDef = slotDefs[clicked.slotIndex];
+  if (clickedDef === undefined || !clickedDef.industries.includes(action.industry)) return undefined;
+  if (placed[clicked.slotIndex] !== null) return undefined;
+  // 单图标槽优先:存在空单图标槽时显式选双图标槽非法
+  const singleIconEmpty = slotDefs.some(
+    (sd, i) =>
+      sd.industries.length === 1 && sd.industries.includes(action.industry) && placed[i] === null,
+  );
+  if (singleIconEmpty) return undefined;
+  return clicked.slotIndex;
+}
