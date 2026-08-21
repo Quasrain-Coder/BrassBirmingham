@@ -765,8 +765,14 @@ async function serveStatic(
   }
   try {
     const body = await readFile(filePath);
+    // 缓存策略:带内容指纹的构建产物可长期缓存;index.html 与游戏素材
+    // 每次校验,避免旧 HTML 引用已不存在的新指纹资源(或反之)造成白屏。
+    const cacheControl = /\/assets\/[^/]+-[A-Za-z0-9_-]{8,}\.[^/]+$/.test(pathname)
+      ? 'public, max-age=31536000, immutable'
+      : 'no-cache';
     res.writeHead(200, {
       'content-type': MIME[extname(filePath).toLowerCase()] ?? 'application/octet-stream',
+      'cache-control': cacheControl,
     });
     res.end(body);
   } catch {

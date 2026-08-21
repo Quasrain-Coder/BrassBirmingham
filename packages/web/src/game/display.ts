@@ -105,7 +105,7 @@ export function cardFaceKey(card: { kind: string; location?: string; industries?
 export function describeAction(action: Action): string {
   switch (action.type) {
     case 'build':
-      return `建造 ${industryName(action.industry)}（${locationName(action.location)}）`;
+      return `建造 ${locationName(action.location)}${industryName(action.industry)}`;
     case 'network':
       return `建设连接 ×${action.links.length}`;
     case 'develop':
@@ -113,7 +113,7 @@ export function describeAction(action: Action): string {
     case 'sell':
       return `出售翻面 ×${action.sales.length}`;
     case 'loan':
-      return '贷款 £30（收入 −3 级）';
+      return '贷款 £30';
     case 'scout':
       return '侦察：弃 3 张换 2 张百搭';
     case 'pass':
