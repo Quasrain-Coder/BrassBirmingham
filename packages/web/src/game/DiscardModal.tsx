@@ -61,12 +61,14 @@ export function DiscardModal({
                         src="/assets/cards/back.png"
                         alt="开局暗置"
                       />
+                      <span className="discard-card-name">暗置</span>
                       <span className="card-tip">开局暗置（不公开）</span>
                     </span>
                   ) : null}
                   {cards.map((c) => (
                     <span className="discard-cell" key={c.id}>
                       <img className="discard-card" src={cardImageSrc(c)} alt={cardName(c)} />
+                      <span className="discard-card-name">{cardName(c)}</span>
                       <span className="card-tip">{cardName(c)}</span>
                     </span>
                   ))}

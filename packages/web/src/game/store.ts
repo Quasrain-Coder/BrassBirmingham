@@ -61,6 +61,8 @@ export interface SessionStorageLike {
 /** localStorage key 前缀：`brass:token:<房间号>` / `brass:owner:<房间号>`。 */
 export const TOKEN_KEY_PREFIX = 'brass:token:';
 export const OWNER_KEY_PREFIX = 'brass:owner:';
+/** 宽屏固定座次的持久化 key:`brass:fixedseats:<房间号>`(刷新后仍按开局座次)。 */
+export const FIXED_SEATS_KEY_PREFIX = 'brass:fixedseats:';
 /** owner 标记新鲜窗口：被动 close 时他 tab 在此窗口内抢座才判为"被接管"。 */
 export const TAKEOVER_WINDOW_MS = 10_000;
 
@@ -203,6 +205,9 @@ export interface GameStoreState {
   playedCards: Card[][];
   /** 各座位本时代的全部行动（快照附带;"本时代行动"折叠记录用）。 */
   eraActions: Action[][];
+  /** 宽屏面板固定座次:首个快照落地后不再变化(顺位每轮重算也不动;
+   *  存 store 而非组件 ref——断线重连导致 GameBoard 重挂载时不被重置)。 */
+  fixedSeats: PlayerIndex[] | null;
   /** 其他玩家当前的暂存预览（player_draft 流；座位 → 预览,确认/重置/换回合时清除）。 */
   remoteDrafts: Partial<Record<PlayerIndex, DraftPreview>>;
   /** 最近一次"重置本回合"广播（n 单调递增作触发键）。 */
@@ -228,6 +233,7 @@ const INITIAL_STATE: GameStoreState = {
   takenOver: false,
   playedCards: [],
   eraActions: [],
+  fixedSeats: null,
   remoteDrafts: {},
   resetNotice: null,
 };
@@ -404,6 +410,7 @@ export class GameStore {
     if (this.storage !== null && code !== null) {
       this.storage.removeItem(TOKEN_KEY_PREFIX + code);
       this.storage.removeItem(OWNER_KEY_PREFIX + code);
+      this.storage.removeItem(FIXED_SEATS_KEY_PREFIX + code);
     }
     this.persistedCode = null;
     this.patch({
@@ -415,6 +422,7 @@ export class GameStore {
       seq: 0,
       gameOver: null,
       takenOver: false,
+      fixedSeats: null,
     });
   }
 
@@ -438,6 +446,29 @@ export class GameStore {
       OWNER_KEY_PREFIX + code,
       JSON.stringify({ tabId: this.tabId, at: Date.now() }),
     );
+  }
+
+  /**
+   * 固定座次读取:localStorage 已有(刷新/重开页面)直接用,否则取首个快照的顺位
+   * 并持久化——此后顺位每轮重算、组件重挂载、页面刷新都不改变面板位置。
+   */
+  private loadFixedSeats(state: FilteredState): PlayerIndex[] {
+    const code = this.roomCode();
+    if (this.storage !== null && code !== null) {
+      const raw = this.storage.getItem(FIXED_SEATS_KEY_PREFIX + code);
+      if (raw !== null) {
+        try {
+          const parsed = JSON.parse(raw) as unknown;
+          if (Array.isArray(parsed) && parsed.length === state.turnOrder.length) {
+            return parsed as PlayerIndex[];
+          }
+        } catch {
+          // 落回快照顺位
+        }
+      }
+      this.storage.setItem(FIXED_SEATS_KEY_PREFIX + code, JSON.stringify(state.turnOrder));
+    }
+    return [...state.turnOrder];
   }
 
   /** 被动 close 时判定：他 tab 在窗口期内抢座（owner 标记新鲜且非本 tab）。 */
@@ -537,6 +568,9 @@ export class GameStore {
           eraActions: msg.eraActions ?? this.state.eraActions,
           ...(trimmedLog !== this.state.log ? { log: trimmedLog } : {}),
           ...(turnChanged ? { remoteDrafts: {} } : {}),
+          // 固定座次:首个快照落地(优先读 localStorage,刷新后仍按开局座次);
+          // 此后顺位每轮重算也不动
+          ...(this.state.fixedSeats === null ? { fixedSeats: this.loadFixedSeats(msg.state) } : {}),
           // 快照推进(seq 变化)= 行动已被接受,清选牌;被拒(seq 不变)保留暂存
           ...(msg.seq !== this.state.seq ? { selectedCard: null } : {}),
         });

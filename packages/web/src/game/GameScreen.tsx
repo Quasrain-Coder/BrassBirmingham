@@ -35,7 +35,9 @@ interface GameBoardProps {
   thinkingSeats: PlayerIndex[];
   gameOver: GameStoreState['gameOver'];
   turnHold: PlayerIndex | null;
-  /** 当前快照 seq(宽屏布局的本回合信息行用)。 */
+  /** 宽屏面板固定座次(store 持久,断线重连/刷新不重置)。 */
+  fixedSeats: PlayerIndex[];
+  /** 本回合操作行(宽屏紧凑面板第二行):行动日志/本时代行动/当前 seq。 */
   seq: number;
   /** 其他玩家当前的暂存预览(座位 → 预览)。 */
   remoteDrafts: Partial<Record<PlayerIndex, DraftPreview>>;
@@ -62,6 +64,7 @@ function GameBoard({
   gameOver,
   turnHold,
   seq,
+  fixedSeats,
   remoteDrafts,
   resetNotice,
   playedCards,
@@ -71,11 +74,7 @@ function GameBoard({
   // 上家回合仍被扣住(turnHold)时,即使轮到自己也不能行动——服务端会拒
   // (awaiting-turn-confirm);此时按"等待确认"显示,避免误以为行动被退回
   const myTurn = current === seat && gameOver === null && turnHold === null;
-  // 宽屏四个侧列面板按**初始顺位**固定位置(不随每轮顺位重排而换位);
-  // 信息行里的顺位徽标仍按当前轮顺位显示。
-  const fixedSeatsRef = useRef<PlayerIndex[] | null>(null);
-  if (fixedSeatsRef.current === null) fixedSeatsRef.current = [...state.turnOrder];
-  const fixedSeats = fixedSeatsRef.current;
+  // 面板按开局座次固定(store 持久);顺位徽标仍按当前轮顺位显示
   // 面板按本轮顺位排布:顺位在自己之前的排在版图上区,自己锚定在手牌/行动条旁
   // (默认展开),之后的排在自己单元之后——每轮顺位变化时两侧名单随之重排。
   const myPos = state.turnOrder.indexOf(seat);
@@ -466,6 +465,7 @@ export function GameScreen({ store }: { store: GameStore }): ReactElement {
       gameOver={s.gameOver}
       turnHold={s.turnHold}
       seq={s.seq}
+      fixedSeats={s.fixedSeats ?? s.snapshot.turnOrder}
       remoteDrafts={s.remoteDrafts}
       resetNotice={s.resetNotice}
       playedCards={s.playedCards}

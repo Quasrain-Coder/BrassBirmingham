@@ -1342,11 +1342,24 @@ body {
 }
 
 .discard-card {
-  width: 56px;
+  width: 96px;
   height: auto;
-  border-radius: 5px;
+  border-radius: 7px;
   border: 1px solid #4a3f2c;
   display: block;
+}
+
+/* 卡面下方中文名(打出记录弹层) */
+.discard-card-name {
+  display: block;
+  margin-top: 3px;
+  max-width: 96px;
+  overflow: hidden;
+  color: #d8cdb4;
+  font-size: 0.72rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .discard-card-back {
