@@ -40,7 +40,7 @@ import type { SlotRect } from './geometry';
 import { LOCATION_ZH } from '../game/display';
 
 /** 官方玩家色：P0 紫 / P1 黄 / P2 橙 / P3 青（与官方板块底色一致）。 */
-export const PLAYER_COLORS = ['#8e6bb0', '#d9a832', '#c05a30', '#4fa3a5'];
+export const PLAYER_COLORS = ['#8e6bb0', '#d9a832', '#c05a30', '#f0ece2'];
 /** 玩家色英文键（素材文件名用）。 */
 export const PLAYER_COLOR_KEYS = ['purple', 'yellow', 'orange', 'teal'] as const;
 
@@ -558,35 +558,12 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                   <StandingBeer key={`${id}-beer-${bi}`} cx={r.x + r.w / 2} cy={r.y + r.h / 2} size={BEER_TOKEN_SIZE} />
                 );
               })}
-              {/* 剩余酒数 token(该商人位总桶数) */}
-              {(m?.beer ?? 0) > 0 && geom.beer.length > 0 ? (
-                <g className="merchant-beer-count" data-testid={`merchant-beer-${id}`}>
-                  <rect
-                    x={geom.beer[geom.beer.length - 1]!.x + geom.beer[geom.beer.length - 1]!.w + 8}
-                    y={geom.beer[geom.beer.length - 1]!.y + geom.beer[geom.beer.length - 1]!.h / 2 - 26}
-                    width={86}
-                    height={52}
-                    rx={12}
-                    fill="#14100a"
-                    opacity={0.9}
-                  />
-                  <text
-                    x={geom.beer[geom.beer.length - 1]!.x + geom.beer[geom.beer.length - 1]!.w + 51}
-                    y={geom.beer[geom.beer.length - 1]!.y + geom.beer[geom.beer.length - 1]!.h / 2 + 12}
-                    textAnchor="middle"
-                    fontSize={34}
-                    fill="#f3e9c8"
-                  >
-                    ×{m!.beer}
-                  </text>
-                </g>
-              ) : null}
             </g>
           );
         })}
       </g>
 
-      {/* 煤/铁市场：已填格叠方块 */}
+      {/* 煤/铁市场：已填格叠方块 + 英文印刷下方中文标注 */}
       <g className="board-markets" pointerEvents="none">
         {COAL_MARKET_CELLS.map((p, i) =>
           i >= coalFilledFrom ? <Cube key={`coal-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#1f2329" /> : null,
@@ -594,6 +571,8 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
         {IRON_MARKET_CELLS.map((p, i) =>
           i >= ironFilledFrom ? <Cube key={`iron-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#c76b2a" /> : null,
         )}
+        <text x={4495} y={3212} textAnchor="middle" fontSize={38} fill="#d8c9a0" stroke="#14100a" strokeWidth={6} paintOrder="stroke">煤炭市场</text>
+        <text x={4712} y={3212} textAnchor="middle" fontSize={38} fill="#d8c9a0" stroke="#14100a" strokeWidth={6} paintOrder="stroke">铁矿市场</text>
       </g>
 
       {/* 连线 token 顶层渲染（不被板块图遮挡） */}
@@ -860,7 +839,8 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
           return (
             <g key={`track-${i}`}>
               <circle cx={vp.x + dx} cy={vp.y} r={34} fill={playerColor(i)} stroke="#14100a" strokeWidth={6} />
-              <circle cx={inc.x + dx * 0.6} cy={inc.y} r={24} fill={playerColor(i)} stroke="#f3e9c8" strokeWidth={5} />
+              {/* 收入标记:加大并整体右移(原偏小且普遍偏左) */}
+              <circle cx={inc.x + dx * 0.6 + 44} cy={inc.y} r={30} fill={playerColor(i)} stroke="#f3e9c8" strokeWidth={5} />
             </g>
           );
         })}

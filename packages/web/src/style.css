@@ -683,8 +683,8 @@ body {
 }
 
 .seat-card.hue-3 .seat-avatar {
-  border-color: #4fa3a5;
-  color: #7fc4c6;
+  border-color: #f0ece2;
+  color: #d8d4c8;
 }
 
 .seat-body {
@@ -2396,4 +2396,15 @@ body {
 
 .compact-round-delta.pos {
   color: #58c47b;
+}
+
+/* 第一行末"打出"按钮右对齐;行动行/历史行的出牌文本同样右对齐 */
+.compact-head .discard-open-btn {
+  margin-left: auto;
+}
+
+.compact-round-line .compact-history-card,
+.compact-history-act .compact-history-card {
+  margin-left: auto;
+  text-align: right;
 }
