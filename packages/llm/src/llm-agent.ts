@@ -146,7 +146,9 @@ export class LLMAgent implements DecidingAgent {
       // 只有 DeepSeek-V4-Flash 没有 claude-sonnet-4-5）。
       model: process.env['BRASS_AI_MODEL'] ?? cfg.model,
       maxTokens: cfg.maxTokens,
-      timeoutMs: cfg.timeoutMs,
+      // 网关慢时 8s 频繁超时→降级启发式（v5-ab 实测 15% 超时）。BRASS_AI_TIMEOUT_MS
+      // 覆盖难度默认超时，慢网关调到 30s+，减少误降级。
+      timeoutMs: Number(process.env['BRASS_AI_TIMEOUT_MS'] ?? cfg.timeoutMs),
     };
     const usage = { input: 0, output: 0 };
 
