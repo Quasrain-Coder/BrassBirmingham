@@ -99,45 +99,56 @@ function playerColor(player: PlayerIndex): string {
   return PLAYER_COLORS[player] ?? '#7f8c8d';
 }
 
+/** 啤酒立桶全场统一尺寸(酒厂/商人位相同)。 */
+const BEER_TOKEN_SIZE = 76;
+
 /**
- * 立起的啤酒桶（替代平贴图,与版图印刷图案区分）：偏黄的桶身 + 椭圆顶面 +
- * 桶箍两道 + 底部投影,营造"立起来"的立体感。
+ * 立起的啤酒桶（与版图印刷图案区分）：原木琥珀桶身 + 椭圆顶面 + 桶箍两道 +
+ * 底部投影,"立起来"的立体感。全场统一按中心+尺寸渲染(酒厂/商人位同大小)。
  */
-function StandingBeer({ r }: { r: SlotRect }): ReactElement {
-  const cx = r.x + r.w / 2;
-  const top = r.y + r.h * 0.12;
-  const bodyH = r.h * 0.68;
-  const rx = r.w * 0.32;
-  const ry = r.h * 0.09;
+function StandingBeer({ cx, cy, size }: { cx: number; cy: number; size: number }): ReactElement {
+  const s = size;
+  const top = cy - s * 0.42;
+  const bodyH = s * 0.68;
+  const rx = s * 0.3;
+  const ry = s * 0.085;
   const bottom = top + bodyH;
   return (
     <g className="board-merchant-beer" pointerEvents="none">
       {/* 底部投影 */}
-      <ellipse cx={cx} cy={bottom + ry * 0.7} rx={rx * 1.2} ry={ry} fill="#000" opacity={0.45} />
-      {/* 桶身(侧面,到底部椭圆弧) */}
+      <ellipse cx={cx} cy={bottom + ry * 0.8} rx={rx * 1.2} ry={ry} fill="#000" opacity={0.45} />
+      {/* 桶身(原木琥珀) */}
       <path
         d={`M ${cx - rx} ${top} L ${cx - rx} ${bottom} A ${rx} ${ry} 0 0 0 ${cx + rx} ${bottom} L ${cx + rx} ${top} Z`}
-        fill="#d99a22"
-        stroke="#4a2f08"
-        strokeWidth={4}
+        fill="#9c6f30"
+        stroke="#45300c"
+        strokeWidth={s * 0.045}
       />
       {/* 侧面高光 */}
-      <rect x={cx - rx * 0.58} y={top + 6} width={rx * 0.3} height={bodyH - 12} rx={6} fill="#f7dc7e" opacity={0.5} />
-      {/* 桶箍两道(沿桶身弧度的细弧) */}
+      <rect
+        x={cx - rx * 0.58}
+        y={top + s * 0.06}
+        width={rx * 0.3}
+        height={bodyH - s * 0.12}
+        rx={s * 0.06}
+        fill="#e6c98a"
+        opacity={0.4}
+      />
+      {/* 桶箍两道 */}
       <path
         d={`M ${cx - rx} ${top + bodyH * 0.35} A ${rx} ${ry} 0 0 0 ${cx + rx} ${top + bodyH * 0.35}`}
         fill="none"
-        stroke="#4a2f08"
-        strokeWidth={3}
+        stroke="#45300c"
+        strokeWidth={s * 0.035}
       />
       <path
         d={`M ${cx - rx} ${top + bodyH * 0.68} A ${rx} ${ry} 0 0 0 ${cx + rx} ${top + bodyH * 0.68}`}
         fill="none"
-        stroke="#4a2f08"
-        strokeWidth={3}
+        stroke="#45300c"
+        strokeWidth={s * 0.035}
       />
-      {/* 顶面(亮黄椭圆,立体感的来源) */}
-      <ellipse cx={cx} cy={top} rx={rx} ry={ry} fill="#f4c84f" stroke="#4a2f08" strokeWidth={4} />
+      {/* 顶面(亮一档的原木色,立体感来源) */}
+      <ellipse cx={cx} cy={top} rx={rx} ry={ry} fill="#c1903f" stroke="#45300c" strokeWidth={s * 0.045} />
     </g>
   );
 }
@@ -188,7 +199,7 @@ function Cube({ x, y, size, fill }: { x: number; y: number; size: number; fill: 
 /** 已建板块上的资源 token 布局：板块底部两行（最多 6 个），啤酒桶用官方图标。 */
 function ResourceTokens({ cx, cy, industry, count }: { cx: number; cy: number; industry: IndustryType; count: number }): ReactElement {
   const perRow = 3;
-  const gap = 52;
+  const gap = industry === 'brewery' ? 88 : 52; // 立桶更宽,间距防叠
   const tokens = [];
   for (let i = 0; i < count; i++) {
     const row = Math.floor(i / perRow);
@@ -198,8 +209,8 @@ function ResourceTokens({ cx, cy, industry, count }: { cx: number; cy: number; i
     const y = cy + SLOT_SIZE / 2 - 66 + row * 46;
     tokens.push(
       industry === 'brewery' ? (
-        // 酒厂商用立桶(与商人位同款):1-2 桶直观可见
-        <StandingBeer key={i} r={{ x: x - 26, y: y - 26, w: 52, h: 52 }} />
+        // 酒厂商用立桶(与商人位同尺寸)
+        <StandingBeer key={i} cx={x} cy={y} size={BEER_TOKEN_SIZE} />
       ) : (
         <Cube key={i} x={x} y={y} size={44} fill={industry === 'coal' ? '#1f2329' : '#c76b2a'} />
       ),
@@ -540,10 +551,12 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                 );
               })}
               {geom.beer.map((r, bi) => {
-                // 啤酒格:有桶画"立桶"(空的格保持印刷空框);非 blank 板块旁才会放桶
+                // 啤酒格:有桶画"立桶"(空的格保持印刷空框);与酒厂商用同尺寸
                 const filled = bi < (m?.beer ?? 0);
                 if (!filled) return null;
-                return <StandingBeer key={`${id}-beer-${bi}`} r={r} />;
+                return (
+                  <StandingBeer key={`${id}-beer-${bi}`} cx={r.x + r.w / 2} cy={r.y + r.h / 2} size={BEER_TOKEN_SIZE} />
+                );
               })}
               {/* 剩余酒数 token(该商人位总桶数) */}
               {(m?.beer ?? 0) > 0 && geom.beer.length > 0 ? (
