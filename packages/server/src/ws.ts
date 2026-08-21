@@ -208,6 +208,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         legalActions: snap.legalActions,
         turnHold: entry.turnHold,
         playedCards: snap.playedCards,
+        eraActions: snap.eraActions,
       });
     }
   }
@@ -661,6 +662,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         legalActions: snap.legalActions,
         turnHold: entry.turnHold,
         playedCards: snap.playedCards,
+        eraActions: snap.eraActions,
       });
       broadcastRoomState(entry.room);
       // resume 重触发 driveAI（幂等，守卫防重入）——对局若停在 AI 回合则被唤醒

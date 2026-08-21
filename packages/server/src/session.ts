@@ -58,6 +58,8 @@ export interface Snapshot {
   legalActions: Action[];
   /** 各座位本时代已打出的牌（按打出顺序；Wild 弃置回供应区不入列）。 */
   playedCards: Card[][];
+  /** 各座位本时代的全部行动（按顺序；"本时代行动"折叠记录用）。 */
+  eraActions: Action[][];
 }
 
 /** 'g_' + 8 字节 base64url（11 字符），crypto 随机。测试里应显式传 gameId。 */
@@ -75,13 +77,18 @@ export class GameSession {
    * 回合备份：每个回合第 1 个行动前的状态引用(GameState 不可变,引用即快照)与
    * 当时 seq。供 resetTurn 撤销本回合全部行动(server 扣住回合期间可反悔)。
    */
-  private turnBackup: { state: GameState; seq: number; played: Card[][] } | null = null;
+  private turnBackup: { state: GameState; seq: number; played: Card[][]; actions: Action[][] } | null = null;
   /**
    * 各座位本时代已打出的牌（按打出顺序）：实体弃牌堆公开规则的按玩家视图。
    * Wild 卡弃置回供应区不入列；时代切换时（弃牌合洗进新牌堆）清空重计。
    * resetTurn 撤销时同步回滚到回合初状态。
    */
   private playedThisEra: Card[][];
+  /**
+   * 各座位本时代的全部行动（按顺序）:面板下方"本时代行动"折叠记录的数据源。
+   * 与 playedThisEra 同生命周期(时代切换清空、resetTurn 回滚、重放重建)。
+   */
+  private eraActions: Action[][];
 
   constructor(
     db: Db,
@@ -108,6 +115,7 @@ export class GameSession {
     this.seats = new Set(seats.map((s) => s.seat));
     this.gameState = newGame(playerCount, seed);
     this.playedThisEra = seats.map(() => []);
+    this.eraActions = seats.map(() => []);
     if (opts?.persist !== false) {
       createGame(db, {
         id: this.gameId,
@@ -149,10 +157,12 @@ export class GameSession {
     try {
       for (const { action } of listActions(db, gameId)) {
         session.recordPlayed(action);
+        session.eraActions[session.currentSeat]?.push(action);
         const eraBefore = session.gameState.era;
         session.gameState = applyAction(session.gameState, action);
         if (session.gameState.era !== eraBefore) {
           session.playedThisEra = session.playedThisEra.map(() => []);
+          session.eraActions = session.eraActions.map(() => []);
         }
         session.seq += 1;
       }
@@ -209,20 +219,24 @@ export class GameSession {
       }
       throw e;
     }
-    // 回合第 1 个行动前留下备份(应用前捕获;含本时代出牌记录,resetTurn 一并回滚)
+    // 回合第 1 个行动前留下备份(应用前捕获;含本时代出牌/行动记录,resetTurn 一并回滚)
     if (this.gameState.actionsThisTurn === 0) {
       this.turnBackup = {
         state: this.gameState,
         seq: this.seq,
         played: this.playedThisEra.map((l) => [...l]),
+        actions: this.eraActions.map((l) => [...l]),
       };
     }
     this.recordPlayed(action);
+    this.eraActions[this.currentSeat]?.push(action);
     const eraBefore = this.gameState.era;
     appendAction(this.db, this.gameId, this.seq, seat, action);
     this.gameState = next;
     if (this.gameState.era !== eraBefore) {
-      this.playedThisEra = this.playedThisEra.map(() => []); // 时代切换:弃牌合洗,重计
+      // 时代切换:弃牌合洗,出牌/行动记录重计
+      this.playedThisEra = this.playedThisEra.map(() => []);
+      this.eraActions = this.eraActions.map(() => []);
     }
     const applied = this.seq;
     this.seq += 1;
@@ -242,6 +256,7 @@ export class GameSession {
     this.gameState = this.turnBackup.state;
     this.seq = this.turnBackup.seq;
     this.playedThisEra = this.turnBackup.played;
+    this.eraActions = this.turnBackup.actions;
     this.turnBackup = null;
     return true;
   }
@@ -273,6 +288,7 @@ export class GameSession {
           ? enumerateActions(this.gameState, seat)
           : [],
       playedCards: this.playedThisEra.map((l) => [...l]),
+      eraActions: this.eraActions.map((l) => [...l]),
     };
   }
 

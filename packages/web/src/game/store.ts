@@ -201,6 +201,8 @@ export interface GameStoreState {
   takenOver: boolean;
   /** 各座位本时代已打出的牌（快照附带；按打出顺序,Wild 不入列）。 */
   playedCards: Card[][];
+  /** 各座位本时代的全部行动（快照附带;"本时代行动"折叠记录用）。 */
+  eraActions: Action[][];
   /** 其他玩家当前的暂存预览（player_draft 流；座位 → 预览,确认/重置/换回合时清除）。 */
   remoteDrafts: Partial<Record<PlayerIndex, DraftPreview>>;
   /** 最近一次"重置本回合"广播（n 单调递增作触发键）。 */
@@ -225,6 +227,7 @@ const INITIAL_STATE: GameStoreState = {
   selectedCard: null,
   takenOver: false,
   playedCards: [],
+  eraActions: [],
   remoteDrafts: {},
   resetNotice: null,
 };
@@ -391,7 +394,7 @@ export class GameStore {
     }
     this.disconnect();
     this.clearSession();
-    this.patch({ log: [], thinkingSeats: [], lastError: null, selectedCard: null, playedCards: [], remoteDrafts: {}, resetNotice: null });
+    this.patch({ log: [], thinkingSeats: [], lastError: null, selectedCard: null, playedCards: [], eraActions: [], remoteDrafts: {}, resetNotice: null });
     this.connect();
   }
 
@@ -527,6 +530,7 @@ export class GameStore {
           seq: msg.seq,
           turnHold: msg.turnHold ?? null,
           playedCards: msg.playedCards ?? this.state.playedCards,
+          eraActions: msg.eraActions ?? this.state.eraActions,
           ...(turnChanged ? { remoteDrafts: {} } : {}),
         });
         break;

@@ -139,6 +139,10 @@ describe('WebSocket 传输层', () => {
     const played = after.playedCards as { id: string }[][];
     expect(played[actorSeat]!.map((c) => c.id)).toEqual([loan.cardId]);
     expect(played[1 - actorSeat]).toEqual([]);
+    // eraActions:该座位本时代行动同步入列
+    const eraActs = after.eraActions as { type: string }[][];
+    expect(eraActs[actorSeat]!.map((a) => a.type)).toEqual(['loan']);
+    expect(eraActs[1 - actorSeat]).toEqual([]);
   });
 
   it('resume returns seat and snapshot after disconnect（开局后）', async () => {

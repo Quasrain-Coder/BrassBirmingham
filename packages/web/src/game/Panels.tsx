@@ -216,6 +216,7 @@ export function PlayerBoard({
   pulse = false,
   compact = false,
   activeTurn = false,
+  buildStatus,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -228,6 +229,8 @@ export function PlayerBoard({
   compact?: boolean;
   /** 当前回合进行中(思考/行动全程):面板持续发光(稳态,区别于脉冲)。 */
   activeTurn?: boolean;
+  /** 各产业可建性标注(本人回合的本人面板;明细行内显示,如 "✓ 可建造"/"还需 £3")。 */
+  buildStatus?: Partial<Record<IndustryType, string>> | undefined;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
   // 堆叠视图:版图(官方玩家面板美术)/明细(#19 列表)——记住玩家选择
@@ -305,6 +308,14 @@ export function PlayerBoard({
                 <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
                   {industryName(ind)}
                 </span>
+                {buildStatus?.[ind] !== undefined ? (
+                  <span
+                    className={`board-ind-status${buildStatus[ind]!.startsWith('✓') ? ' ok' : ''}`}
+                    data-testid={`build-status-${seat}-${ind}`}
+                  >
+                    {buildStatus[ind]}
+                  </span>
+                ) : null}
                 <span className="board-ind-list">
                   {TILES.filter((t) => t.industry === ind).map((def) => {
                     const remaining = remainingByTile.get(`${ind}-${def.level}`) ?? 0;
@@ -447,6 +458,14 @@ export function PlayerBoard({
                 <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
                   {industryName(ind)}
                 </span>
+                {buildStatus?.[ind] !== undefined ? (
+                  <span
+                    className={`board-ind-status${buildStatus[ind]!.startsWith('✓') ? ' ok' : ''}`}
+                    data-testid={`build-status-${seat}-${ind}`}
+                  >
+                    {buildStatus[ind]}
+                  </span>
+                ) : null}
                 <span className="board-ind-list">
                   {TILES.filter((t) => t.industry === ind).map((def) => {
                     const remaining = remainingByTile.get(`${ind}-${def.level}`) ?? 0;

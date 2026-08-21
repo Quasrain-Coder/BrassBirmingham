@@ -296,3 +296,38 @@ describe('describeAction', () => {
     expect(describeAction(cases[0]!)).toContain('伯明翰');
   });
 });
+
+describe('buildabilityFor(面板可建性标注)', () => {
+  it('开局:有合法建造的产业标 ✓,其余给原因;现金不足标 还需 £N', async () => {
+    const { buildabilityFor } = await import('./interactions');
+    const { filterStateFor } = await import('@brass/protocol');
+    const game = newGame(4, 42);
+    const seat = game.turnOrder[game.currentPlayerIdx]!;
+    const state = filterStateFor(game, seat);
+    const legal = enumerateActions(game, seat);
+    const status = buildabilityFor(state, seat, legal);
+    // 全产业都有标注
+    expect(Object.keys(status).sort()).toEqual(
+      ['brewery', 'coal', 'cotton', 'iron', 'manufacturer', 'pottery'].sort(),
+    );
+    // 有合法 build 的产业 → ✓ 可建造
+    const buildable = new Set(
+      legal.filter((a) => a.type === 'build').map((a) => (a as { industry: IndustryType }).industry),
+    );
+    for (const ind of buildable) expect(status[ind]).toBe('✓ 可建造');
+    // 现金压到 0 → 非可建产业全部 还需 £N
+    state.players[seat]!.money = 0;
+    const broke = buildabilityFor(state, seat, []);
+    expect(broke['cotton']).toMatch(/^还需 £\d+$/);
+  });
+
+  it('板块用尽:该产业标 板块已用尽', async () => {
+    const { buildabilityFor } = await import('./interactions');
+    const { filterStateFor } = await import('@brass/protocol');
+    const game = newGame(4, 42);
+    const seat = game.turnOrder[game.currentPlayerIdx]!;
+    const state = filterStateFor(game, seat);
+    state.players[seat]!.tiles = state.players[seat]!.tiles.filter((t) => t.industry !== 'coal');
+    expect(buildabilityFor(state, seat, [])['coal']).toBe('板块已用尽');
+  });
+});

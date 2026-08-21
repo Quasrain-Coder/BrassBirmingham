@@ -6,7 +6,7 @@
 import { act, render, renderHook, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { enumerateActions, newGame, tileDef } from '@brass/engine';
-import type { Action, Card, GameState } from '@brass/engine';
+import type { Action, Card, GameState, IndustryType } from '@brass/engine';
 import { filterStateFor } from '@brass/protocol';
 import type { FilteredState } from '@brass/protocol';
 import { ActionBar, useActionDraft } from './ActionBar';
@@ -212,8 +212,34 @@ describe('useActionDraft', () => {
     expect(result.current.resolved).toBe(legal[1]);
   });
 
-  it('loan/pass 无参数：choose 即 resolved', () => {
+  it('建造产业预选:高亮只留该产业槽位,点槽在预选产业内解析', () => {
     const f = freshFixture();
+    const card = locationCard(f);
+    const { result } = renderDraft(f, card.id);
+    // 选一个候选里存在的产业
+    const ind = result.current.candidates.find((a) => a.type === 'build')!;
+    const industry = (ind as { industry: IndustryType }).industry;
+    act(() => result.current.pickIndustry(industry));
+    expect(result.current.buildIndustry).toBe(industry);
+    // 所有高亮槽位都接受该产业(且候选里有该产业)
+    const slots = result.current.highlights.slots ?? [];
+    expect(slots.length).toBeGreaterThan(0);
+    for (const s of slots) {
+      const at = buildCandidatesAt(result.current.candidates, s.location, s.slotIndex);
+      expect(at.some((a) => a.industry === industry)).toBe(true);
+    }
+    // 点槽:即使槽位印多产业,也只在预选产业内解析 → 直接 resolved
+    const target = slots[0]!;
+    act(() => result.current.clickSlot(target.location, target.slotIndex));
+    expect(result.current.buildChoices).toEqual([]);
+    expect(result.current.resolved?.type).toBe('build');
+    expect((result.current.resolved as { industry: IndustryType }).industry).toBe(industry);
+    // 再点同一产业 = 取消预选
+    act(() => result.current.pickIndustry(industry));
+    expect(result.current.buildIndustry).toBeNull();
+  });
+
+  it('loan/pass 无参数：choose 即 resolved', () => {    const f = freshFixture();
     const card = locationCard(f);
     const { result } = renderDraft(f, card.id);
     const loan = result.current.candidates.find((a) => a.type === 'loan');
@@ -252,6 +278,8 @@ function draftFixture(overrides: Partial<ActionDraft> = {}): ActionDraft {
     sellTile: null,
     buildChoices: [],
     buildPreview: null,
+    buildIndustry: null,
+    pickIndustry: () => {},
     beerMatches: [],
     resolved: null,
     clickSlot: () => {},
@@ -306,6 +334,29 @@ describe('<ActionBar>', () => {
     );
     expect(screen.getByTestId('select-card-hint')).toBeInTheDocument();
     expect(screen.getByTestId('confirm-action')).toBeDisabled();
+  });
+
+  it('未选牌:常驻行动行全部压灰(row-disabled)', () => {
+    render(
+      <ActionBar
+        myTurn
+        waitingFor="甲"
+        selectedCard={null}
+        hand={[]}
+        draft={draftFixture()}
+        state={filterStateFor(newGame(4, 42), 0)}
+        turnHold={null}
+        seat={0}
+        canResetTurn={false}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+        onEndTurn={() => {}}
+        onResetTurn={() => {}}
+      />,
+    );
+    for (const id of ['build-options', 'network-row', 'develop-options', 'sell-options', 'scout-options', 'loan-row']) {
+      expect(screen.getByTestId(id).classList.contains('row-disabled')).toBe(true);
+    }
   });
 
   it('resolved 后确认钮显示行动描述，点击触发 onConfirm', () => {

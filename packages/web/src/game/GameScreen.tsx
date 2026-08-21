@@ -18,8 +18,9 @@ import { AIIndicator } from './AIIndicator';
 import { DiscardModal } from './DiscardModal';
 import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
 import { describeAction } from './display';
+import { buildabilityFor } from './interactions';
 import { ScoreModal, useScoreHistory } from './ScoreTable';
-import { RoundInfo } from './WideLayout';
+import { EraActions, RoundInfo } from './WideLayout';
 import { SPOTLIGHT_DURATION_MS, spotlightOf } from './spotlight';
 import type { GameStore, GameStoreState, LogEntry } from './store';
 import { useGameStore } from './store';
@@ -43,6 +44,8 @@ interface GameBoardProps {
   resetNotice: { seat: PlayerIndex; n: number } | null;
   /** 各座位本时代已打出的牌(打出记录弹层用)。 */
   playedCards: Card[][];
+  /** 各座位本时代的全部行动("本时代行动"折叠记录用)。 */
+  eraActions: Action[][];
 }
 
 /** 非本人回合的固定空数组：避免每渲染新引用触发 useActionDraft 的重置 effect 死循环。 */
@@ -63,6 +66,7 @@ function GameBoard({
   remoteDrafts,
   resetNotice,
   playedCards,
+  eraActions,
 }: GameBoardProps): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx] ?? seat;
   const myTurn = current === seat && gameOver === null;
@@ -84,6 +88,11 @@ function GameBoard({
     state,
     seat,
   });
+  // 本人面板各产业可建性标注(仅本人回合;他人面板/非本人回合不显示)
+  const buildability = useMemo(
+    () => (myTurn ? buildabilityFor(state, seat, legalActions) : undefined),
+    [myTurn, state, seat, legalActions],
+  );
   // 分数构成:时代切换时自动弹出(手动关闭),头部按钮随时查阅
   const scoreHistory = useScoreHistory(state);
 
@@ -375,8 +384,9 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={current === i} compact />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={current === i} compact buildStatus={i === seat ? buildability : undefined} />
                 <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} />
+                <EraActions seat={i} actions={eraActions[i] ?? []} />
               </div>
             ))}
           </aside>
@@ -389,8 +399,9 @@ function GameBoard({
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={current === i} compact />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={current === i} compact buildStatus={i === seat ? buildability : undefined} />
                 <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} />
+                <EraActions seat={i} actions={eraActions[i] ?? []} />
               </div>
             ))}
           </aside>
@@ -399,18 +410,18 @@ function GameBoard({
         <>
           <div className="player-boards">
             {seatsBefore.map((i) => (
-              <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} />
+              <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} buildStatus={i === seat ? buildability : undefined} />
             ))}
           </div>
           <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
           {boardEl}
           {handEl}
           {actionEl}
-          <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} />
+          <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} buildStatus={buildability} />
           {seatsAfter.length > 0 ? (
             <div className="player-boards player-boards-after">
               {seatsAfter.map((i) => (
-                <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} />
+                <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} buildStatus={i === seat ? buildability : undefined} />
               ))}
             </div>
           ) : null}
@@ -446,6 +457,7 @@ export function GameScreen({ store }: { store: GameStore }): ReactElement {
       remoteDrafts={s.remoteDrafts}
       resetNotice={s.resetNotice}
       playedCards={s.playedCards}
+      eraActions={s.eraActions}
     />
   );
 }

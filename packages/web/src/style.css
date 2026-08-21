@@ -901,6 +901,48 @@ body {
   gap: 6px;
 }
 
+/* 面板下方"本时代行动"折叠记录 */
+.era-actions {
+  border: 1px solid #3a3226;
+  border-radius: 8px;
+  background: rgba(23, 26, 31, 0.55);
+  padding: 2px 10px;
+  font-size: 0.8rem;
+}
+
+.era-actions-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 4px 0;
+  border: none;
+  background: transparent;
+  color: #b3a888;
+  font: inherit;
+  cursor: pointer;
+}
+
+.era-actions-toggle:hover {
+  color: #e3d3a8;
+}
+
+.era-actions-list {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+  color: #d8cdb4;
+}
+
+.era-actions-empty {
+  margin: 0 0 6px;
+  color: #8a8068;
+}
+
 /* 侧列面板缩放适配:内容字号略降,面板图随列宽自适应 */
 .wide-col .player-board {
   font-size: 0.92rem;
@@ -1506,6 +1548,20 @@ body {
   color: #b3a888;
 }
 
+/* 常驻行动行:不可用行整行压灰 */
+.action-choices.row-disabled {
+  opacity: 0.45;
+}
+
+.action-choices .action-row-none {
+  color: #6b6353;
+}
+
+.action-choices .action-row-hint {
+  color: #8a8068;
+  font-size: 0.92em;
+}
+
 .action-choices button {
   padding: 5px 12px;
   border: 1px solid #6b5b3e;
@@ -1932,6 +1988,17 @@ body {
   width: 3.5em;
   font-size: 0.82rem;
   font-weight: 600;
+}
+
+/* 可建性标注(本人面板明细行):默认弱化色,可建造绿色 */
+.board-ind-status {
+  flex: none;
+  font-size: 0.72rem;
+  color: #8a8068;
+}
+
+.board-ind-status.ok {
+  color: #58c47b;
 }
 
 .board-ind-list {

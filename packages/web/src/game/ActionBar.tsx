@@ -65,6 +65,10 @@ export interface ActionDraft {
   buildChoices: BuildAction[];
   /** 建造预览（非贴合的预览 token 盖在目标槽位，切换城市即跟随）。 */
   buildPreview: { location: LocationId; slotIndex: number; industry: IndustryType } | null;
+  /** 建造产业预选（行动行产业按钮）：选中后棋盘高亮/点槽只解析该产业。 */
+  buildIndustry: IndustryType | null;
+  /** 预选/取消预选建造产业（再次点同一产业 = 取消）。 */
+  pickIndustry: (ind: IndustryType) => void;
   /** 啤酒匹配线(resolved 为卖货时):啤酒来源(商人位/自有酒厂)→ 卖货地点。 */
   beerMatches: { from: LocationId | MerchantId; to: LocationId }[];
   /** 唯一匹配到的可提交行动（legalActions 原对象）。 */
@@ -90,6 +94,7 @@ export function useActionDraft({
   const [scoutPicks, setScoutPicks] = useState<string[]>([]);
   const [sellTile, setSellTile] = useState<SlotRef | null>(null);
   const [buildChoices, setBuildChoices] = useState<BuildAction[]>([]);
+  const [buildIndustry, setBuildIndustry] = useState<IndustryType | null>(null);
   const [chosen, setChosen] = useState<Action | null>(null);
 
   const reset = (): void => {
@@ -98,6 +103,7 @@ export function useActionDraft({
     setScoutPicks([]);
     setSellTile(null);
     setBuildChoices([]);
+    setBuildIndustry(null);
     setChosen(null);
   };
 
@@ -116,7 +122,17 @@ export function useActionDraft({
 
   const highlights = useMemo<BoardHighlights>(() => {
     const targets = targetsFor(selectedCard, legalActions);
-    const buildSlots = buildSlotTargets(targets, state.board.slots);
+    let buildSlots = buildSlotTargets(targets, state.board.slots);
+    // 产业预选:高亮只留能落该产业的槽位
+    if (buildIndustry !== null) {
+      const ind = buildIndustry;
+      buildSlots = buildSlots.filter(
+        (s) =>
+          buildCandidatesAt(candidates, s.location, s.slotIndex).filter(
+            (a) => a.industry === ind,
+          ).length > 0,
+      );
+    }
     const slots = [...buildSlots, ...sellSlotTargets(candidates)];
     // 可建城市级高亮:所有可放置地点(与槽位高亮互补,找城更快)
     const locations = [...new Set(buildSlots.map((s) => s.location))];
@@ -140,7 +156,7 @@ export function useActionDraft({
       }
     }
     return { slots, links: [...extendableLinks(candidates, pickedLinks)], locations, beerSources };
-  }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks]);
+  }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks, buildIndustry]);
 
   const networkMatch = matchNetwork(candidates, pickedLinks);
   const sell = sellOptions(candidates);
@@ -160,7 +176,11 @@ export function useActionDraft({
         matchScout(legalActions, hand, scoutPicks));
 
   const clickSlot = (location: LocationId, slotIndex: number): void => {
-    const builds = buildCandidatesAt(candidates, location, slotIndex);
+    let builds = buildCandidatesAt(candidates, location, slotIndex);
+    // 产业预选:只在该产业内解析(槽位多产业歧义被预选消解)
+    if (buildIndustry !== null) {
+      builds = builds.filter((a) => a.industry === buildIndustry);
+    }
     if (builds.length === 1) {
       setChosen(builds[0]!);
       setBuildChoices([]);
@@ -175,6 +195,13 @@ export function useActionDraft({
     if (sells.length > 0) {
       setSellTile({ location, slotIndex });
     }
+  };
+
+  /** 产业预选切换:再点同一产业取消;切换时清掉槽位歧义与已选 build。 */
+  const pickIndustry = (ind: IndustryType): void => {
+    setBuildIndustry((prev) => (prev === ind ? null : ind));
+    setBuildChoices([]);
+    setChosen((prev) => (prev?.type === 'build' && prev.industry !== ind ? null : prev));
   };
 
   const clickLink = (linkIndex: number): void => {
@@ -268,6 +295,8 @@ export function useActionDraft({
     sellTile,
     buildChoices,
     buildPreview,
+    buildIndustry,
+    pickIndustry,
     beerMatches,
     resolved,
     clickSlot,
@@ -349,6 +378,8 @@ export function ActionBar({
   // 过:仅当该牌没有任何其他可执行行动时兜底出现(防死锁,例如贷款已不可用)
   const onlyPass =
     draft.candidates.length > 0 && draft.candidates.every((a) => a.type === 'pass');
+  // 建造行产业按钮:候选中的产业去重(按候选出现序)
+  const buildIndustries = [...new Set(builds.map((a) => a.industry))];
 
   // 啤酒实况:自己的酒厂桶(无需连通)+ 各商人位余桶
   const ownBreweries = Object.entries(state.board.slots)
@@ -395,58 +426,91 @@ export function ActionBar({
       </p>
       {selectedCard === null ? (
         <p data-testid="select-card-hint">从手牌中选一张牌，棋盘将高亮可执行的目标。</p>
-      ) : (
-        <div className="action-sections">
-          {builds.length > 0 ? (
-            <p className="action-hint">建造：点击棋盘高亮槽位。</p>
-          ) : null}
-          {draft.buildChoices.length > 0 ? (
-            <div className="action-choices" data-testid="build-choices">
-              <span>该槽位可建：</span>
-              {draft.buildChoices.map((a) => (
+      ) : null}
+      <div className="action-sections">
+        {/* 建造行:常驻;产业按钮带 等级+花费,点选后棋盘高亮只留该产业槽位 */}
+        <div className={`action-choices${builds.length === 0 ? ' row-disabled' : ''}`} data-testid="build-options">
+          <span>建造：</span>
+          {buildIndustries.length === 0 ? (
+            <span className="action-row-none">选牌后在此选产业</span>
+          ) : (
+            buildIndustries.map((ind) => {
+              const tile = state.players[seat]?.tiles.find((t) => t.industry === ind);
+              return (
                 <button
-                  key={a.industry}
+                  key={ind}
                   type="button"
-                  onClick={() => draft.choose(a)}
+                  data-testid={`build-ind-${ind}`}
+                  className={draft.buildIndustry === ind ? 'selected' : undefined}
+                  onClick={() => draft.pickIndustry(ind)}
                 >
-                  {describeAction(a)}
+                  {industryName(ind)}
+                  {tile !== undefined
+                    ? ` L${tile.level} £${tile.costMoney}${tile.costCoal > 0 ? `·煤${tile.costCoal}` : ''}${tile.costIron > 0 ? `·铁${tile.costIron}` : ''}`
+                    : ''}
                 </button>
-              ))}
-            </div>
-          ) : null}
+              );
+            })
+          )}
+          {builds.length > 0 ? <span className="action-row-hint">再点棋盘高亮槽位</span> : null}
+        </div>
+        {draft.buildChoices.length > 0 ? (
+          <div className="action-choices" data-testid="build-choices">
+            <span>该槽位可建：</span>
+            {draft.buildChoices.map((a) => (
+              <button
+                key={a.industry}
+                type="button"
+                onClick={() => draft.choose(a)}
+              >
+                {describeAction(a)}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
-          {networks.length > 0 ? (
-            <p className="action-hint" data-testid="network-progress">
-              连接：已选 {draft.pickedLinks.length} 条
+        <div className={`action-choices${networks.length === 0 ? ' row-disabled' : ''}`} data-testid="network-row">
+          <span>连接：</span>
+          {networks.length === 0 ? (
+            <span className="action-row-none">—</span>
+          ) : (
+            <span className="action-row-hint" data-testid="network-progress">
+              已选 {draft.pickedLinks.length} 条
               {draft.networkCanExtend ? '（可继续点第二条）' : ''}
               ；点高亮边，点末条撤销。
-            </p>
-          ) : null}
+            </span>
+          )}
+        </div>
 
-          {draft.developChoices.length > 0 ? (
-            <div className="action-choices" data-testid="develop-options">
-              <span>研发（1-2 块；同产业再点一次 = 研发两块）：</span>
-              {draft.developChoices.map((ind) => {
-                const count = draft.developPicks.filter((x) => x === ind).length;
-                return (
-                  <button
-                    key={ind}
-                    type="button"
-                    data-testid={`develop-opt-${ind}`}
-                    className={count > 0 ? 'selected' : undefined}
-                    onClick={() => draft.toggleDevelop(ind)}
-                  >
-                    {industryName(ind)}
-                    {count > 0 ? ` ×${count}` : ''}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
+        <div className={`action-choices${draft.developChoices.length === 0 ? ' row-disabled' : ''}`} data-testid="develop-options">
+          <span>研发{draft.developChoices.length > 0 ? '（1-2 块；同产业再点一次 = 研发两块）' : ''}：</span>
+          {draft.developChoices.length === 0 ? (
+            <span className="action-row-none">—</span>
+          ) : (
+            draft.developChoices.map((ind) => {
+              const count = draft.developPicks.filter((x) => x === ind).length;
+              return (
+                <button
+                  key={ind}
+                  type="button"
+                  data-testid={`develop-opt-${ind}`}
+                  className={count > 0 ? 'selected' : undefined}
+                  onClick={() => draft.toggleDevelop(ind)}
+                >
+                  {industryName(ind)}
+                  {count > 0 ? ` ×${count}` : ''}
+                </button>
+              );
+            })
+          )}
+        </div>
 
-          {draft.sellSingles.length > 0 || draft.sellFullSet !== null ? (
-            <div className="action-choices" data-testid="sell-options">
-              <span>出售：</span>
+        <div className={`action-choices${draft.sellSingles.length === 0 && draft.sellFullSet === null ? ' row-disabled' : ''}`} data-testid="sell-options">
+          <span>出售：</span>
+          {draft.sellSingles.length === 0 && draft.sellFullSet === null ? (
+            <span className="action-row-none">—</span>
+          ) : (
+            <>
               {draft.sellSingles.map((a, i) => (
                 <button
                   key={describeAction(a)}
@@ -466,49 +530,51 @@ export function ActionBar({
                   {describeAction(draft.sellFullSet)}
                 </button>
               ) : null}
-            </div>
-          ) : null}
-
-          {draft.scoutAvailable ? (
-            <div className="action-choices" data-testid="scout-options">
-              <span>侦察：选 3 张弃牌（已选 {draft.scoutPicks.length}/3）</span>
-              {hand.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  data-testid={`scout-card-${c.id}`}
-                  className={draft.scoutPicks.includes(c.id) ? 'selected' : undefined}
-                  disabled={draft.scoutPicks.length >= 3 && !draft.scoutPicks.includes(c.id)}
-                  onClick={() => draft.toggleScoutCard(c.id)}
-                >
-                  {cardName(c)}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          {loan !== undefined || onlyPass ? (
-            <div className="action-choices">
-              {loan !== undefined ? (
-                <>
-                  <span>贷款：</span>
-                  <button type="button" data-testid="quick-loan" onClick={() => draft.choose(loan)}>
-                    £30（收入 −3 级）
-                  </button>
-                </>
-              ) : null}
-              {onlyPass && pass !== undefined ? (
-                <>
-                  <span>其他：</span>
-                  <button type="button" data-testid="quick-pass" onClick={() => draft.choose(pass)}>
-                    {describeAction(pass)}
-                  </button>
-                </>
-              ) : null}
-            </div>
-          ) : null}
+            </>
+          )}
         </div>
-      )}
+
+        <div className={`action-choices${draft.scoutAvailable ? '' : ' row-disabled'}`} data-testid="scout-options">
+          <span>侦察{draft.scoutAvailable ? `：选 3 张弃牌（已选 ${draft.scoutPicks.length}/3）` : '：'}</span>
+          {!draft.scoutAvailable ? (
+            <span className="action-row-none">—</span>
+          ) : (
+            hand.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                data-testid={`scout-card-${c.id}`}
+                className={draft.scoutPicks.includes(c.id) ? 'selected' : undefined}
+                disabled={draft.scoutPicks.length >= 3 && !draft.scoutPicks.includes(c.id)}
+                onClick={() => draft.toggleScoutCard(c.id)}
+              >
+                {cardName(c)}
+              </button>
+            ))
+          )}
+        </div>
+
+        <div className={`action-choices${loan === undefined && !onlyPass ? ' row-disabled' : ''}`} data-testid="loan-row">
+          <span>贷款：</span>
+          {loan === undefined && !onlyPass ? (
+            <span className="action-row-none">—</span>
+          ) : (
+            <>
+              {loan !== undefined ? (
+                <button type="button" data-testid="quick-loan" onClick={() => draft.choose(loan)}>
+                  £30（收入 −3 级）
+                </button>
+              ) : null}
+              {/* 过:仅当该牌没有任何其他可执行行动时兜底出现,防死锁 */}
+              {onlyPass && pass !== undefined ? (
+                <button type="button" data-testid="quick-pass" onClick={() => draft.choose(pass)}>
+                  {describeAction(pass)}
+                </button>
+              ) : null}
+            </>
+          )}
+        </div>
+      </div>
 
       <div className="action-confirm">
         {hints.map((h) => (

@@ -395,3 +395,37 @@ export function describeAction(action: Action): string {
       return '过';
   }
 }
+
+/**
+ * 各产业当前可建性标注（玩家面板明细行用,brassforge 同款"✓ 可建造/缺……"）:
+ * - 板块已用尽:该产业面板堆叠已空;
+ * - ✓ 可建造:legalActions 中存在该产业的 build(已有可用的牌+资源+槽位);
+ * - 还需 £N:面板顶板块现金成本超过当前现金;
+ * - 暂不可建:其余(无匹配空槽/不在网络内/缺煤铁——精确归因需引擎支持,先给兜底)。
+ */
+export function buildabilityFor(
+  state: FilteredState,
+  seat: PlayerIndex,
+  legalActions: readonly Action[],
+): Partial<Record<IndustryType, string>> {
+  const self = state.players[seat];
+  if (self === undefined) return {};
+  const out: Partial<Record<IndustryType, string>> = {};
+  for (const ind of INDUSTRY_ORDER) {
+    const top = self.tiles.find((t) => t.industry === ind);
+    if (top === undefined) {
+      out[ind] = '板块已用尽';
+      continue;
+    }
+    if (legalActions.some((a) => a.type === 'build' && a.industry === ind)) {
+      out[ind] = '✓ 可建造';
+      continue;
+    }
+    if (top.costMoney > self.money) {
+      out[ind] = `还需 £${top.costMoney - self.money}`;
+      continue;
+    }
+    out[ind] = '暂不可建';
+  }
+  return out;
+}
