@@ -18,8 +18,9 @@ import { AIIndicator } from './AIIndicator';
 import { DiscardModal } from './DiscardModal';
 import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
 import { describeAction } from './display';
+import { buildabilityFor, reconstructEraLog } from './interactions';
 import { ScoreModal, useScoreHistory } from './ScoreTable';
-import { RoundInfo } from './WideLayout';
+import { EraActions, RoundInfo } from './WideLayout';
 import { SPOTLIGHT_DURATION_MS, spotlightOf } from './spotlight';
 import type { GameStore, GameStoreState, LogEntry } from './store';
 import { useGameStore } from './store';
@@ -43,6 +44,8 @@ interface GameBoardProps {
   resetNotice: { seat: PlayerIndex; n: number } | null;
   /** 各座位本时代已打出的牌(打出记录弹层用)。 */
   playedCards: Card[][];
+  /** 各座位本时代的全部行动("本时代行动"折叠记录用)。 */
+  eraActions: Action[][];
 }
 
 /** 非本人回合的固定空数组：避免每渲染新引用触发 useActionDraft 的重置 effect 死循环。 */
@@ -63,9 +66,12 @@ function GameBoard({
   remoteDrafts,
   resetNotice,
   playedCards,
+  eraActions,
 }: GameBoardProps): ReactElement {
   const current = state.turnOrder[state.currentPlayerIdx] ?? seat;
-  const myTurn = current === seat && gameOver === null;
+  // 上家回合仍被扣住(turnHold)时,即使轮到自己也不能行动——服务端会拒
+  // (awaiting-turn-confirm);此时按"等待确认"显示,避免误以为行动被退回
+  const myTurn = current === seat && gameOver === null && turnHold === null;
   // 宽屏四个侧列面板按**初始顺位**固定位置(不随每轮顺位重排而换位);
   // 信息行里的顺位徽标仍按当前轮顺位显示。
   const fixedSeatsRef = useRef<PlayerIndex[] | null>(null);
@@ -84,6 +90,11 @@ function GameBoard({
     state,
     seat,
   });
+  // 本人面板各产业可建性标注(仅本人回合;他人面板/非本人回合不显示)
+  const buildability = useMemo(
+    () => (myTurn ? buildabilityFor(state, seat, legalActions) : undefined),
+    [myTurn, state, seat, legalActions],
+  );
   // 分数构成:时代切换时自动弹出(手动关闭),头部按钮随时查阅
   const scoreHistory = useScoreHistory(state);
 
@@ -121,15 +132,13 @@ function GameBoard({
     store.sendDraft(ownDraft);
   }, [store, ownDraft]);
 
-  // 播报舞台：三类播报同一舞台——行动聚光灯(action)/轮次·时代·重置播报(round)/
-  // 他人暂存播报(draft)。同一时刻只播一条,每条 5 秒:
-  // - action/round:空闲即播,否则排队(串行,不叠加);
-  // - draft:立即抢占在播条目——"已暂存就播报,改操作直接替换"(被抢占的在播
-  //   条目丢弃,队列不动);确认行动时该玩家的 draft 原位转正为 action。
+  // 播报舞台：两类播报同一舞台串行播放——行动聚光灯(action)/轮次·时代·重置播报(round)。
+  // 同一时刻只播一条,每条 5 秒;播报中到达的新条目排队等播完。
+  // 注:他人的**暂存**不播报(只在地图上渲染幽灵落子),确认后的行动才播(action);
+  // "重置本回合"保留全场播报(round)。
   type StageItem =
     | (ActionSpotlight & { kind: 'action'; text: string })
-    | { kind: 'round'; text: string }
-    | { kind: 'draft'; seat: PlayerIndex; text: string };
+    | { kind: 'round'; text: string };
   const [stage, setStage] = useState<StageItem | null>(null);
   const stageQueueRef = useRef<StageItem[]>([]);
   const stageRef = useRef<StageItem | null>(null);
@@ -148,28 +157,24 @@ function GameBoard({
     if (stageRef.current === null) setStageBoth(item);
     else stageQueueRef.current.push(item);
   };
-  const preemptStage = (item: StageItem): void => setStageBoth(item);
-  const clearDraftStage = (draftSeat: PlayerIndex): void => {
-    if (stageRef.current?.kind === 'draft' && stageRef.current.seat === draftSeat) advanceStage();
-  };
 
-  // 最新一条 action_applied → 行动聚光灯(在播该玩家暂存播报时原位转正,否则排队)
-  const lastEntry = log[log.length - 1];
-  const lastSeq = lastEntry?.seq;
+  // 行动聚光灯：逐条消费日志流(不以"最后一条"为触发键——AI 行动一帧内连发时,
+  // React 合并渲染会让中间行动丢播报;每条行动都入队,各播 5 秒)。
+  // resetTurn 后序号回退(seq 变小):重置消费水位;store 已剔除被撤销的日志条目。
+  const consumedSeqRef = useRef(-1);
   useEffect(() => {
-    if (lastEntry === undefined) return;
-    const item: StageItem = {
-      kind: 'action',
-      ...spotlightOf(lastEntry.player, lastEntry.action),
-      text: describeAction(lastEntry.action),
-    };
-    if (stageRef.current?.kind === 'draft' && stageRef.current.seat === lastEntry.player) {
-      setStageBoth(item);
-    } else {
-      pushStage(item);
+    if (seq < consumedSeqRef.current) consumedSeqRef.current = seq - 1;
+    for (const e of log) {
+      if (e.seq <= consumedSeqRef.current) continue;
+      consumedSeqRef.current = e.seq;
+      pushStage({
+        kind: 'action',
+        ...spotlightOf(e.player, e.action),
+        text: describeAction(e.action),
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastSeq]);
+  }, [log, seq]);
 
   // 新一轮/新时代红字播放入队：round 递增或 era 切换时触发;首帧不播
   const prevRoundRef = useRef<{ era: string; round: number } | null>(null);
@@ -185,24 +190,33 @@ function GameBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.era, state.round]);
 
-  // 他人暂存(当前行动方非本人时):播报立即抢占/替换;清除时若在播则切下一条
+  // 行动日志补全:resume 后客户端 log 只有残尾——用 eraActions 按回合结构
+  // (运河首轮各 1 动,其余各 2 动,turnOrder 轮转)重建全时代日志,残尾与实时
+  // log 对齐合并(AI reason 等字段保留)。
+  const displayLog = useMemo<LogEntry[]>(() => {
+    const history = reconstructEraLog(state, eraActions);
+    if (history.length <= log.length) return log;
+    const offset = history.length - log.length;
+    return history.map((h, i) => {
+      const live = i >= offset ? log[i - offset] : undefined;
+      return {
+        seq: i,
+        player: h.player,
+        action: h.action,
+        events: live?.events ?? [],
+        ...(live?.reason !== undefined ? { reason: live.reason } : {}),
+        ...(live?.degraded !== undefined ? { degraded: live.degraded } : {}),
+      };
+    });
+  }, [state, eraActions, log]);
+
+  // 他人暂存(当前行动方非本人时):只取幽灵落子数据,不入播报舞台
   const remoteDraftSeat = current !== seat ? current : null;
   const remoteDraft = remoteDraftSeat !== null ? remoteDrafts[remoteDraftSeat] : undefined;
-  const remoteDraftText = remoteDraft?.text ?? null;
-  useEffect(() => {
-    if (remoteDraftSeat === null) return;
-    if (remoteDraftText === null) {
-      clearDraftStage(remoteDraftSeat);
-      return;
-    }
-    preemptStage({ kind: 'draft', seat: remoteDraftSeat, text: remoteDraftText });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remoteDraftText, remoteDraftSeat]);
 
-  // "X 已重置本回合"全场播报(清其暂存播报后入队)
+  // "X 已重置本回合"全场播放入队
   useEffect(() => {
     if (resetNotice === null) return;
-    clearDraftStage(resetNotice.seat);
     pushStage({
       kind: 'round',
       text: `${playerName(room ?? undefined, resetNotice.seat)} 已重置本回合`,
@@ -213,8 +227,10 @@ function GameBoard({
   const spotlight: (ActionSpotlight & { text: string }) | null =
     stage?.kind === 'action' ? stage : null;
   const roundBanner: string | null = stage?.kind === 'round' ? stage.text : null;
-  const draftBanner: { seat: PlayerIndex; text: string } | null =
-    stage?.kind === 'draft' ? stage : null;
+
+  // 高亮跟随播报:播谁的行动就高亮谁(5 秒全程,直到播完才切换);队列空时回到
+  // 实际当前玩家——人类回合于是从思考一直亮到点"结束回合"。面板发光与头像光圈统一。
+  const highlightSeat: PlayerIndex = spotlight !== null ? spotlight.player : current;
 
   // 布局模式:经典 / 宽屏(27 寸全屏,地图居中,左右两列面板全部铺开)
   const storage = typeof localStorage === 'undefined' ? null : localStorage;
@@ -248,12 +264,14 @@ function GameBoard({
         state={state}
         highlights={myTurn ? draft.highlights : undefined}
         spotlight={spotlight}
+        highlightSeat={highlightSeat}
         thinkingSeats={thinkingSeats}
         buildPreview={ghostBuild}
         beerMatches={ghostBeerMatches.length > 0 ? ghostBeerMatches : undefined}
         linkPreview={ghostLinks}
         onSlotClick={myTurn ? draft.clickSlot : undefined}
         onLinkClick={myTurn ? draft.clickLink : undefined}
+        onMerchantClick={myTurn ? draft.clickMerchant : undefined}
       />
       {spotlight !== null ? (
         <div className="action-spotlight-banner" data-testid="action-spotlight">
@@ -262,15 +280,6 @@ function GameBoard({
             style={{ background: PLAYER_COLORS[spotlight.player] ?? '#7f8c8d' }}
           />
           {playerName(room ?? undefined, spotlight.player)}：{spotlight.text}
-        </div>
-      ) : null}
-      {draftBanner !== null ? (
-        <div className="action-spotlight-banner draft-banner" data-testid="draft-spotlight">
-          <span
-            className="spotlight-dot"
-            style={{ background: PLAYER_COLORS[draftBanner.seat] ?? '#7f8c8d' }}
-          />
-          {playerName(room ?? undefined, draftBanner.seat)}：{draftBanner.text}（暂存）
         </div>
       ) : null}
       {roundBanner !== null ? (
@@ -375,8 +384,9 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={current === i} compact />
-                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} />
+                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} active={highlightSeat === i} />
+                <EraActions seat={i} actions={eraActions[i] ?? []} />
               </div>
             ))}
           </aside>
@@ -389,8 +399,9 @@ function GameBoard({
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={current === i} compact />
-                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} />
+                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} active={highlightSeat === i} />
+                <EraActions seat={i} actions={eraActions[i] ?? []} />
               </div>
             ))}
           </aside>
@@ -399,24 +410,24 @@ function GameBoard({
         <>
           <div className="player-boards">
             {seatsBefore.map((i) => (
-              <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} />
+              <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} buildStatus={i === seat ? buildability : undefined} />
             ))}
           </div>
           <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
           {boardEl}
           {handEl}
           {actionEl}
-          <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} />
+          <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} buildStatus={buildability} />
           {seatsAfter.length > 0 ? (
             <div className="player-boards player-boards-after">
               {seatsAfter.map((i) => (
-                <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} />
+                <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} buildStatus={i === seat ? buildability : undefined} />
               ))}
             </div>
           ) : null}
         </>
       )}
-      <LogPanel log={log} room={room ?? undefined} />
+      <LogPanel log={displayLog} room={room ?? undefined} />
     </div>
   );
 }
@@ -446,6 +457,7 @@ export function GameScreen({ store }: { store: GameStore }): ReactElement {
       remoteDrafts={s.remoteDrafts}
       resetNotice={s.resetNotice}
       playedCards={s.playedCards}
+      eraActions={s.eraActions}
     />
   );
 }

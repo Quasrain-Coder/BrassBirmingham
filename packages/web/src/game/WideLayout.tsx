@@ -4,7 +4,8 @@
  * (顺位、回合前金钱-开销-回合后金钱、本回合两动)。地图底下是我方手牌与行动。
  */
 import type { ReactElement, CSSProperties } from 'react';
-import type { PlayerIndex } from '@brass/engine';
+import { useState } from 'react';
+import type { Action, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { PLAYER_COLORS } from '../board/BoardSvg';
 import { describeAction } from './display';
@@ -28,34 +29,75 @@ export function RoundInfo({
   seq,
   log,
   room,
+  active,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
   seq: number;
   log: LogEntry[];
   room: RoomState | null;
+  /** 高亮覆盖(跟随播报舞台);缺省按当前行动玩家。 */
+  active?: boolean | undefined;
 }): ReactElement {
   const p = state.players[seat]!;
   const rank = state.turnOrder.indexOf(seat) + 1;
   const start = roundStartSeq(state, seq);
   const acts = log.filter((e) => e.seq >= start && e.player === seat);
-  const active = state.turnOrder[state.currentPlayerIdx] === seat;
+  const isActive = active ?? state.turnOrder[state.currentPlayerIdx] === seat;
   return (
     <div
-      className={`round-info${active ? ' active' : ''}`}
+      className={`round-info${isActive ? ' active' : ''}`}
       data-testid={`round-info-${seat}`}
-      style={active ? ({ '--pulse-color': PLAYER_COLORS[seat] } as CSSProperties) : undefined}
+      style={isActive ? ({ '--pulse-color': PLAYER_COLORS[seat] } as CSSProperties) : undefined}
     >
       <span className="round-info-rank" style={{ borderColor: PLAYER_COLORS[seat] }}>
         {rank === -1 ? '—' : `#${rank}`}
       </span>
       <span className="round-info-spent">开销 £{p.spentThisRound}</span>
-      <span
-        className="round-info-acts"
-        title={acts.length > 0 ? acts.map((a) => describeAction(a.action)).join('；') : '本回合未行动'}
-      >
+      <span className="round-info-acts">
         {acts.length > 0 ? acts.map((a) => describeAction(a.action)).join('；') : '本回合未行动'}
       </span>
+      {acts.length > 0 ? (
+        <span className="round-info-tip">{acts.map((a) => describeAction(a.action)).join('；')}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * 面板下方的"本时代行动"折叠记录:展开后按顺序列出该玩家本时代全部行动
+ * (与日志同级简洁度;数据来自快照 eraActions,resume/重放后仍完整)。
+ */
+export function EraActions({
+  seat,
+  actions,
+}: {
+  seat: PlayerIndex;
+  actions: Action[];
+}): ReactElement {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="era-actions" data-testid={`era-actions-${seat}`}>
+      <button
+        type="button"
+        className="era-actions-toggle"
+        data-testid={`era-actions-toggle-${seat}`}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        本时代 {actions.length} 动<span className="board-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
+      </button>
+      {open ? (
+        actions.length === 0 ? (
+          <p className="era-actions-empty">本时代尚未行动</p>
+        ) : (
+          <ol className="era-actions-list">
+            {actions.map((a, i) => (
+              <li key={i}>{describeAction(a)}</li>
+            ))}
+          </ol>
+        )
+      ) : null}
     </div>
   );
 }

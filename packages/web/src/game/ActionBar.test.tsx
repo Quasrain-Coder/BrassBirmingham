@@ -6,7 +6,7 @@
 import { act, render, renderHook, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { enumerateActions, newGame, tileDef } from '@brass/engine';
-import type { Action, Card, GameState } from '@brass/engine';
+import type { Action, Card, GameState, IndustryType } from '@brass/engine';
 import { filterStateFor } from '@brass/protocol';
 import type { FilteredState } from '@brass/protocol';
 import { ActionBar, useActionDraft } from './ActionBar';
@@ -212,8 +212,114 @@ describe('useActionDraft', () => {
     expect(result.current.resolved).toBe(legal[1]);
   });
 
-  it('loan/pass 无参数：choose 即 resolved', () => {
+  it('建造产业预选:高亮只留该产业槽位,点槽在预选产业内解析', () => {
     const f = freshFixture();
+    const card = locationCard(f);
+    const { result } = renderDraft(f, card.id);
+    // 选一个候选里存在的产业
+    const ind = result.current.candidates.find((a) => a.type === 'build')!;
+    const industry = (ind as { industry: IndustryType }).industry;
+    act(() => result.current.pickIndustry(industry));
+    expect(result.current.buildIndustry).toBe(industry);
+    // 所有高亮槽位都接受该产业(且候选里有该产业)
+    const slots = result.current.highlights.slots ?? [];
+    expect(slots.length).toBeGreaterThan(0);
+    for (const s of slots) {
+      const at = buildCandidatesAt(result.current.candidates, s.location, s.slotIndex);
+      expect(at.some((a) => a.industry === industry)).toBe(true);
+    }
+    // 点槽:即使槽位印多产业,也只在预选产业内解析 → 直接 resolved
+    const target = slots[0]!;
+    act(() => result.current.clickSlot(target.location, target.slotIndex));
+    expect(result.current.buildChoices).toEqual([]);
+    expect(result.current.resolved?.type).toBe('build');
+    expect((result.current.resolved as { industry: IndustryType }).industry).toBe(industry);
+    // 再点同一产业 = 取消预选
+    act(() => result.current.pickIndustry(industry));
+    expect(result.current.buildIndustry).toBeNull();
+  });
+
+  it('双-双图标槽:点右槽附显式 slotIndex,预览落右槽', () => {
+    const f = freshFixture();
+    const legal: Action[] = [
+      { type: 'build', cardId: 'c1', industry: 'brewery', location: 'uttoxeter' },
+    ];
+    const { result } = renderDraft(f, 'c1', legal);
+    // 乌托科斯特 [manufacturer+brewery, cotton+brewery]:无双图标优先级约束,可自选
+    act(() => result.current.clickSlot('uttoxeter', 1));
+    const chosen = result.current.resolved as Extract<Action, { type: 'build' }>;
+    expect(chosen.slotIndex).toBe(1);
+    expect(result.current.buildPreview?.slotIndex).toBe(1);
+    // 点规范化槽(左,0)则不附显式,保持 legalActions 原对象
+    act(() => result.current.reset());
+    act(() => result.current.clickSlot('uttoxeter', 0));
+    expect(result.current.resolved).toBe(legal[0]);
+    expect((result.current.resolved as { slotIndex?: number }).slotIndex).toBeUndefined();
+    expect(result.current.buildPreview?.slotIndex).toBe(0);
+  });
+
+  it('单图标优先:点双图标槽不附显式,预览规范化到单图标槽', () => {
+    const f = freshFixture();
+    const legal: Action[] = [
+      { type: 'build', cardId: 'c1', industry: 'manufacturer', location: 'stoke-on-trent' },
+    ];
+    const { result } = renderDraft(f, 'c1', legal);
+    // 斯托克 [cotton+manufacturer(双0), pottery+iron, manufacturer(单2)]
+    act(() => result.current.clickSlot('stoke-on-trent', 0));
+    expect(result.current.resolved).toBe(legal[0]); // 原对象,无显式 slotIndex
+    expect(result.current.buildPreview?.slotIndex).toBe(2); // 规范化到单图标槽
+  });
+
+  it('分组卖出:建筑→贸易商→啤酒逐桶,收组后 resolved 为带 beerSources 的自定义 sell', () => {
+    const f = freshFixture();
+    // 摆:自己 birmingham 棉 L1(需 1 酒)、derby 自家酒厂 1 桶;oxford 商人 1 桶
+    const cotton = tileDef('cotton', 1)!;
+    const brew = tileDef('brewery', 1)!;
+    f.state.board.slots['birmingham']![0] = { tile: cotton, player: 0, flipped: false, resources: 0 };
+    f.state.board.slots['derby']![0] = { tile: brew, player: 0, flipped: false, resources: 1 };
+    f.state.board.links.push({ linkIndex: 5, player: 0, era: 'canal' }); // birmingham-oxford
+    f.state.merchants.oxford = { tiles: ['any'], beer: 1 };
+    const legal: Action[] = [
+      {
+        type: 'sell',
+        cardId: 'c1',
+        sales: [{ location: 'birmingham', slotIndex: 0, merchant: 'oxford', useMerchantBeer: true }],
+      },
+    ];
+    const { result } = renderDraft(f, 'c1', legal);
+
+    // 顺序约束:先点酒厂无效(未选建筑)
+    act(() => result.current.clickSlot('derby', 0));
+    expect(result.current.sellBeer).toEqual([]);
+
+    // 图上点自己可卖板块 = 选本组建筑
+    act(() => result.current.clickSlot('birmingham', 0));
+    expect(result.current.sellTile).toEqual({ location: 'birmingham', slotIndex: 0 });
+    // 选贸易商 → 商人桶切选 → 酒厂桶计数
+    act(() => result.current.pickSellMerchant('oxford'));
+    act(() => result.current.toggleSellMerchantBarrel());
+    expect(result.current.sellBeer).toEqual([{ kind: 'merchant' }]);
+    // 需求 1 酒:换成自家酒厂桶
+    act(() => result.current.toggleSellMerchantBarrel()); // 撤商人桶
+    act(() => result.current.setSellBreweryCount({ location: 'derby', slotIndex: 0 }, 1));
+    expect(result.current.sellBeer).toEqual([{ kind: 'brewery', location: 'derby', slotIndex: 0 }]);
+    // 当前组选齐(未收组):确认也已可亮——resolved 直接含当前组
+    expect(result.current.resolved?.type).toBe('sell');
+    expect((result.current.resolved as Extract<Action, { type: 'sell' }>).sales).toHaveLength(1);
+    // 收下本组 → resolved 为自定义 sell(带 beerSources)
+    act(() => result.current.commitSellGroup());
+    expect(result.current.sellGroups).toHaveLength(1);
+    const resolved = result.current.resolved as Extract<Action, { type: 'sell' }>;
+    expect(resolved.type).toBe('sell');
+    expect(resolved.sales).toHaveLength(1);
+    expect(resolved.sales[0]!.beerSources).toEqual([{ kind: 'brewery', location: 'derby', slotIndex: 0 }]);
+    expect(resolved.sales[0]!.useMerchantBeer).toBe(false);
+    // 下一组可选剩余板块;移除组后 resolved 清空
+    act(() => result.current.removeSellGroup(0));
+    expect(result.current.resolved).toBeNull();
+  });
+
+  it('loan/pass 无参数：choose 即 resolved', () => {    const f = freshFixture();
     const card = locationCard(f);
     const { result } = renderDraft(f, card.id);
     const loan = result.current.candidates.find((a) => a.type === 'loan');
@@ -250,8 +356,20 @@ function draftFixture(overrides: Partial<ActionDraft> = {}): ActionDraft {
     sellSingles: [],
     sellFullSet: null,
     sellTile: null,
+    sellGroups: [],
+    sellMerchant: null,
+    sellBeer: [],
+    pickSellTile: () => {},
+    pickSellMerchant: () => {},
+    toggleSellMerchantBarrel: () => {},
+    setSellBreweryCount: () => {},
+    commitSellGroup: () => {},
+    removeSellGroup: () => {},
+    clickMerchant: () => {},
     buildChoices: [],
     buildPreview: null,
+    buildIndustry: null,
+    pickIndustry: () => {},
     beerMatches: [],
     resolved: null,
     clickSlot: () => {},
@@ -306,6 +424,58 @@ describe('<ActionBar>', () => {
     );
     expect(screen.getByTestId('select-card-hint')).toBeInTheDocument();
     expect(screen.getByTestId('confirm-action')).toBeDisabled();
+  });
+
+  it('未选牌:常驻行动行全部压灰(row-disabled)', () => {
+    render(
+      <ActionBar
+        myTurn
+        waitingFor="甲"
+        selectedCard={null}
+        hand={[]}
+        draft={draftFixture()}
+        state={filterStateFor(newGame(4, 42), 0)}
+        turnHold={null}
+        seat={0}
+        canResetTurn={false}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+        onEndTurn={() => {}}
+        onResetTurn={() => {}}
+      />,
+    );
+    for (const id of ['build-options', 'network-row', 'develop-options', 'sell-options', 'scout-options', 'loan-row']) {
+      expect(screen.getByTestId(id).classList.contains('row-disabled')).toBe(true);
+    }
+  });
+
+  it('现金实时标记:默认显示当前现金;暂存贷款后预览 +£30,取消恢复', () => {
+    const state = filterStateFor(newGame(4, 42), 0);
+    const loan: Action = { type: 'loan', cardId: 'c1' };
+    const barProps = {
+      myTurn: true,
+      waitingFor: '甲',
+      selectedCard: 'c1',
+      hand: [],
+      state,
+      turnHold: null,
+      seat: 0 as const,
+      canResetTurn: false,
+      onConfirm: () => {},
+      onCancel: () => {},
+      onEndTurn: () => {},
+      onResetTurn: () => {},
+    };
+    const { rerender } = render(<ActionBar {...barProps} draft={draftFixture()} />);
+    const chip = screen.getByTestId('action-money');
+    expect(chip).toHaveTextContent('£17');
+    expect(chip).not.toHaveTextContent('→');
+    // 暂存贷款 → 预览 £17 → £47
+    rerender(<ActionBar {...barProps} draft={draftFixture({ resolved: loan, candidates: [loan] })} />);
+    expect(screen.getByTestId('action-money')).toHaveTextContent('£17→ £47');
+    // 取消(resolved 清空)→ 恢复 £17
+    rerender(<ActionBar {...barProps} draft={draftFixture()} />);
+    expect(screen.getByTestId('action-money')).not.toHaveTextContent('→');
   });
 
   it('resolved 后确认钮显示行动描述，点击触发 onConfirm', () => {

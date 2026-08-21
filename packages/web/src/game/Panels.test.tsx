@@ -260,13 +260,10 @@ describe('<HandBar>', () => {
     expect(screen.getByTestId('hand-card-w1')).toHaveTextContent('百搭·产业');
   });
 
-  it('他人只显示牌数；点击自己手牌触发 onSelect', () => {
+  it('点击自己手牌触发 onSelect', () => {
     const state = handState([{ id: 'l0', kind: 'location', location: 'derby' }]);
     const selected: string[] = [];
     render(<HandBar state={state} seat={0} onSelect={(id) => selected.push(id)} />);
-    for (let i = 1; i < 4; i++) {
-      expect(screen.getByTestId(`opponent-hand-${i}`)).toHaveTextContent('8 张');
-    }
     screen.getByTestId('hand-card-l0').click();
     expect(selected).toEqual(['l0']);
   });

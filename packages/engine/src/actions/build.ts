@@ -289,7 +289,34 @@ export function applyBuild(
   events.push(...ri.flipped);
 
   // 3. 面板取最低级板块放置；被覆盖板块连同资源直接移出游戏（退回供应）
-  const target = resolveSlot(next, player, action.location, action.industry, def)!;
+  let target = resolveSlot(next, player, action.location, action.industry, def)!;
+  // 显式槽位选择（Action.slotIndex）：仅当同地**没有**可放该产业的空单图标槽时，
+  // 允许玩家在空双图标槽之间自选（规则书 p.9 单图标优先不适用双-双情形）。
+  // 其余情况（含显式的就是规范化槽位）不影响解析结果。
+  if (action.slotIndex !== undefined && action.slotIndex !== target.slotIndex) {
+    const slotDefs = LOCATIONS[action.location]!.slots;
+    const placedNow = next.board.slots[action.location]!;
+    const explicitDef = slotDefs[action.slotIndex];
+    const singleIconEmpty = slotDefs.some(
+      (sd, i) =>
+        sd.industries.length === 1 &&
+        sd.industries.includes(action.industry) &&
+        placedNow[i] === null,
+    );
+    const legalExplicit =
+      target.overbuild === 'none' &&
+      explicitDef !== undefined &&
+      explicitDef.industries.includes(action.industry) &&
+      placedNow[action.slotIndex] === null &&
+      !singleIconEmpty;
+    if (!legalExplicit) {
+      throw new IllegalActionError(
+        'illegal-build-slot',
+        `illegal-build-slot: slot ${action.slotIndex} at ${action.location} is not a legal explicit choice for ${action.industry}`,
+      );
+    }
+    target = { slotIndex: action.slotIndex, overbuild: 'none' };
+  }
   const psNow = next.players[player]!;
   const tileIdx = psNow.tiles.findIndex((t) => t === def);
   next = withPlayer(next, player, {

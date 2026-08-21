@@ -13,8 +13,16 @@
  * - network：双轨 links 为有序对（放置顺序），两种顺序分别枚举——点击顺序即放置顺序。
  * - sell：单块全枚举 + "可卖全集"至多一个（sales.length >= 2）。
  */
-import { LINKS, LOCATIONS } from '@brass/engine';
-import type { Action, Card, IndustryType, LocationId, PlayerIndex } from '@brass/engine';
+import { LINKS, LOCATIONS, MERCHANTS, reachableFrom } from '@brass/engine';
+import type {
+  Action,
+  BeerSourceRef,
+  Card,
+  IndustryType,
+  LocationId,
+  MerchantId,
+  PlayerIndex,
+} from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { SlotRef } from '../board/BoardSvg';
 import {
@@ -394,4 +402,189 @@ export function describeAction(action: Action): string {
     case 'pass':
       return '过';
   }
+}
+
+/**
+ * 各产业当前可建性标注（玩家面板明细行用,brassforge 同款"✓ 可建造/缺……"）:
+ * - 板块已用尽:该产业面板堆叠已空;
+ * - ✓ 可建造:legalActions 中存在该产业的 build(已有可用的牌+资源+槽位);
+ * - 还需 £N:面板顶板块现金成本超过当前现金;
+ * - 暂不可建:其余(无匹配空槽/不在网络内/缺煤铁——精确归因需引擎支持,先给兜底)。
+ */
+export function buildabilityFor(
+  state: FilteredState,
+  seat: PlayerIndex,
+  legalActions: readonly Action[],
+): Partial<Record<IndustryType, string>> {
+  const self = state.players[seat];
+  if (self === undefined) return {};
+  const out: Partial<Record<IndustryType, string>> = {};
+  for (const ind of INDUSTRY_ORDER) {
+    const top = self.tiles.find((t) => t.industry === ind);
+    if (top === undefined) {
+      out[ind] = '板块已用尽';
+      continue;
+    }
+    if (legalActions.some((a) => a.type === 'build' && a.industry === ind)) {
+      out[ind] = '✓ 可建造';
+      continue;
+    }
+    if (top.costMoney > self.money) {
+      out[ind] = `还需 £${top.costMoney - self.money}`;
+      continue;
+    }
+    out[ind] = '暂不可建';
+  }
+  return out;
+}
+
+/**
+ * 显式槽位选择（bug2）：同地没有可放该产业的**空单图标槽**时，允许玩家在空双图标
+ * 槽之间自选（与 engine applyBuild 的 illegal-build-slot 校验同规则；单图标槽优先
+ * 仍强制）。返回应附到 build Action 的 slotIndex；无需/不可显式时返回 undefined。
+ */
+export function explicitBuildSlot(
+  state: FilteredState,
+  seat: PlayerIndex,
+  action: BuildAction,
+  clicked: SlotRef,
+): number | undefined {
+  if (clicked.location !== action.location) return undefined;
+  const def = state.players[seat]?.tiles.find((t) => t.industry === action.industry);
+  if (def === undefined) return undefined;
+  const resolved = resolveBuildSlot(state, seat, action.location, action.industry, def.level);
+  // 点击的已是规范化落槽 → 无需显式
+  if (resolved === null || resolved.slotIndex === clicked.slotIndex) return undefined;
+  const slotDefs = LOCATIONS[action.location]?.slots;
+  const placed = state.board.slots[action.location];
+  if (!slotDefs || !placed) return undefined;
+  // 规范化落点须为空槽放置（overbuild 情形不允许显式改槽）
+  if (placed[resolved.slotIndex] !== null) return undefined;
+  // 点击槽须为空且接收该产业
+  const clickedDef = slotDefs[clicked.slotIndex];
+  if (clickedDef === undefined || !clickedDef.industries.includes(action.industry)) return undefined;
+  if (placed[clicked.slotIndex] !== null) return undefined;
+  // 单图标槽优先:存在空单图标槽时显式选双图标槽非法
+  const singleIconEmpty = slotDefs.some(
+    (sd, i) =>
+      sd.industries.length === 1 && sd.industries.includes(action.industry) && placed[i] === null,
+  );
+  if (singleIconEmpty) return undefined;
+  return clicked.slotIndex;
+}
+
+// ---------------------------------------------------------------------------
+// Sell 分组选择器(2026-08-21):建筑 → 贸易商 → 逐桶啤酒源,一组组拼自定义 sales
+// ---------------------------------------------------------------------------
+
+export interface SellableTileRef extends SlotRef {
+  industry: IndustryType;
+  level: number;
+  beerToFlip: number;
+}
+
+/** 本人场上未翻面的可卖板块(棉/制造/陶),按地点字典序+槽位序。 */
+export function sellableTilesFor(state: FilteredState, seat: PlayerIndex): SellableTileRef[] {
+  const out: SellableTileRef[] = [];
+  for (const [loc, slots] of Object.entries(state.board.slots)) {
+    for (let i = 0; i < slots.length; i++) {
+      const t = slots[i];
+      if (t && t.player === seat && !t.flipped && t.tile.sellable) {
+        out.push({
+          location: loc as LocationId,
+          slotIndex: i,
+          industry: t.tile.industry,
+          level: t.tile.level,
+          beerToFlip: t.tile.beerToFlip,
+        });
+      }
+    }
+  }
+  out.sort((a, b) => (a.location < b.location ? -1 : a.location > b.location ? 1 : 0) || a.slotIndex - b.slotIndex);
+  return out;
+}
+
+/** 该板块可卖向的商人位:可达(当前时代已建边)且图标匹配('any' 收任意;'blank' 不算)。 */
+export function merchantsForTile(state: FilteredState, tile: SlotRef): MerchantId[] {
+  const reach = reachableFrom(state as unknown as import('@brass/engine').GameState, [tile.location]);
+  const placed = state.board.slots[tile.location]?.[tile.slotIndex];
+  if (placed == null) return [];
+  return (Object.keys(MERCHANTS) as MerchantId[]).filter((id) => {
+    if (!reach.has(id)) return false;
+    const m = state.merchants[id];
+    return m.tiles.some((t) => t === 'any' || t === placed.tile.industry);
+  });
+}
+
+export interface BreweryRef extends SlotRef {
+  player: PlayerIndex;
+  barrels: number;
+}
+
+/** 啤酒源候选:商人桶(有桶时至多 1)+ 自家酒厂(无需连通)+ 对手酒厂(须连通用酒处)。 */
+export function beerSourcesFor(
+  state: FilteredState,
+  seat: PlayerIndex,
+  merchant: MerchantId,
+): { merchantBarrel: boolean; own: BreweryRef[]; opponent: BreweryRef[] } {
+  const reach = reachableFrom(state as unknown as import('@brass/engine').GameState, [merchant]);
+  const own: BreweryRef[] = [];
+  const opponent: BreweryRef[] = [];
+  for (const [loc, slots] of Object.entries(state.board.slots)) {
+    for (let i = 0; i < slots.length; i++) {
+      const t = slots[i];
+      if (!t || t.flipped || t.tile.industry !== 'brewery' || t.resources <= 0) continue;
+      const ref: BreweryRef = { location: loc as LocationId, slotIndex: i, player: t.player, barrels: t.resources };
+      if (t.player === seat) own.push(ref);
+      else if (reach.has(loc as LocationId)) opponent.push(ref);
+    }
+  }
+  return { merchantBarrel: state.merchants[merchant].beer > 0, own, opponent };
+}
+
+/** 按已选 beerSources 计算还剩多少桶可用(组内连续消耗同一酒厂不能超过其桶数)。 */
+export function beerRemaining(
+  sources: { own: BreweryRef[]; opponent: BreweryRef[] },
+  picked: BeerSourceRef[],
+): Map<string, number> {
+  const used = new Map<string, number>();
+  for (const p of picked) {
+    if (p.kind !== 'brewery') continue;
+    const k = `${p.location}:${p.slotIndex}`;
+    used.set(k, (used.get(k) ?? 0) + 1);
+  }
+  const remaining = new Map<string, number>();
+  for (const b of [...sources.own, ...sources.opponent]) {
+    const k = `${b.location}:${b.slotIndex}`;
+    remaining.set(k, b.barrels - (used.get(k) ?? 0));
+  }
+  return remaining;
+}
+
+/**
+ * 本时代完整行动日志重建（"行动日志补全"）：eraActions 是按座位分桶的有序行动,
+ * 按规则回合结构（运河首轮各 1 动,其余各 2 动,turnOrder 轮转）交错还原全局顺序。
+ * resume/重放后客户端 log 只有残尾,用它补全整个时代的日志展示。
+ */
+export function reconstructEraLog(
+  state: FilteredState,
+  eraActions: readonly (readonly Action[])[],
+): { player: PlayerIndex; action: Action }[] {
+  const out: { player: PlayerIndex; action: Action }[] = [];
+  const idx = eraActions.map(() => 0);
+  const perRound = (round: number): number => (state.era === 'canal' && round === 1 ? 1 : 2);
+  for (let round = 1; ; round += 1) {
+    let any = false;
+    for (const seat of state.turnOrder) {
+      for (let k = 0; k < perRound(round); k += 1) {
+        const a = eraActions[seat]?.[idx[seat]!];
+        if (a === undefined) break;
+        out.push({ player: seat, action: a });
+        idx[seat]! += 1;
+        any = true;
+      }
+    }
+    if (!any) break;
+  }
+  return out;
 }

@@ -13,6 +13,7 @@ export type {
   FlipEvent,
   MerchantBonusEvent,
   GameEvent,
+  BeerSourceRef,
   Action,
 } from './types.js';
 export {

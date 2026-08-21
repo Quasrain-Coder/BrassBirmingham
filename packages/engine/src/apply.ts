@@ -25,7 +25,7 @@ import { applyLoan, enumerateLoan } from './actions/loan.js';
 import { applyNetwork, enumerateNetwork } from './actions/network.js';
 import { applyPass } from './actions/pass.js';
 import { applyScout, enumerateScout } from './actions/scout.js';
-import { applySell, enumerateSells } from './actions/sell.js';
+import { applySell, enumerateSells, validateSales } from './actions/sell.js';
 import { IllegalActionError } from './errors.js';
 import { stableStringify } from './serialize.js';
 import type { GameState, PlayerState } from './state.js';
@@ -63,22 +63,41 @@ function saleKey(s: Sale): string {
 }
 
 /**
- * 规范化：sell 的 sales 排序（顺序无关）；network 剥离 beerFromOpponentBrewery
- * （apply-only 的显式啤酒来源覆盖，enumerateNetwork 从不出产——只影响与枚举集的
- * 比较，原始 action 仍带该字段传给 applyNetwork）；其余行动原样（scout cardIds
- * 顺序有语义）。
+ * 规范化：build 剥离 slotIndex（apply-only 的显式槽位选择,枚举从不产出——合法性
+ * 由 applyBuild 的 illegal-build-slot 另行校验）；sell 的 sales 排序（顺序无关）并
+ * 剥离 beerSources（apply-only 的显式啤酒来源）；network 剥离 beerFromOpponentBrewery
+ * （同前例）；其余行动原样（scout cardIds 顺序有语义）。
  */
 function normalizeAction(action: Action): Action {
   if (action.type === 'network') {
     const { beerFromOpponentBrewery: _ignored, ...rest } = action;
     return rest;
   }
+  if (action.type === 'build') {
+    const { slotIndex: _ignored, ...rest } = action;
+    return rest;
+  }
   if (action.type !== 'sell') return action;
-  return { ...action, sales: [...action.sales].sort((a, b) => (saleKey(a) < saleKey(b) ? -1 : 1)) };
+  return {
+    ...action,
+    sales: action.sales
+      .map(({ beerSources: _ignored, ...s }) => s)
+      .sort((a, b) => (saleKey(a) < saleKey(b) ? -1 : 1)),
+  };
 }
 
-/** 规范化比较：action 是否在 enumerateActions 输出内。 */
+/** 规范化比较：action 是否在 enumerateActions 输出内。sell 走组合式校验(自定义组合)。 */
 function isLegalAction(state: GameState, player: PlayerIndex, action: Action): boolean {
+  if (action.type === 'sell') {
+    // 组合式校验(applySell 同一套):行动卡须在手 + 逐块合法 + 啤酒可行
+    if (!state.players[player]!.hand.some((c) => c.id === action.cardId)) return false;
+    try {
+      validateSales(state, player, action);
+      return true;
+    } catch {
+      return false;
+    }
+  }
   const target = stableStringify(normalizeAction(action));
   return enumerateActions(state, player).some(
     (a) => stableStringify(normalizeAction(a)) === target,

@@ -76,7 +76,7 @@ describe('<GameScreen>', () => {
   });
 
   it('本人回合：选牌 → 棋盘高亮；贷款 → 确认提交 submit_action 帧', () => {
-    const { store, ws, seat } = setup(true);
+    const { store, ws, game, seat } = setup(true);
     const { container } = render(<GameScreen store={store} />);
     expect(screen.getByTestId('select-card-hint')).toBeInTheDocument();
 
@@ -103,6 +103,16 @@ describe('<GameScreen>', () => {
     expect(lastDraft.draft?.text).toContain('贷款');
     fireEvent.click(confirm);
 
+    // 服务端接受后回快照(seq 推进)→ 清选牌,暂存清除帧收尾
+    act(() => {
+      ws.emit({
+        type: 'snapshot',
+        protocolVersion: PROTOCOL_VERSION,
+        seq: 2,
+        state: filterStateFor(game, seat),
+        legalActions: [],
+      });
+    });
     // 确认后:submit_action 帧(提交的就是枚举项本身),随后一帧 draft_update 清除暂存
     const frames = ws.sent.map((s) => JSON.parse(s) as { type: string; token?: string; action?: Action });
     const frame = frames.filter((f) => f.type === 'submit_action').at(-1)!;
@@ -110,7 +120,7 @@ describe('<GameScreen>', () => {
     expect(frame.action).toEqual(loan);
     const lastFrame = frames[frames.length - 1]!;
     expect(lastFrame.type).toBe('draft_update'); // 暂存清除帧
-    expect(store.getState().selectedCard).toBeNull(); // 提交后清选牌
+    expect(store.getState().selectedCard).toBeNull(); // 快照推进后清选牌
     expect(seat).toBe(store.getState().seat);
   });
 
@@ -191,7 +201,7 @@ describe('<GameScreen>', () => {
     }
   });
 
-  it('他人暂存:暂存播报同步(改动替换/清除撤下),重置本回合全场播报', () => {
+  it('他人暂存:不播报(仅幽灵落子);重置本回合全场播报', () => {
     vi.useFakeTimers();
     try {
       const { store, ws, game, seat } = setup(false); // 非本人回合:当前玩家是别人
@@ -199,52 +209,68 @@ describe('<GameScreen>', () => {
       expect(otherSeat).not.toBe(seat);
       render(<GameScreen store={store} />);
 
-      // 他人暂存 → 暂存播报出现(虚线"暂存"样式)
+      // 他人暂存 → 不出现任何暂存播报(临时动作不播报,确认后才播)
       act(() => {
         ws.emit({
           type: 'player_draft',
           protocolVersion: PROTOCOL_VERSION,
           seat: otherSeat,
-          draft: { text: '建造伯明翰棉纺厂' },
-        });
-      });
-      expect(screen.getByTestId('draft-spotlight')).toHaveTextContent('建造伯明翰棉纺厂');
-      // 改动 → 直接替换为新播报
-      act(() => {
-        ws.emit({
-          type: 'player_draft',
-          protocolVersion: PROTOCOL_VERSION,
-          seat: otherSeat,
-          draft: { text: '贷款 £30（收入 −3 级）' },
-        });
-      });
-      expect(screen.getByTestId('draft-spotlight')).toHaveTextContent('贷款');
-      // 清除 → 撤下
-      act(() => {
-        ws.emit({
-          type: 'player_draft',
-          protocolVersion: PROTOCOL_VERSION,
-          seat: otherSeat,
-          draft: null,
+          draft: { links: [5], text: '建设连接 1 条（待定）' },
         });
       });
       expect(screen.queryByTestId('draft-spotlight')).toBeNull();
+      expect(screen.queryByTestId('action-spotlight')).toBeNull();
 
-      // 再暂存 → 重置本回合:暂存撤下 + 全场播报"已重置本回合"
-      act(() => {
-        ws.emit({
-          type: 'player_draft',
-          protocolVersion: PROTOCOL_VERSION,
-          seat: otherSeat,
-          draft: { text: '建造斯托克煤矿' },
-        });
-      });
-      expect(screen.getByTestId('draft-spotlight')).toBeInTheDocument();
+      // 重置本回合 → 全场播报"已重置本回合"
       act(() => {
         ws.emit({ type: 'turn_reset', protocolVersion: PROTOCOL_VERSION, seat: otherSeat });
       });
-      expect(screen.queryByTestId('draft-spotlight')).toBeNull();
       expect(screen.getByTestId('round-banner')).toHaveTextContent('已重置本回合');
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.queryByTestId('round-banner')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('播报流:一帧内多条行动逐条入队,不丢中间播报', () => {
+    vi.useFakeTimers();
+    try {
+      const { store, ws, game } = setup(true);
+      render(<GameScreen store={store} />);
+      const p0 = game.turnOrder[0]!;
+      const p1 = game.turnOrder[1]!;
+      // 同一帧内连发两条 action_applied(模拟 AI 连动)
+      act(() => {
+        ws.emit({
+          type: 'action_applied',
+          protocolVersion: PROTOCOL_VERSION,
+          seq: 1,
+          player: p0,
+          action: { type: 'loan', cardId: 'c0' },
+          events: [],
+        });
+        ws.emit({
+          type: 'action_applied',
+          protocolVersion: PROTOCOL_VERSION,
+          seq: 2,
+          player: p1,
+          action: { type: 'pass', cardId: 'c1' },
+          events: [],
+        });
+      });
+      // 第一条立即播;第二条排队,5 秒后接棒
+      expect(screen.getByTestId('action-spotlight')).toHaveTextContent('贷款');
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.getByTestId('action-spotlight')).toHaveTextContent('过');
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.queryByTestId('action-spotlight')).toBeNull();
     } finally {
       vi.useRealTimers();
     }

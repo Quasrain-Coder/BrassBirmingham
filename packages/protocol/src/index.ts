@@ -17,7 +17,7 @@ export interface RoomState { code: string; config: RoomConfig; customSeed: boole
 export type ServerMessage =
   | { type: 'room_state'; protocolVersion: number; room: RoomState; yourSeat: PlayerIndex | null } // 广播安全：绝不含 token
   | { type: 'credentials'; protocolVersion: number; seat: PlayerIndex; token: string } // 仅 create/join/resume 时单发给本人
-  | { type: 'snapshot'; protocolVersion: number; seq: number; state: FilteredState; legalActions: Action[]; turnHold?: PlayerIndex | null; playedCards?: Card[][] } // turnHold：该座位行动完但尚未显式"结束回合"——对局被扣住,等其 end_turn/reset_turn；playedCards：各座位本时代已打出的牌(按打出顺序,Wild 不入列)
+  | { type: 'snapshot'; protocolVersion: number; seq: number; state: FilteredState; legalActions: Action[]; turnHold?: PlayerIndex | null; playedCards?: Card[][]; eraActions?: Action[][] } // turnHold：该座位行动完但尚未显式"结束回合"——对局被扣住,等其 end_turn/reset_turn；playedCards：各座位本时代已打出的牌(按打出顺序,Wild 不入列)；eraActions：各座位本时代全部行动(按顺序)
   | { type: 'action_applied'; protocolVersion: number; seq: number; player: PlayerIndex; action: Action; events: unknown[]; reason?: string; degraded?: boolean } // reason：AI 决策理由（真人行动无此字段）；degraded=true：非 LLM 降级路径（启发式/兜底）
   | { type: 'player_draft'; protocolVersion: number; seat: PlayerIndex; draft: DraftPreview | null } // 某座位暂存预览(考虑中的行动);null=清除
   | { type: 'turn_reset'; protocolVersion: number; seat: PlayerIndex } // 某座位重置了本回合(全场播报用)

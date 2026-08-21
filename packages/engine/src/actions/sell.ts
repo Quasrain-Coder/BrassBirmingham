@@ -202,14 +202,54 @@ export function enumerateSells(state: GameState, player: PlayerIndex): Action[] 
   return out;
 }
 
-/** sales 规范化比较：按 (location, slotIndex, merchant, useMerchantBeer) 排序后逐项相等。 */
-function sameSales(a: Sale[], b: Sale[]): boolean {
-  if (a.length !== b.length) return false;
-  const key = (s: Sale): string =>
-    `${s.location}${s.slotIndex}${s.merchant}${s.useMerchantBeer ? 1 : 0}`;
-  const sa = a.map(key).sort();
-  const sb = b.map(key).sort();
-  return sa.every((k, i) => k === sb[i]);
+/**
+ * 组合式合法性校验（2026-08-21 修订,支持客户端分组自由组合）：
+ * 不再要求命中枚举集——逐块校验 ①板块为本人未翻面可卖 ②所卖向商人可达且
+ * 图标匹配 ③啤酒（显式 beerSources 或自动解析）按顺序试消耗可行。
+ * 模拟推进啤酒消耗(多组共享酒库存),全部通过才放行;任何一步非法抛
+ * IllegalActionError('illegal-sell'/'insufficient-beer'/'illegal-beer-sources'…)。
+ * 注:行动卡在手校验在 apply.ts 的 isLegalAction 一并做。
+ */
+export function validateSales(state: GameState, player: PlayerIndex, action: SellAction): void {
+  if (action.sales.length === 0) {
+    throw new IllegalActionError('illegal-sell', 'illegal-sell: empty sales');
+  }
+  let sim = state;
+  for (const sale of action.sales) {
+    const placed = sim.board.slots[sale.location]?.[sale.slotIndex];
+    if (
+      placed === null ||
+      placed === undefined ||
+      placed.player !== player ||
+      placed.flipped ||
+      !placed.tile.sellable
+    ) {
+      throw new IllegalActionError(
+        'illegal-sell',
+        `illegal-sell: no sellable tile at ${sale.location} slot ${sale.slotIndex}`,
+      );
+    }
+    if (!reachableFrom(sim, [sale.location]).has(sale.merchant)) {
+      throw new IllegalActionError(
+        'illegal-sell',
+        `illegal-sell: merchant ${sale.merchant} is not reachable from ${sale.location}`,
+      );
+    }
+    const m = sim.merchants[sale.merchant];
+    if (!m.tiles.some((t) => t === 'any' || t === placed.tile.industry)) {
+      throw new IllegalActionError(
+        'illegal-sell',
+        `illegal-sell: merchant ${sale.merchant} does not accept ${placed.tile.industry}`,
+      );
+    }
+    // 啤酒试消耗(显式源按显式结算,否则自动解析),并推进模拟态(组间共享酒库存)
+    const rb = consumeBeer(sim, player, placed.tile.beerToFlip, {
+      at: sale.merchant,
+      useMerchantBeer: sale.useMerchantBeer,
+      ...(sale.beerSources !== undefined ? { explicit: sale.beerSources } : {}),
+    });
+    sim = rb.state;
+  }
 }
 
 /** gloucester 免费 develop：移除产业序首个可研发产业的栈顶板块（不耗铁）；无可移除则落空。 */
@@ -234,9 +274,10 @@ function settleFreeDevelop(state: GameState, player: PlayerIndex): GameState {
 }
 
 /**
- * 执行 Sell。先以 enumerateSells 校验合法性（不在枚举集内抛 'illegal-sell'），
- * 再按 sales 顺序逐块结算：耗啤酒（来源翻面事件在前）→ 商人奖励（vp/money/income
- * 已由 consumeBeer 结算；gloucester 在此免费 develop）→ 板块翻面进收入。
+ * 执行 Sell。先组合式校验（validateSales：任意合法组合均可,不限枚举集），
+ * 再按 sales 顺序逐块结算：耗啤酒（显式 beerSources 按显式,否则自动解析;
+ * 来源翻面事件在前）→ 商人奖励（vp/money/income 已由 consumeBeer 结算;
+ * gloucester 在此免费 develop）→ 板块翻面进收入。
  * 弃牌不在此结算（Task 11）。
  */
 export function applySell(
@@ -247,15 +288,7 @@ export function applySell(
   if (action.type !== 'sell') {
     throw new IllegalActionError('not-a-sell-action', `not-a-sell-action: ${action.type}`);
   }
-  const legal = enumerateSells(state, player).some(
-    (a) => a.type === 'sell' && a.cardId === action.cardId && sameSales(a.sales, action.sales),
-  );
-  if (!legal) {
-    throw new IllegalActionError(
-      'illegal-sell',
-      `illegal-sell: ${action.sales.length} sale(s) with card ${action.cardId}`,
-    );
-  }
+  validateSales(state, player, action);
 
   const events: GameEvent[] = [];
   let next = state;
@@ -270,6 +303,7 @@ export function applySell(
     const rb = consumeBeer(next, player, placed.tile.beerToFlip, {
       at: sale.merchant,
       useMerchantBeer: sale.useMerchantBeer,
+      ...(sale.beerSources !== undefined ? { explicit: sale.beerSources } : {}),
     });
     next = rb.state;
     events.push(...rb.flipped);

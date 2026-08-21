@@ -36,6 +36,7 @@ import {
   locationAnchor,
   merchantAnchor,
 } from './geometry';
+import type { SlotRect } from './geometry';
 import { LOCATION_ZH } from '../game/display';
 
 /** 官方玩家色：P0 紫 / P1 黄 / P2 橙 / P3 青（与官方板块底色一致）。 */
@@ -80,6 +81,8 @@ export interface BoardSvgProps {
   spotlight?: ActionSpotlight | null | undefined;
   /** AI 思考中的座位（顺位轨头像呼吸灯）。 */
   thinkingSeats?: readonly PlayerIndex[] | undefined;
+  /** 高亮座位(顺位轨头像光圈):跟随播报舞台;缺省按当前行动玩家。 */
+  highlightSeat?: PlayerIndex | null | undefined;
   /** 建造预览:非贴合预览 token 盖在目标槽位(确认前,切换城市即跟随)。 */
   buildPreview?: { location: LocationId; slotIndex: number; industry: IndustryType; player: PlayerIndex } | null | undefined;
   /** 啤酒匹配线(resolved 卖货):啤酒来源 → 卖货地点(虚线动效)。 */
@@ -88,10 +91,66 @@ export interface BoardSvgProps {
   linkPreview?: { links: number[]; player: PlayerIndex; era: 'canal' | 'rail' } | null | undefined;
   onSlotClick?: ((location: LocationId, slotIndex: number) => void) | undefined;
   onLinkClick?: ((linkIndex: number) => void) | undefined;
+  /** 点贸易商位(卖出流:选贸易商/切商人桶;顺序约束由 ActionDraft 裁决)。 */
+  onMerchantClick?: ((merchant: MerchantId) => void) | undefined;
 }
 
 function playerColor(player: PlayerIndex): string {
   return PLAYER_COLORS[player] ?? '#7f8c8d';
+}
+
+/** 啤酒立桶全场统一尺寸(酒厂/商人位相同)。 */
+const BEER_TOKEN_SIZE = 76;
+
+/**
+ * 立起的啤酒桶（与版图印刷图案区分）：原木琥珀桶身 + 椭圆顶面 + 桶箍两道 +
+ * 底部投影,"立起来"的立体感。全场统一按中心+尺寸渲染(酒厂/商人位同大小)。
+ */
+function StandingBeer({ cx, cy, size }: { cx: number; cy: number; size: number }): ReactElement {
+  const s = size;
+  const top = cy - s * 0.42;
+  const bodyH = s * 0.68;
+  const rx = s * 0.3;
+  const ry = s * 0.085;
+  const bottom = top + bodyH;
+  return (
+    <g className="board-merchant-beer" pointerEvents="none">
+      {/* 底部投影 */}
+      <ellipse cx={cx} cy={bottom + ry * 0.8} rx={rx * 1.2} ry={ry} fill="#000" opacity={0.45} />
+      {/* 桶身(原木琥珀) */}
+      <path
+        d={`M ${cx - rx} ${top} L ${cx - rx} ${bottom} A ${rx} ${ry} 0 0 0 ${cx + rx} ${bottom} L ${cx + rx} ${top} Z`}
+        fill="#9c6f30"
+        stroke="#45300c"
+        strokeWidth={s * 0.045}
+      />
+      {/* 侧面高光 */}
+      <rect
+        x={cx - rx * 0.58}
+        y={top + s * 0.06}
+        width={rx * 0.3}
+        height={bodyH - s * 0.12}
+        rx={s * 0.06}
+        fill="#e6c98a"
+        opacity={0.4}
+      />
+      {/* 桶箍两道 */}
+      <path
+        d={`M ${cx - rx} ${top + bodyH * 0.35} A ${rx} ${ry} 0 0 0 ${cx + rx} ${top + bodyH * 0.35}`}
+        fill="none"
+        stroke="#45300c"
+        strokeWidth={s * 0.035}
+      />
+      <path
+        d={`M ${cx - rx} ${top + bodyH * 0.68} A ${rx} ${ry} 0 0 0 ${cx + rx} ${top + bodyH * 0.68}`}
+        fill="none"
+        stroke="#45300c"
+        strokeWidth={s * 0.035}
+      />
+      {/* 顶面(亮一档的原木色,立体感来源) */}
+      <ellipse cx={cx} cy={top} rx={rx} ry={ry} fill="#c1903f" stroke="#45300c" strokeWidth={s * 0.045} />
+    </g>
+  );
 }
 
 /** 版图有效区域（6144 扫描件四边有大片暗边，viewBox 只取版图本体）。 */
@@ -140,7 +199,7 @@ function Cube({ x, y, size, fill }: { x: number; y: number; size: number; fill: 
 /** 已建板块上的资源 token 布局：板块底部两行（最多 6 个），啤酒桶用官方图标。 */
 function ResourceTokens({ cx, cy, industry, count }: { cx: number; cy: number; industry: IndustryType; count: number }): ReactElement {
   const perRow = 3;
-  const gap = 52;
+  const gap = industry === 'brewery' ? 88 : 52; // 立桶更宽,间距防叠
   const tokens = [];
   for (let i = 0; i < count; i++) {
     const row = Math.floor(i / perRow);
@@ -150,7 +209,8 @@ function ResourceTokens({ cx, cy, industry, count }: { cx: number; cy: number; i
     const y = cy + SLOT_SIZE / 2 - 66 + row * 46;
     tokens.push(
       industry === 'brewery' ? (
-        <image key={i} href="/assets/beer.png" x={x - 26} y={y - 26} width={52} height={52} />
+        // 酒厂商用立桶(与商人位同尺寸)
+        <StandingBeer key={i} cx={x} cy={y} size={BEER_TOKEN_SIZE} />
       ) : (
         <Cube key={i} x={x} y={y} size={44} fill={industry === 'coal' ? '#1f2329' : '#c76b2a'} />
       ),
@@ -189,7 +249,7 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
   );
 }
 
-export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPreview, beerMatches, linkPreview, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
+export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinkingSeats, buildPreview, beerMatches, linkPreview, onSlotClick, onLinkClick, onMerchantClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const highlightedLocations = new Set(highlights?.locations ?? []);
@@ -245,19 +305,6 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
           const extras = LINK_EXTRA_ENDPOINTS[i] ?? [];
           return (
             <g key={`link-${i}`}>
-              {built ? (
-                <polyline
-                  className="board-link-visual"
-                  points={pts}
-                  fill="none"
-                  stroke={playerColor(builtBy.player)}
-                  strokeWidth={12}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  opacity={0.6}
-                  pointerEvents="none"
-                />
-              ) : null}
               {hl && !built ? (
                 <>
                   <polyline
@@ -310,18 +357,6 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
                 const m = mid ?? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
                 return (
                   <g key={`link-${i}-${extra}`}>
-                    {built ? (
-                      <polyline
-                        className="board-link-visual"
-                        points={`${m.x},${m.y} ${e.x},${e.y}`}
-                        fill="none"
-                        stroke={playerColor(builtBy.player)}
-                        strokeWidth={12}
-                        strokeLinecap="round"
-                        opacity={0.6}
-                        pointerEvents="none"
-                      />
-                    ) : null}
                     <line
                       className="board-link-branch"
                       data-link-index={i}
@@ -487,13 +522,19 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
         })}
       </g>
 
-      {/* 商人位：官方商人板块贴框 + 啤酒桶格(有桶贴桶 + 剩余数 token) */}
+      {/* 商人位：官方商人板块贴框 + 啤酒桶格(立桶 + 剩余数 token);卖出流可点选 */}
       <g className="board-merchants">
         {(Object.keys(MERCHANTS) as MerchantId[]).map((id) => {
           const geom = MERCHANT_GEOM[id];
           const m = state.merchants[id];
           return (
-            <g className="board-merchant-group" data-merchant={id} key={id}>
+            <g
+              className="board-merchant-group"
+              data-merchant={id}
+              key={id}
+              style={onMerchantClick ? { cursor: 'pointer' } : undefined}
+              onClick={onMerchantClick ? () => onMerchantClick(id) : undefined}
+            >
               {geom.tiles.map((r, ti) => {
                 const type = m?.tiles[ti];
                 if (type === undefined) return null;
@@ -510,19 +551,11 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
                 );
               })}
               {geom.beer.map((r, bi) => {
-                // 啤酒格:有桶贴桶(空的格保持印刷空框);非 blank 板块旁才会放桶
+                // 啤酒格:有桶画"立桶"(空的格保持印刷空框);与酒厂商用同尺寸
                 const filled = bi < (m?.beer ?? 0);
                 if (!filled) return null;
                 return (
-                  <image
-                    key={`${id}-beer-${bi}`}
-                    className="board-merchant-beer"
-                    href="/assets/beer.png"
-                    x={r.x}
-                    y={r.y}
-                    width={r.w}
-                    height={r.h}
-                  />
+                  <StandingBeer key={`${id}-beer-${bi}`} cx={r.x + r.w / 2} cy={r.y + r.h / 2} size={BEER_TOKEN_SIZE} />
                 );
               })}
               {/* 剩余酒数 token(该商人位总桶数) */}
@@ -702,7 +735,7 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
           const b = TURN_BARRELS[rank]!;
           const m = TURN_MONEY[rank]!;
           const spent = state.players[seat]!.spentThisRound;
-          const isCurrent = state.turnOrder[state.currentPlayerIdx] === seat;
+          const isCurrent = (highlightSeat ?? state.turnOrder[state.currentPlayerIdx]) === seat;
           const thinking = thinkingSeats?.includes(seat) ?? false;
           const colorKey = PLAYER_COLOR_KEYS[seat] ?? 'purple';
           // 钱币按 15/5/1 面额分解堆叠(最多 5 枚)
@@ -752,7 +785,17 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
                   {coins.map((d, i) => (
                     <image key={i} href={`/assets/coins/${d}.png`} x={m.x - 86 + i * 30} y={m.y - 18} width={36} height={36} />
                   ))}
-                  <text x={m.x + 64} y={m.y + 13} textAnchor="middle" fontSize={34} fill="#f0d89a" fontWeight={700}>
+                  <text
+                    x={m.x + 10}
+                    y={m.y + 17}
+                    textAnchor="middle"
+                    fontSize={50}
+                    fill="#ff5040"
+                    fontWeight={800}
+                    stroke="#14100a"
+                    strokeWidth={7}
+                    paintOrder="stroke"
+                  >
                     £{spent}
                   </text>
                 </g>

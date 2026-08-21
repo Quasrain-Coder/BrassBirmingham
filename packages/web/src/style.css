@@ -83,14 +83,13 @@ body {
   justify-content: flex-end;
 }
 
-/* 手牌行横向内边距归零(8 张牌与地图同宽对齐),标题/对手手牌保留缩进 */
+/* 手牌行横向内边距归零(8 张牌与地图同宽对齐),标题保留缩进 */
 .hand-bar {
   padding-right: 0;
   padding-left: 0;
 }
 
-.hand-bar > h3,
-.hand-bar > .opponent-hands {
+.hand-bar > h3 {
   margin-right: 18px;
   margin-left: 18px;
 }
@@ -902,6 +901,48 @@ body {
   gap: 6px;
 }
 
+/* 面板下方"本时代行动"折叠记录 */
+.era-actions {
+  border: 1px solid #3a3226;
+  border-radius: 8px;
+  background: rgba(23, 26, 31, 0.55);
+  padding: 2px 10px;
+  font-size: 0.8rem;
+}
+
+.era-actions-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 4px 0;
+  border: none;
+  background: transparent;
+  color: #b3a888;
+  font: inherit;
+  cursor: pointer;
+}
+
+.era-actions-toggle:hover {
+  color: #e3d3a8;
+}
+
+.era-actions-list {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+  color: #d8cdb4;
+}
+
+.era-actions-empty {
+  margin: 0 0 6px;
+  color: #8a8068;
+}
+
 /* 侧列面板缩放适配:内容字号略降,面板图随列宽自适应 */
 .wide-col .player-board {
   font-size: 0.92rem;
@@ -913,6 +954,7 @@ body {
 
 /* 面板下方本回合信息行 */
 .round-info {
+  position: relative;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -924,7 +966,6 @@ body {
   font-size: 0.78rem;
   color: #9aa4b2;
   white-space: nowrap;
-  overflow: hidden;
 }
 
 .round-info-rank {
@@ -947,6 +988,32 @@ body {
   color: #8f96a3;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 行动省略时的即时完整浮层(悬停行动文字即出,替代原生 title 的 1s 延迟) */
+.round-info-tip {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 30;
+  max-width: 340px;
+  padding: 5px 12px;
+  border: 1px solid #6b5b3e;
+  border-radius: 8px;
+  background: rgba(20, 16, 10, 0.96);
+  color: #f3ead4;
+  font-size: 0.8rem;
+  white-space: normal;
+  line-height: 1.5;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.08s ease;
+}
+
+.round-info-acts:hover ~ .round-info-tip {
+  opacity: 1;
+  visibility: visible;
 }
 
 
@@ -1009,14 +1076,6 @@ body {
   border-radius: 50%;
   border: 2px solid #14100a;
   flex: none;
-}
-
-/* 他人暂存播报:与行动播报同位,虚线边框 + 斜体示意"未定" */
-.action-spotlight-banner.draft-banner {
-  border-style: dashed;
-  border-color: #8a8068;
-  font-style: italic;
-  color: #d8cdb4;
 }
 
 /* 新一轮/新时代播报:红字横幅(约 5 秒淡出,与行动横幅错位下排) */
@@ -1465,23 +1524,50 @@ body {
   transform: translateY(-4px);
 }
 
-.opponent-hands {
-  margin-top: 10px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+/* 回合待确认(该点"结束回合"):红色提醒底色 + 实心红按钮,区别于普通灰底 */
+.action-bar.turn-hold {
+  border-color: rgba(192, 57, 43, 0.65);
+  background: linear-gradient(180deg, rgba(120, 30, 22, 0.38), rgba(60, 18, 14, 0.48));
 }
 
-.opponent-hands > span {
-  padding: 3px 10px;
-  border: 1px solid #3f3a2e;
-  border-radius: 999px;
-  background: rgba(23, 26, 31, 0.7);
-  color: #9aa4b2;
-  font-size: 0.78rem;
+.action-bar.turn-hold [data-testid='turn-hold-hint'] {
+  margin: 4px 0;
+  color: #f0b4a8;
+  font-weight: 600;
 }
 
-/* 行动条 */
+.action-bar.turn-hold button[data-testid='end-turn'] {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #c0392b;
+  color: #fdf0ec;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.action-bar.turn-hold button[data-testid='end-turn']:hover {
+  background: #d24637;
+}
+
+/* 等待他人确认回合的提示同样带红色 */
+.action-bar .waiting-hold {
+  color: #f0b4a8;
+  font-weight: 600;
+}
+
+/* 卖出子步骤(板块/贸易商/酒):缩进+左边线,表达从属于"出售"的层级 */
+.sell-builder {
+  margin-left: 1.4em;
+  padding-left: 0.9em;
+  border-left: 2px solid #3a3226;
+}
+
+.sell-builder .action-choices {
+  margin: 4px 0;
+}
+
 /* 行动条:统一字号体系——面板内文字/按钮同一基准字号,颜色区分层级 */
 .action-bar {
   border: 1px solid #3a3226;
@@ -1505,6 +1591,42 @@ body {
   margin: 0 0 8px;
 }
 
+/* 行动条头部:标题左,现金实时标记右(显眼大金 chip) */
+.action-bar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.action-money {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #f0c964;
+  letter-spacing: 0.02em;
+}
+
+.action-money .coin-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.action-money-delta {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.action-money-delta.neg {
+  color: #e0705c;
+}
+
+.action-money-delta.pos {
+  color: #58c47b;
+}
+
 .action-hint {
   color: #b3a888;
   margin: 4px 0;
@@ -1521,6 +1643,20 @@ body {
 /* 行首标签(研发:/侦察:/出售:…):弱化色,与按钮同字号 */
 .action-choices > span:first-child {
   color: #b3a888;
+}
+
+/* 常驻行动行:不可用行整行压灰 */
+.action-choices.row-disabled {
+  opacity: 0.45;
+}
+
+.action-choices .action-row-none {
+  color: #6b6353;
+}
+
+.action-choices .action-row-hint {
+  color: #8a8068;
+  font-size: 0.92em;
 }
 
 .action-choices button {
@@ -1949,6 +2085,17 @@ body {
   width: 3.5em;
   font-size: 0.82rem;
   font-weight: 600;
+}
+
+/* 可建性标注(本人面板明细行):默认弱化色,可建造绿色 */
+.board-ind-status {
+  flex: none;
+  font-size: 0.72rem;
+  color: #8a8068;
+}
+
+.board-ind-status.ok {
+  color: #58c47b;
 }
 
 .board-ind-list {

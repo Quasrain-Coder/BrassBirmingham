@@ -296,3 +296,79 @@ describe('describeAction', () => {
     expect(describeAction(cases[0]!)).toContain('伯明翰');
   });
 });
+
+describe('buildabilityFor(面板可建性标注)', () => {
+  it('开局:有合法建造的产业标 ✓,其余给原因;现金不足标 还需 £N', async () => {
+    const { buildabilityFor } = await import('./interactions');
+    const { filterStateFor } = await import('@brass/protocol');
+    const game = newGame(4, 42);
+    const seat = game.turnOrder[game.currentPlayerIdx]!;
+    const state = filterStateFor(game, seat);
+    const legal = enumerateActions(game, seat);
+    const status = buildabilityFor(state, seat, legal);
+    // 全产业都有标注
+    expect(Object.keys(status).sort()).toEqual(
+      ['brewery', 'coal', 'cotton', 'iron', 'manufacturer', 'pottery'].sort(),
+    );
+    // 有合法 build 的产业 → ✓ 可建造
+    const buildable = new Set(
+      legal.filter((a) => a.type === 'build').map((a) => (a as { industry: IndustryType }).industry),
+    );
+    for (const ind of buildable) expect(status[ind]).toBe('✓ 可建造');
+    // 现金压到 0 → 非可建产业全部 还需 £N
+    state.players[seat]!.money = 0;
+    const broke = buildabilityFor(state, seat, []);
+    expect(broke['cotton']).toMatch(/^还需 £\d+$/);
+  });
+
+  it('板块用尽:该产业标 板块已用尽', async () => {
+    const { buildabilityFor } = await import('./interactions');
+    const { filterStateFor } = await import('@brass/protocol');
+    const game = newGame(4, 42);
+    const seat = game.turnOrder[game.currentPlayerIdx]!;
+    const state = filterStateFor(game, seat);
+    state.players[seat]!.tiles = state.players[seat]!.tiles.filter((t) => t.industry !== 'coal');
+    expect(buildabilityFor(state, seat, [])['coal']).toBe('板块已用尽');
+  });
+});
+
+describe('reconstructEraLog(行动日志补全)', () => {
+  it('按回合结构交错还原:运河首轮各 1 动,其后各 2 动', async () => {
+    const { reconstructEraLog } = await import('./interactions');
+    const { filterStateFor } = await import('@brass/protocol');
+    const state = filterStateFor(newGame(4, 42), 0);
+    const order = state.turnOrder;
+    const mk = (id: string): Action => ({ type: 'pass', cardId: id });
+    // 首轮每座位 1 条,次轮每座位 2 条(按座位号入桶)
+    const eraActions: Action[][] = [];
+    order.forEach((seat) => {
+      eraActions[seat] = [mk(`r1-${seat}`), mk(`r2a-${seat}`), mk(`r2b-${seat}`)];
+    });
+    const out = reconstructEraLog(state, eraActions);
+    expect(out.map((e) => e.player)).toEqual([
+      order[0], order[1], order[2], order[3], // 首轮轮转
+      order[0], order[0], order[1], order[1], order[2], order[2], order[3], order[3], // 次轮各 2 动
+    ]);
+    expect(out.map((e) => (e.action as { cardId: string }).cardId)).toEqual([
+      `r1-${order[0]}`, `r1-${order[1]}`, `r1-${order[2]}`, `r1-${order[3]}`,
+      `r2a-${order[0]}`, `r2b-${order[0]}`, `r2a-${order[1]}`, `r2b-${order[1]}`,
+      `r2a-${order[2]}`, `r2b-${order[2]}`, `r2a-${order[3]}`, `r2b-${order[3]}`,
+    ]);
+  });
+
+  it('残缺尾部(当前轮进行中)也能正确截断', async () => {
+    const { reconstructEraLog } = await import('./interactions');
+    const { filterStateFor } = await import('@brass/protocol');
+    const state = filterStateFor(newGame(4, 42), 0);
+    const order = state.turnOrder;
+    const mk = (id: string): Action => ({ type: 'pass', cardId: id });
+    const eraActions: Action[][] = [];
+    order.forEach((seat, i) => {
+      eraActions[seat] = i === 0 ? [mk(`r1-${seat}`), mk(`r2-${seat}`)] : [mk(`r1-${seat}`)];
+    });
+    const out = reconstructEraLog(state, eraActions);
+    expect(out.map((e) => (e.action as { cardId: string }).cardId)).toEqual([
+      `r1-${order[0]}`, `r1-${order[1]}`, `r1-${order[2]}`, `r1-${order[3]}`, `r2-${order[0]}`,
+    ]);
+  });
+});

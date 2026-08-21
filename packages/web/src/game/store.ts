@@ -201,6 +201,8 @@ export interface GameStoreState {
   takenOver: boolean;
   /** 各座位本时代已打出的牌（快照附带；按打出顺序,Wild 不入列）。 */
   playedCards: Card[][];
+  /** 各座位本时代的全部行动（快照附带;"本时代行动"折叠记录用）。 */
+  eraActions: Action[][];
   /** 其他玩家当前的暂存预览（player_draft 流；座位 → 预览,确认/重置/换回合时清除）。 */
   remoteDrafts: Partial<Record<PlayerIndex, DraftPreview>>;
   /** 最近一次"重置本回合"广播（n 单调递增作触发键）。 */
@@ -225,6 +227,7 @@ const INITIAL_STATE: GameStoreState = {
   selectedCard: null,
   takenOver: false,
   playedCards: [],
+  eraActions: [],
   remoteDrafts: {},
   resetNotice: null,
 };
@@ -307,7 +310,8 @@ export class GameStore {
     });
   }
 
-  /** 提交行动并清空选牌（行动消耗一张卡）。 */
+  /** 提交行动。选牌在下一个快照(行动被接受、seq 前进)时清空——被拒(如
+   *  等待上家确认回合)时保留暂存,玩家修正后可直接重试,不会"退回"。 */
   submitAction(action: Action): void {
     this.send({
       type: 'submit_action',
@@ -315,7 +319,6 @@ export class GameStore {
       token: this.requireToken(),
       action,
     });
-    this.patch({ selectedCard: null });
   }
 
   /** 结束被扣住的回合（放行下一玩家/AI）。 */
@@ -391,7 +394,7 @@ export class GameStore {
     }
     this.disconnect();
     this.clearSession();
-    this.patch({ log: [], thinkingSeats: [], lastError: null, selectedCard: null, playedCards: [], remoteDrafts: {}, resetNotice: null });
+    this.patch({ log: [], thinkingSeats: [], lastError: null, selectedCard: null, playedCards: [], eraActions: [], remoteDrafts: {}, resetNotice: null });
     this.connect();
   }
 
@@ -521,13 +524,21 @@ export class GameStore {
         const prevCurrent = prev?.turnOrder[prev.currentPlayerIdx];
         const nextCurrent = msg.state.turnOrder[msg.state.currentPlayerIdx];
         const turnChanged = prev !== null && prevCurrent !== nextCurrent;
+        // resetTurn 回滚后,seq >= 快照 seq 的日志条目是"已被撤销的行动",剔除
+        // (否则序号复用时会把已撤销行动再次播报;快照 seq = 下一个行动的 seq)
+        const trimmedLog =
+          msg.seq <= this.state.seq ? this.state.log.filter((e) => e.seq < msg.seq) : this.state.log;
         this.patch({
           snapshot: msg.state,
           legalActions: msg.legalActions,
           seq: msg.seq,
           turnHold: msg.turnHold ?? null,
           playedCards: msg.playedCards ?? this.state.playedCards,
+          eraActions: msg.eraActions ?? this.state.eraActions,
+          ...(trimmedLog !== this.state.log ? { log: trimmedLog } : {}),
           ...(turnChanged ? { remoteDrafts: {} } : {}),
+          // 快照推进(seq 变化)= 行动已被接受,清选牌;被拒(seq 不变)保留暂存
+          ...(msg.seq !== this.state.seq ? { selectedCard: null } : {}),
         });
         break;
       }

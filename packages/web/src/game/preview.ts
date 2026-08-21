@@ -5,6 +5,8 @@
  */
 import type { Action, IndustryType, LocationId, PlayerIndex } from '@brass/engine';
 import {
+  LINKS,
+  LOCATIONS,
   MERCHANTS,
   TILES,
   buyCoalCost,
@@ -12,6 +14,8 @@ import {
   canBuyCoalFromMarket,
   coalSources,
   ironSources,
+  sellCoalToMarket,
+  sellIronToMarket,
 } from '@brass/engine';
 import type { GameState, PlacedTile } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
@@ -137,4 +141,66 @@ export function previewOf(action: Action, state: FilteredState, player: PlayerIn
       break;
   }
   return { gains, costs };
+}
+
+/**
+ * 行动的现金变化量（行动条"现金实时标记"用）：与 previewOf 同源的数值版。
+ * 确认/取消/重置时该值即归零,显示回归实际现金(server 快照)。
+ * - build:−(印刷 £+煤铁市价补差)+建成即卖市场收入(铁无条件,煤须连通商人位);
+ * - network:运河 −£3;铁路 −£5/−£15,每联 1 煤按建造地点连通近似(免费源优先);
+ * - develop:−铁的市价补差;loan:+£30;其余 0。
+ */
+export function moneyDelta(action: Action, state: FilteredState, player: PlayerIndex): number {
+  const gs = asGameState(state);
+  switch (action.type) {
+    case 'build': {
+      const def = state.players[player]!.tiles.find((t) => t.industry === action.industry);
+      if (def === undefined) return 0;
+      let delta = -def.costMoney;
+      if (def.costCoal > 0) {
+        const free = coalSources(gs, player, action.location).reduce((s, x) => s + x.tile.resources, 0);
+        const need = def.costCoal - free;
+        if (need > 0) delta -= buyCoalCost(gs, need);
+      }
+      if (def.costIron > 0) {
+        const free = ironSources(gs).reduce((s, x) => s + x.tile.resources, 0);
+        const need = def.costIron - free;
+        if (need > 0) delta -= buyIronCost(gs, need);
+      }
+      const sellable =
+        def.industry === 'iron' ||
+        (def.industry === 'coal' && canBuyCoalFromMarket(gs, action.location));
+      if ((def.industry === 'coal' || def.industry === 'iron') && sellable) {
+        const sale =
+          def.industry === 'coal'
+            ? sellCoalToMarket(gs, def.resourcesPlaced)
+            : sellIronToMarket(gs, def.resourcesPlaced);
+        delta += sale.revenue;
+      }
+      return delta;
+    }
+    case 'network': {
+      if (state.era === 'canal') return -3;
+      let delta = action.links.length === 2 ? -15 : -5;
+      for (const linkIdx of action.links) {
+        const l = LINKS[linkIdx];
+        if (l === undefined) continue;
+        // 近似:取边的首个真实城市端点判定煤源/市场连通(农场/商人端点跳过)
+        const at = [l.a, l.b].find((x): x is LocationId => x in LOCATIONS);
+        if (at === undefined) continue;
+        const free = coalSources(gs, player, at).reduce((s, x) => s + x.tile.resources, 0);
+        if (free < 1 && canBuyCoalFromMarket(gs, at)) delta -= buyCoalCost(gs, 1);
+      }
+      return delta;
+    }
+    case 'develop': {
+      const free = ironSources(gs).reduce((s, x) => s + x.tile.resources, 0);
+      const need = action.removals.length - free;
+      return need > 0 ? -buyIronCost(gs, need) : 0;
+    }
+    case 'loan':
+      return 30;
+    default:
+      return 0;
+  }
 }

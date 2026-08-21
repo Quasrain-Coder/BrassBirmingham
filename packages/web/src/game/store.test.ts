@@ -276,7 +276,7 @@ describe('GameStore 上行消息', () => {
     });
   });
 
-  it('startGame / submitAction 自动带 token；submitAction 清空 selectedCard', () => {
+  it('startGame / submitAction 自动带 token；选牌在快照推进时清空(被拒时保留)', () => {
     const { store } = setup();
     store.connect();
     const ws = lastWs();
@@ -292,6 +292,16 @@ describe('GameStore 上行消息', () => {
       protocolVersion: PROTOCOL_VERSION,
       token: 'tok-9',
       action: { type: 'pass', cardId: 'c1' },
+    });
+    // 提交后不再乐观清空:被拒(seq 不变)时选牌保留
+    expect(store.getState().selectedCard).toBe('c1');
+    // 快照推进(seq 变化)= 行动被接受 → 清选牌
+    ws.emit({
+      type: 'snapshot',
+      protocolVersion: PROTOCOL_VERSION,
+      seq: 1,
+      state: filterStateFor(newGame(4, 42), 0),
+      legalActions: [],
     });
     expect(store.getState().selectedCard).toBeNull();
   });
