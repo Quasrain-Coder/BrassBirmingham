@@ -83,14 +83,13 @@ body {
   justify-content: flex-end;
 }
 
-/* 手牌行横向内边距归零(8 张牌与地图同宽对齐),标题/对手手牌保留缩进 */
+/* 手牌行横向内边距归零(8 张牌与地图同宽对齐),标题保留缩进 */
 .hand-bar {
   padding-right: 0;
   padding-left: 0;
 }
 
-.hand-bar > h3,
-.hand-bar > .opponent-hands {
+.hand-bar > h3 {
   margin-right: 18px;
   margin-left: 18px;
 }
@@ -1463,22 +1462,6 @@ body {
     0 0 0 2px rgba(201, 168, 106, 0.55),
     0 6px 18px rgba(201, 168, 106, 0.3);
   transform: translateY(-4px);
-}
-
-.opponent-hands {
-  margin-top: 10px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.opponent-hands > span {
-  padding: 3px 10px;
-  border: 1px solid #3f3a2e;
-  border-radius: 999px;
-  background: rgba(23, 26, 31, 0.7);
-  color: #9aa4b2;
-  font-size: 0.78rem;
 }
 
 /* 行动条 */

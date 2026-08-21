@@ -200,16 +200,6 @@ export function HandBar({
             })
           : null}
       </div>
-      <div className="opponent-hands">
-        {state.players.map((p, i) =>
-          i === seat ? null : (
-            <span key={i} data-testid={`opponent-hand-${i}`}>
-              <ColorDot seat={i} />
-              {playerName(undefined, i)}：{p.hand.kind === 'count' ? p.hand.count : p.hand.cards.length} 张
-            </span>
-          ),
-        )}
-      </div>
     </section>
   );
 }
