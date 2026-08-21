@@ -738,13 +738,6 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
           const isCurrent = (highlightSeat ?? state.turnOrder[state.currentPlayerIdx]) === seat;
           const thinking = thinkingSeats?.includes(seat) ?? false;
           const colorKey = PLAYER_COLOR_KEYS[seat] ?? 'purple';
-          // 钱币按 15/5/1 面额分解堆叠(最多 5 枚)
-          const coins: number[] = [];
-          for (let rest = spent; rest > 0 && coins.length < 5; ) {
-            const d = rest >= 15 ? 15 : rest >= 5 ? 5 : 1;
-            coins.push(d);
-            rest -= d;
-          }
           return (
             <g
               key={`turn-${seat}`}
@@ -782,18 +775,16 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
               {spent > 0 ? (
                 <g className="turn-money-oval" data-testid={`turn-spent-${seat}`}>
                   <ellipse cx={m.x} cy={m.y} rx={108} ry={56} fill="#14100a" opacity={0.88} stroke="#8a6d3b" strokeWidth={3} />
-                  {coins.map((d, i) => (
-                    <image key={i} href={`/assets/coins/${d}.png`} x={m.x - 86 + i * 30} y={m.y - 18} width={36} height={36} />
-                  ))}
+                  {/* 钱数:黄色加大居中(深色描边保证可读;不再叠钱币堆) */}
                   <text
-                    x={m.x + 10}
-                    y={m.y + 17}
+                    x={m.x}
+                    y={m.y + 21}
                     textAnchor="middle"
-                    fontSize={50}
-                    fill="#ff5040"
+                    fontSize={62}
+                    fill="#ffd94d"
                     fontWeight={800}
                     stroke="#14100a"
-                    strokeWidth={7}
+                    strokeWidth={8}
                     paintOrder="stroke"
                   >
                     £{spent}
