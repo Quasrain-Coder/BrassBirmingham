@@ -78,7 +78,6 @@ describe('<GameScreen>', () => {
   it('本人回合：选牌 → 棋盘高亮；贷款 → 确认提交 submit_action 帧', () => {
     const { store, ws, game, seat } = setup(true);
     const { container } = render(<GameScreen store={store} />);
-    expect(screen.getByTestId('select-card-hint')).toBeInTheDocument();
 
     // 选一张有 loan 行动的牌（每张牌都有）
     const legal = store.getState().legalActions;

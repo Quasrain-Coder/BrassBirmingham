@@ -154,7 +154,7 @@ function StandingBeer({ cx, cy, size }: { cx: number; cy: number; size: number }
 }
 
 /** 版图有效区域（6144 扫描件四边有大片暗边，viewBox 只取版图本体）。 */
-const BOARD_VIEW = { x: 990, y: 990, size: 4200 };
+export const BOARD_VIEW = { x: 990, y: 990, size: 4200 };
 
 function tileImage(industry: IndustryType, level: number, player: PlayerIndex, flipped: boolean): string {
   const color = PLAYER_COLOR_KEYS[player] ?? 'purple';

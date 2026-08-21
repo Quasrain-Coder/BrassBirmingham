@@ -2421,3 +2421,133 @@ body {
   margin-left: auto;
   text-align: right;
 }
+
+/* ---- 宽屏顶部行动栏(固定屏幕不滚动重构) ---- */
+.top-action-bar {
+  padding: 8px 14px;
+}
+
+.top-action-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.top-action-row > button {
+  padding: 5px 14px;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: rgba(23, 26, 31, 0.7);
+  color: #d8cdb4;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.top-action-row > button:hover:not(:disabled) {
+  border-color: #c9a86a;
+  color: #f3ead4;
+}
+
+.top-action-row > button.selected {
+  border-color: #e3c58f;
+  background: rgba(201, 168, 106, 0.16);
+  color: #f3ead4;
+  box-shadow: 0 0 0 1px rgba(201, 168, 106, 0.4);
+}
+
+.top-action-row > button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.top-action-row .top-confirm {
+  border: none;
+  border-radius: 6px;
+  background: #c9a86a;
+  color: #1a1d23;
+  font-weight: 600;
+}
+
+.top-action-row .top-confirm:disabled {
+  background: #4a5160;
+  color: #9aa4b2;
+}
+
+.top-action-spacer {
+  flex: 1 1 auto;
+}
+
+.top-action-money {
+  margin-left: 4px;
+}
+
+.top-action-hint {
+  color: #b3a888;
+}
+
+.top-detail-row {
+  margin: 8px 0 0;
+}
+
+.log-modal {
+  width: min(92vw, 720px);
+}
+
+.log-modal-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 手牌叠在地图下缘:只露牌顶,悬停/选中整张浮出 */
+.hand-bar.overlay {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 4;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.hand-bar.overlay .own-hand {
+  justify-content: center;
+}
+
+.hand-bar.overlay .hand-card {
+  pointer-events: auto;
+  transform: translateY(58%);
+  transition: transform 0.15s ease;
+}
+
+.hand-bar.overlay .hand-card:hover,
+.hand-bar.overlay .hand-card.selected {
+  transform: translateY(0);
+}
+
+/* 面板拖拽建造/研发:跟随指针的板块 ghost */
+.tile-drag-ghost {
+  position: fixed;
+  z-index: 50;
+  width: 72px;
+  height: auto;
+  border-radius: 8px;
+  opacity: 0.85;
+  pointer-events: none;
+  transform: rotate(3deg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}

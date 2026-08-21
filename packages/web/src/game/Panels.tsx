@@ -163,25 +163,30 @@ export function HandBar({
   seat,
   selectedCard,
   onSelect,
+  overlay = false,
+  scoutMode,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
   selectedCard?: string | null;
   onSelect?: ((cardId: string) => void) | undefined;
+  /** 宽屏:绝对定位叠在地图下缘,只露卡牌顶部,悬停整张浮出。 */
+  overlay?: boolean | undefined;
+  /** 搜寻选牌模式:点手牌 = 选/弃搜寻弃牌(与搜寻行的卡牌按钮绑定)。 */
+  scoutMode?: { picks: string[]; onToggle: (cardId: string) => void } | null | undefined;
 }): ReactElement {
   const self = state.players[seat];
   return (
-    <section className="hand-bar">
-      <h3>手牌</h3>
+    <section className={`hand-bar${overlay ? ' overlay' : ''}`}>
       <div className="own-hand">
         {self?.hand.kind === 'full'
           ? self.hand.cards.map((card) => {
               const isWild = card.kind === 'wild-location' || card.kind === 'wild-industry';
-              const classes = [
-                'hand-card',
-                isWild ? 'wild' : '',
-                selectedCard === card.id ? 'selected' : '',
-              ]
+              const selected =
+                scoutMode !== null && scoutMode !== undefined
+                  ? scoutMode.picks.includes(card.id)
+                  : selectedCard === card.id;
+              const classes = ['hand-card', isWild ? 'wild' : '', selected ? 'selected' : '']
                 .filter((c) => c !== '')
                 .join(' ');
               return (
@@ -190,7 +195,11 @@ export function HandBar({
                   type="button"
                   data-testid={`hand-card-${card.id}`}
                   className={classes}
-                  onClick={() => onSelect?.(card.id)}
+                  onClick={() =>
+                    scoutMode !== null && scoutMode !== undefined
+                      ? scoutMode.onToggle(card.id)
+                      : onSelect?.(card.id)
+                  }
                 >
                   <img className="hand-card-art" src={cardImageSrc(card)} alt={cardName(card)} />
                   <span className="hand-card-name">{cardName(card)}</span>
@@ -220,6 +229,7 @@ export function PlayerBoard({
   buildStatus,
   playedCards,
   eraActions,
+  onTileDragStart,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -238,6 +248,8 @@ export function PlayerBoard({
   playedCards?: Card[] | undefined;
   /** 本时代全部行动及实际现金变化(服务端结算时记录,面板行动行的盈亏准确值)。 */
   eraActions?: { action: Action; moneyDelta: number }[] | undefined;
+  /** 按下产业栈顶板块开始拖拽(宽屏拖拽建造/研发,仅紧凑面板用)。 */
+  onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<SVGElement>) => void) | undefined;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
   // 单人打出记录弹层开关(版图/明细切换旁的"打出"按钮)
@@ -373,6 +385,7 @@ export function PlayerBoard({
             tiles={self.tiles}
             playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
             colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
+            onTileDragStart={onTileDragStart}
           />
         </div>
         {discardOpen ? (
@@ -559,6 +572,49 @@ export function PlayerBoard({
         />
       ) : null}
     </section>
+  );
+}
+
+/** 行动日志弹窗(宽屏顶部"行动日志"按钮打开;经典布局仍用底部 LogPanel)。 */
+export function LogModal({
+  log,
+  room,
+  onClose,
+}: {
+  log: LogEntry[];
+  room?: RoomState | undefined;
+  onClose: () => void;
+}): ReactElement {
+  return (
+    <div className="modal-backdrop" data-testid="log-modal" onClick={onClose}>
+      <section className="score-modal log-modal" onClick={(e) => e.stopPropagation()}>
+        <header className="score-modal-head">
+          <h3>行动日志</h3>
+          <button type="button" className="modal-close" data-testid="log-modal-close" onClick={onClose}>
+            ×
+          </button>
+        </header>
+        {log.length === 0 ? (
+          <p data-testid="log-empty">暂无行动</p>
+        ) : (
+          <ol className="log-scroll log-modal-scroll">
+            {log.map((entry) => {
+              const bonus = merchantBonusNote(entry.events);
+              return (
+                <li key={entry.seq} data-testid="log-entry">
+                  #{entry.seq} {playerName(room, entry.player)}：{actionSummary(entry.action)}
+                  {bonus !== null ? <span className="log-bonus">（{bonus}）</span> : null}
+                  {entry.degraded === true ? <span className="degraded-badge">（已降级）</span> : null}
+                  {entry.reason !== undefined ? (
+                    <blockquote className="log-reason">{entry.reason}</blockquote>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
+    </div>
   );
 }
 

@@ -542,10 +542,7 @@ export function ActionBar({
   if (turnHold === seat) {
     return (
       <section className="action-bar turn-hold" data-testid="action-bar">
-        <div className="action-bar-head">
-          <h3>行动</h3>
-          {moneyChip(false)}
-        </div>
+        <div className="action-bar-head">{moneyChip(false)}</div>
         <p data-testid="turn-hold-hint">本回合行动已完成。确认后进入下一位玩家;也可以重置本回合重新行动。</p>
         <div className="action-confirm">
           <button type="button" data-testid="end-turn" onClick={onEndTurn}>
@@ -561,10 +558,7 @@ export function ActionBar({
   if (!myTurn) {
     return (
       <section className="action-bar" data-testid="action-bar">
-        <div className="action-bar-head">
-          <h3>行动</h3>
-          {moneyChip(false)}
-        </div>
+        <div className="action-bar-head">{moneyChip(false)}</div>
         <p data-testid="waiting" className={turnHold !== null ? 'waiting-hold' : undefined}>
           {turnHold !== null ? `等待 ${waitingFor} 确认回合…` : `等待 ${waitingFor} 行动…`}
         </p>
@@ -618,13 +612,7 @@ export function ActionBar({
 
   return (
     <section className="action-bar" data-testid="action-bar">
-      <div className="action-bar-head">
-        <h3>行动</h3>
-        {moneyChip(true)}
-      </div>
-      {selectedCard === null ? (
-        <p data-testid="select-card-hint">从手牌中选一张牌，棋盘将高亮可执行的目标。</p>
-      ) : null}
+      <div className="action-bar-head">{moneyChip(true)}</div>
       <div className="action-sections">
         {/* 建造行:常驻可整行收起(全局记住);产业按钮带 等级+花费 */}
         {buildRowHidden ? (
@@ -713,7 +701,104 @@ export function ActionBar({
           )}
         </div>
 
-        {(() => {
+        <SellDetails draft={draft} state={state} seat={seat} />
+
+        <div className={`action-choices${draft.scoutAvailable ? '' : ' row-disabled'}`} data-testid="scout-options">
+          <span>侦察{draft.scoutAvailable ? `：选 3 张弃牌（已选 ${draft.scoutPicks.length}/3）` : '：'}</span>
+          {!draft.scoutAvailable ? (
+            <span className="action-row-none">—</span>
+          ) : (
+            hand.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                data-testid={`scout-card-${c.id}`}
+                className={draft.scoutPicks.includes(c.id) ? 'selected' : undefined}
+                disabled={draft.scoutPicks.length >= 3 && !draft.scoutPicks.includes(c.id)}
+                onClick={() => draft.toggleScoutCard(c.id)}
+              >
+                {cardName(c)}
+              </button>
+            ))
+          )}
+        </div>
+
+        <div className={`action-choices${loan === undefined && !onlyPass ? ' row-disabled' : ''}`} data-testid="loan-row">
+          <span>贷款：</span>
+          {loan === undefined && !onlyPass ? (
+            <span className="action-row-none">—</span>
+          ) : (
+            <>
+              {loan !== undefined ? (
+                <button type="button" data-testid="quick-loan" onClick={() => draft.choose(loan)}>
+                  £30（收入 −3 级）
+                </button>
+              ) : null}
+              {/* 过:仅当该牌没有任何其他可执行行动时兜底出现,防死锁 */}
+              {onlyPass && pass !== undefined ? (
+                <button type="button" data-testid="quick-pass" onClick={() => draft.choose(pass)}>
+                  {describeAction(pass)}
+                </button>
+              ) : null}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="action-confirm">
+        {hints.map((h) => (
+          <p className="action-blocked-hint" data-testid="blocked-hint" key={h}>
+            {h}
+          </p>
+        ))}
+        {preview !== null && (preview.gains.length > 0 || preview.costs.length > 0) ? (
+          <p className="action-preview" data-testid="action-preview">
+            {preview.gains.length > 0 ? `收益：${preview.gains.join('、')}` : ''}
+            {preview.gains.length > 0 && preview.costs.length > 0 ? '｜' : ''}
+            {preview.costs.length > 0 ? `花费：${preview.costs.join('、')}` : ''}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          data-testid="confirm-action"
+          disabled={draft.resolved === null}
+          onClick={onConfirm}
+        >
+          {draft.resolved === null ? '确认（先完成选择）' : `确认：${describeAction(draft.resolved)}`}
+        </button>
+        <button
+          type="button"
+          data-testid="cancel-draft"
+          title="清空当前未确认的选择（不影响已提交的行动）"
+          onClick={onCancel}
+        >
+          取消选择
+        </button>
+        <button
+          type="button"
+          data-testid="reset-turn"
+          className="btn-ghost"
+          disabled={!canResetTurn}
+          title={canResetTurn ? '撤销本回合已提交的全部行动,回到回合初' : '本回合还没有可撤回的行动'}
+          onClick={onResetTurn}
+        >
+          重置本回合
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** 卖出分组选择器(经典 ActionBar 与宽屏 TopActionBar 共用)。 */
+export function SellDetails({
+  draft,
+  state,
+  seat,
+}: {
+  draft: ActionDraft;
+  state: FilteredState;
+  seat: PlayerIndex;
+}): ReactElement {
           const sellRowDisabled = draft.sellSingles.length === 0 && draft.sellFullSet === null && draft.sellGroups.length === 0;
           // 该板块当前真能卖向的商人(可达+收货+啤酒总量够),建筑行只列非空的
           const feasibleMerchants = (t: SlotRef, beerToFlip: number): MerchantId[] =>
@@ -866,90 +951,4 @@ export function ActionBar({
               ) : null}
             </>
           );
-        })()}
-
-        <div className={`action-choices${draft.scoutAvailable ? '' : ' row-disabled'}`} data-testid="scout-options">
-          <span>侦察{draft.scoutAvailable ? `：选 3 张弃牌（已选 ${draft.scoutPicks.length}/3）` : '：'}</span>
-          {!draft.scoutAvailable ? (
-            <span className="action-row-none">—</span>
-          ) : (
-            hand.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                data-testid={`scout-card-${c.id}`}
-                className={draft.scoutPicks.includes(c.id) ? 'selected' : undefined}
-                disabled={draft.scoutPicks.length >= 3 && !draft.scoutPicks.includes(c.id)}
-                onClick={() => draft.toggleScoutCard(c.id)}
-              >
-                {cardName(c)}
-              </button>
-            ))
-          )}
-        </div>
-
-        <div className={`action-choices${loan === undefined && !onlyPass ? ' row-disabled' : ''}`} data-testid="loan-row">
-          <span>贷款：</span>
-          {loan === undefined && !onlyPass ? (
-            <span className="action-row-none">—</span>
-          ) : (
-            <>
-              {loan !== undefined ? (
-                <button type="button" data-testid="quick-loan" onClick={() => draft.choose(loan)}>
-                  £30（收入 −3 级）
-                </button>
-              ) : null}
-              {/* 过:仅当该牌没有任何其他可执行行动时兜底出现,防死锁 */}
-              {onlyPass && pass !== undefined ? (
-                <button type="button" data-testid="quick-pass" onClick={() => draft.choose(pass)}>
-                  {describeAction(pass)}
-                </button>
-              ) : null}
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="action-confirm">
-        {hints.map((h) => (
-          <p className="action-blocked-hint" data-testid="blocked-hint" key={h}>
-            {h}
-          </p>
-        ))}
-        {preview !== null && (preview.gains.length > 0 || preview.costs.length > 0) ? (
-          <p className="action-preview" data-testid="action-preview">
-            {preview.gains.length > 0 ? `收益：${preview.gains.join('、')}` : ''}
-            {preview.gains.length > 0 && preview.costs.length > 0 ? '｜' : ''}
-            {preview.costs.length > 0 ? `花费：${preview.costs.join('、')}` : ''}
-          </p>
-        ) : null}
-        <button
-          type="button"
-          data-testid="confirm-action"
-          disabled={draft.resolved === null}
-          onClick={onConfirm}
-        >
-          {draft.resolved === null ? '确认（先完成选择）' : `确认：${describeAction(draft.resolved)}`}
-        </button>
-        <button
-          type="button"
-          data-testid="cancel-draft"
-          title="清空当前未确认的选择（不影响已提交的行动）"
-          onClick={onCancel}
-        >
-          取消选择
-        </button>
-        <button
-          type="button"
-          data-testid="reset-turn"
-          className="btn-ghost"
-          disabled={!canResetTurn}
-          title={canResetTurn ? '撤销本回合已提交的全部行动,回到回合初' : '本回合还没有可撤回的行动'}
-          onClick={onResetTurn}
-        >
-          重置本回合
-        </button>
-      </div>
-    </section>
-  );
 }

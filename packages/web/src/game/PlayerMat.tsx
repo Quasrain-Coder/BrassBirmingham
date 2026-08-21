@@ -24,12 +24,15 @@ export function PlayerMat({
   tiles,
   playerColor,
   colorKey,
+  onTileDragStart,
 }: {
   /** 该玩家面板剩余堆叠(TileDef 按产业分组、等级升序)。 */
   tiles: TileDef[];
   playerColor: string;
   /** 玩家色 key(板块 token 图文件名用)。 */
   colorKey: 'purple' | 'yellow' | 'orange' | 'teal';
+  /** 按下某产业栈顶(最低级)板块开始拖拽(宽屏拖拽建造/研发)。 */
+  onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<SVGElement>) => void) | undefined;
 }): ReactElement {
   // 每产业每等级剩余数;栈顶 = 剩余数 >0 的最低级
   const remaining = new Map<string, number>();
@@ -65,6 +68,16 @@ export function PlayerMat({
                       y={slot.y + i * PILE_DY}
                       width={slot.w}
                       height={slot.h}
+                      onPointerDown={
+                        isTop && onTileDragStart !== undefined && i === left - 1
+                          ? (e) => onTileDragStart(ind, e)
+                          : undefined
+                      }
+                      style={
+                        isTop && onTileDragStart !== undefined && i === left - 1
+                          ? { cursor: 'grab' }
+                          : undefined
+                      }
                     />
                   ))}
                 </g>
