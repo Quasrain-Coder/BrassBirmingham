@@ -18,7 +18,7 @@ import { AIIndicator } from './AIIndicator';
 import { DiscardModal } from './DiscardModal';
 import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
 import { describeAction } from './display';
-import { buildabilityFor } from './interactions';
+import { buildabilityFor, reconstructEraLog } from './interactions';
 import { ScoreModal, useScoreHistory } from './ScoreTable';
 import { EraActions, RoundInfo } from './WideLayout';
 import { SPOTLIGHT_DURATION_MS, spotlightOf } from './spotlight';
@@ -187,6 +187,26 @@ function GameBoard({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.era, state.round]);
+
+  // 行动日志补全:resume 后客户端 log 只有残尾——用 eraActions 按回合结构
+  // (运河首轮各 1 动,其余各 2 动,turnOrder 轮转)重建全时代日志,残尾与实时
+  // log 对齐合并(AI reason 等字段保留)。
+  const displayLog = useMemo<LogEntry[]>(() => {
+    const history = reconstructEraLog(state, eraActions);
+    if (history.length <= log.length) return log;
+    const offset = history.length - log.length;
+    return history.map((h, i) => {
+      const live = i >= offset ? log[i - offset] : undefined;
+      return {
+        seq: i,
+        player: h.player,
+        action: h.action,
+        events: live?.events ?? [],
+        ...(live?.reason !== undefined ? { reason: live.reason } : {}),
+        ...(live?.degraded !== undefined ? { degraded: live.degraded } : {}),
+      };
+    });
+  }, [state, eraActions, log]);
 
   // 他人暂存(当前行动方非本人时):只取幽灵落子数据,不入播报舞台
   const remoteDraftSeat = current !== seat ? current : null;
@@ -405,7 +425,7 @@ function GameBoard({
           ) : null}
         </>
       )}
-      <LogPanel log={log} room={room ?? undefined} />
+      <LogPanel log={displayLog} room={room ?? undefined} />
     </div>
   );
 }

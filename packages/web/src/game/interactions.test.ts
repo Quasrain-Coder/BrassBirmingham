@@ -331,3 +331,44 @@ describe('buildabilityFor(面板可建性标注)', () => {
     expect(buildabilityFor(state, seat, [])['coal']).toBe('板块已用尽');
   });
 });
+
+describe('reconstructEraLog(行动日志补全)', () => {
+  it('按回合结构交错还原:运河首轮各 1 动,其后各 2 动', async () => {
+    const { reconstructEraLog } = await import('./interactions');
+    const { filterStateFor } = await import('@brass/protocol');
+    const state = filterStateFor(newGame(4, 42), 0);
+    const order = state.turnOrder;
+    const mk = (id: string): Action => ({ type: 'pass', cardId: id });
+    // 首轮每座位 1 条,次轮每座位 2 条(按座位号入桶)
+    const eraActions: Action[][] = [];
+    order.forEach((seat) => {
+      eraActions[seat] = [mk(`r1-${seat}`), mk(`r2a-${seat}`), mk(`r2b-${seat}`)];
+    });
+    const out = reconstructEraLog(state, eraActions);
+    expect(out.map((e) => e.player)).toEqual([
+      order[0], order[1], order[2], order[3], // 首轮轮转
+      order[0], order[0], order[1], order[1], order[2], order[2], order[3], order[3], // 次轮各 2 动
+    ]);
+    expect(out.map((e) => (e.action as { cardId: string }).cardId)).toEqual([
+      `r1-${order[0]}`, `r1-${order[1]}`, `r1-${order[2]}`, `r1-${order[3]}`,
+      `r2a-${order[0]}`, `r2b-${order[0]}`, `r2a-${order[1]}`, `r2b-${order[1]}`,
+      `r2a-${order[2]}`, `r2b-${order[2]}`, `r2a-${order[3]}`, `r2b-${order[3]}`,
+    ]);
+  });
+
+  it('残缺尾部(当前轮进行中)也能正确截断', async () => {
+    const { reconstructEraLog } = await import('./interactions');
+    const { filterStateFor } = await import('@brass/protocol');
+    const state = filterStateFor(newGame(4, 42), 0);
+    const order = state.turnOrder;
+    const mk = (id: string): Action => ({ type: 'pass', cardId: id });
+    const eraActions: Action[][] = [];
+    order.forEach((seat, i) => {
+      eraActions[seat] = i === 0 ? [mk(`r1-${seat}`), mk(`r2-${seat}`)] : [mk(`r1-${seat}`)];
+    });
+    const out = reconstructEraLog(state, eraActions);
+    expect(out.map((e) => (e.action as { cardId: string }).cardId)).toEqual([
+      `r1-${order[0]}`, `r1-${order[1]}`, `r1-${order[2]}`, `r1-${order[3]}`, `r2-${order[0]}`,
+    ]);
+  });
+});

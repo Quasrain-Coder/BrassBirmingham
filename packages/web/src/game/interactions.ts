@@ -560,3 +560,31 @@ export function beerRemaining(
   }
   return remaining;
 }
+
+/**
+ * 本时代完整行动日志重建（"行动日志补全"）：eraActions 是按座位分桶的有序行动,
+ * 按规则回合结构（运河首轮各 1 动,其余各 2 动,turnOrder 轮转）交错还原全局顺序。
+ * resume/重放后客户端 log 只有残尾,用它补全整个时代的日志展示。
+ */
+export function reconstructEraLog(
+  state: FilteredState,
+  eraActions: readonly (readonly Action[])[],
+): { player: PlayerIndex; action: Action }[] {
+  const out: { player: PlayerIndex; action: Action }[] = [];
+  const idx = eraActions.map(() => 0);
+  const perRound = (round: number): number => (state.era === 'canal' && round === 1 ? 1 : 2);
+  for (let round = 1; ; round += 1) {
+    let any = false;
+    for (const seat of state.turnOrder) {
+      for (let k = 0; k < perRound(round); k += 1) {
+        const a = eraActions[seat]?.[idx[seat]!];
+        if (a === undefined) break;
+        out.push({ player: seat, action: a });
+        idx[seat]! += 1;
+        any = true;
+      }
+    }
+    if (!any) break;
+  }
+  return out;
+}
