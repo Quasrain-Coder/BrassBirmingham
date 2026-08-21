@@ -140,8 +140,9 @@ describe('WebSocket 传输层', () => {
     expect(played[actorSeat]!.map((c) => c.id)).toEqual([loan.cardId]);
     expect(played[1 - actorSeat]).toEqual([]);
     // eraActions:该座位本时代行动同步入列
-    const eraActs = after.eraActions as { type: string }[][];
-    expect(eraActs[actorSeat]!.map((a) => a.type)).toEqual(['loan']);
+    const eraActs = after.eraActions as { action: { type: string }; moneyDelta: number }[][];
+    expect(eraActs[actorSeat]!.map((a) => a.action.type)).toEqual(['loan']);
+    expect(eraActs[actorSeat]!.map((a) => a.moneyDelta)).toEqual([30]); // 贷款实际现金 +30
     expect(eraActs[1 - actorSeat]).toEqual([]);
   });
 

@@ -683,8 +683,8 @@ body {
 }
 
 .seat-card.hue-3 .seat-avatar {
-  border-color: #4fa3a5;
-  color: #7fc4c6;
+  border-color: #f0ece2;
+  color: #d8d4c8;
 }
 
 .seat-body {
@@ -1342,11 +1342,24 @@ body {
 }
 
 .discard-card {
-  width: 56px;
+  width: 96px;
   height: auto;
-  border-radius: 5px;
+  border-radius: 7px;
   border: 1px solid #4a3f2c;
   display: block;
+}
+
+/* 卡面下方中文名(打出记录弹层) */
+.discard-card-name {
+  display: block;
+  margin-top: 3px;
+  max-width: 96px;
+  overflow: hidden;
+  color: #d8cdb4;
+  font-size: 0.72rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .discard-card-back {
@@ -1449,6 +1462,43 @@ body {
 
 /* 手牌（官方卡面 + 中文名） */
 /* 8 张一排、总宽与地图持平:单张宽 = (容器 − 7 个间隔) / 8,随屏幕缩放 */
+/* 宽屏手牌标题条:地图下方一行文字标签(全屏免滚动看手牌构成,可点选) */
+.hand-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.hand-strip-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 3px 8px;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: rgba(23, 26, 31, 0.7);
+  color: #d8cdb4;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+
+.hand-strip-chip:hover:not(:disabled) {
+  border-color: #c9a86a;
+  color: #f3ead4;
+}
+
+.hand-strip-chip.selected {
+  border-color: #e3c58f;
+  background: rgba(201, 168, 106, 0.16);
+  color: #f3ead4;
+}
+
 .own-hand {
   display: flex;
   flex-wrap: nowrap;
@@ -1659,6 +1709,23 @@ body {
   font-size: 0.92em;
 }
 
+/* 行级显隐小开关(建造行全局收起/展开) */
+.action-choices .row-toggle {
+  margin-left: auto;
+  padding: 1px 9px;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: transparent;
+  color: #b3a888;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.action-choices .row-toggle:hover {
+  border-color: #c9a86a;
+  color: #f3ead4;
+}
+
 .action-choices button {
   padding: 5px 12px;
   border: 1px solid #6b5b3e;
@@ -1804,7 +1871,14 @@ body {
 .turn-money,
 .head-money {
   color: #e3c58f;
+  font-size: 1.06rem;
+  font-weight: 700;
   white-space: nowrap;
+}
+
+.head-money .coin-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .turn-vp,
@@ -1967,6 +2041,25 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+/* 版图/明细切换旁的"打出"按钮(单人打出记录弹层) */
+.discard-open-btn {
+  padding: 2px 10px;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: transparent;
+  color: #b3a888;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.discard-open-btn:hover {
+  border-color: #c9a86a;
+  color: #f3ead4;
 }
 
 .board-stack-head h4 {
@@ -2163,4 +2256,168 @@ body {
   margin: 4px 0;
   color: #5d5a50;
   font-size: 0.8rem;
+}
+
+/* 紧凑面板第一行:顺位圆牌(与 RoundInfo 同款) */
+.compact-rank {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 26px;
+  height: 26px;
+  border: 2px solid #7f8c8d;
+  border-radius: 50%;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #e3d3a8;
+}
+
+/* 紧凑面板第二行:本回合操作+开销+出牌+打出/历史按钮 */
+.compact-round {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid #3a3226;
+  border-radius: 8px;
+  background: rgba(23, 26, 31, 0.55);
+  font-size: 0.78rem;
+  color: #9aa4b2;
+  white-space: nowrap;
+}
+
+.compact-round-acts {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #8f96a3;
+}
+
+.compact-round-spent {
+  flex: none;
+  color: #b3a888;
+}
+
+.compact-round-cards {
+  display: inline-flex;
+  flex: none;
+  gap: 3px;
+}
+
+.compact-round-cards img {
+  width: 22px;
+  height: auto;
+  border-radius: 3px;
+  border: 1px solid #4a3f2c;
+  display: block;
+}
+
+.history-toggle {
+  flex: none;
+  padding: 1px 7px;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: transparent;
+  color: #b3a888;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.history-toggle:hover {
+  border-color: #c9a86a;
+  color: #f3ead4;
+}
+
+/* 前几回合动作下拉:滚轮查看,每行动右侧标出牌名 */
+.compact-history {
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid #3a3226;
+  border-radius: 8px;
+  background: rgba(23, 26, 31, 0.55);
+  padding: 6px 10px;
+  font-size: 0.76rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.compact-history-round {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.compact-history-label {
+  color: #b3a888;
+  font-weight: 600;
+}
+
+.compact-history-act {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #d8cdb4;
+}
+
+.compact-history-card {
+  flex: none;
+  color: #8a8068;
+  font-style: normal;
+}
+
+/* 钱数椭圆底(与版图顺位钱数椭圆同款) */
+.money-oval {
+  padding: 2px 12px;
+  border: 1px solid #8a6d3b;
+  border-radius: 999px;
+  background: #14100a;
+  color: #ffd94d;
+}
+
+/* 紧凑面板本回合行动:每动一行,动作后跟开销/收入,再跟出牌文本 */
+.compact-round-acts {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.compact-round-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.compact-round-line:first-child:last-child {
+  color: #8f96a3;
+}
+
+.compact-round-delta {
+  flex: none;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.compact-round-delta.neg {
+  color: #e0705c;
+}
+
+.compact-round-delta.pos {
+  color: #58c47b;
+}
+
+/* 第一行末"打出"按钮右对齐;行动行/历史行的出牌文本同样右对齐 */
+.compact-head .discard-open-btn {
+  margin-left: auto;
+}
+
+.compact-round-line .compact-history-card,
+.compact-history-act .compact-history-card {
+  margin-left: auto;
+  text-align: right;
 }

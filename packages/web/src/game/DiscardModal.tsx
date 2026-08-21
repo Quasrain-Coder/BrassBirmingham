@@ -16,18 +16,22 @@ export function DiscardModal({
   playedCards,
   room,
   onClose,
+  onlySeat,
 }: {
   state: FilteredState;
   playedCards: Card[][];
   room?: RoomState | undefined;
   onClose: () => void;
+  /** 单人模式:只显示该座位的打出记录(个人版图上的查看按钮用)。 */
+  onlySeat?: PlayerIndex | undefined;
 }): ReactElement {
   const faceDown = state.era === 'canal' ? 1 : 0;
+  const seats = onlySeat !== undefined ? [onlySeat] : state.players.map((_, i) => i as PlayerIndex);
   return (
     <div className="modal-backdrop" data-testid="discard-modal" onClick={onClose}>
       <section className="score-modal discard-modal" onClick={(e) => e.stopPropagation()}>
         <header className="score-modal-head">
-          <h3>本时代打出记录</h3>
+          <h3>{onlySeat !== undefined ? `${playerName(room, onlySeat)} 的打出记录` : '本时代打出记录'}</h3>
           <button
             type="button"
             className="modal-close"
@@ -38,7 +42,7 @@ export function DiscardModal({
           </button>
         </header>
         <div className="discard-columns">
-          {state.players.map((_, i) => {
+          {seats.map((i) => {
             const cards = playedCards[i] ?? [];
             return (
               <div className="discard-col" key={i} data-testid={`discard-col-${i}`}>
@@ -57,12 +61,14 @@ export function DiscardModal({
                         src="/assets/cards/back.png"
                         alt="开局暗置"
                       />
+                      <span className="discard-card-name">暗置</span>
                       <span className="card-tip">开局暗置（不公开）</span>
                     </span>
                   ) : null}
                   {cards.map((c) => (
                     <span className="discard-cell" key={c.id}>
                       <img className="discard-card" src={cardImageSrc(c)} alt={cardName(c)} />
+                      <span className="discard-card-name">{cardName(c)}</span>
                       <span className="card-tip">{cardName(c)}</span>
                     </span>
                   ))}

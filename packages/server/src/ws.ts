@@ -26,7 +26,7 @@
  * （true→false 成对），AI 的 action_applied 带 reason；usage 记内存，终局打日志行。
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import { PROTOCOL_VERSION } from '@brass/protocol';
@@ -849,15 +849,31 @@ async function serveStatic(
   }
   try {
     const body = await readFile(filePath);
-    // 缓存策略:带内容指纹的构建产物可长期缓存;index.html 与游戏素材
-    // 每次校验,避免旧 HTML 引用已不存在的新指纹资源(或反之)造成白屏。
-    const cacheControl = /\/assets\/[^/]+-[A-Za-z0-9_-]{8,}\.[^/]+$/.test(pathname)
-      ? 'public, max-age=31536000, immutable'
-      : 'no-cache';
-    res.writeHead(200, {
+    // 缓存策略:
+    // - 带内容指纹的构建产物(index-<hash>.js/css):immutable 长缓存;
+    // - index.html:no-cache 每次校验,避免旧 HTML 引用新指纹资源(或反之)白屏;
+    // - 图片等游戏素材:1 天缓存 + ETag——局域网/IP 访问不再每次全量重下,
+    //   过期后也只走 304 轻量校验;素材更新(fetch-assets)后 ETag 随 mtime 变化。
+    const isFingerprint = /\/assets\/[^/]+-[A-Za-z0-9_-]{8,}\.[^/]+$/.test(pathname);
+    const isHtml = pathname.endsWith('.html');
+    const headers: Record<string, string> = {
       'content-type': MIME[extname(filePath).toLowerCase()] ?? 'application/octet-stream',
-      'cache-control': cacheControl,
-    });
+      'cache-control': isFingerprint
+        ? 'public, max-age=31536000, immutable'
+        : isHtml
+          ? 'no-cache'
+          : 'public, max-age=86400',
+    };
+    if (!isFingerprint && !isHtml) {
+      const st = await stat(filePath);
+      const etag = `W/"${Math.round(st.mtimeMs)}-${st.size}"`;
+      headers['etag'] = etag;
+      if (req.headers['if-none-match'] === etag) {
+        res.writeHead(304, headers).end();
+        return;
+      }
+    }
+    res.writeHead(200, headers);
     res.end(body);
   } catch {
     res.writeHead(404).end('not found');

@@ -13,8 +13,9 @@ import { INCOME_LEVEL_SPACES, MERCHANTS, TILES, incomeLevelAt } from '@brass/eng
 import type { Action, Card, IndustryType, MerchantId, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { INDUSTRY_STYLE, PLAYER_COLORS, PLAYER_COLOR_KEYS } from '../board/BoardSvg';
-import { cardFaceKey, cardName, describeAction, industryName, locationName, merchantName } from './display';
+import { cardFaceKey, cardFromId, cardName, describeAction, industryName, locationName, merchantName } from './display';
 import { INDUSTRY_ORDER } from './interactions';
+import { DiscardModal } from './DiscardModal';
 import { PlayerMat } from './PlayerMat';
 import type { LogEntry } from './store';
 
@@ -217,6 +218,8 @@ export function PlayerBoard({
   compact = false,
   activeTurn = false,
   buildStatus,
+  playedCards,
+  eraActions,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -231,8 +234,16 @@ export function PlayerBoard({
   activeTurn?: boolean;
   /** 各产业可建性标注(本人回合的本人面板;明细行内显示,如 "✓ 可建造"/"还需 £3")。 */
   buildStatus?: Partial<Record<IndustryType, string>> | undefined;
+  /** 该座位本时代已打出的牌(右上"打出"按钮的单人记录用)。 */
+  playedCards?: Card[] | undefined;
+  /** 本时代全部行动及实际现金变化(服务端结算时记录,面板行动行的盈亏准确值)。 */
+  eraActions?: { action: Action; moneyDelta: number }[] | undefined;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
+  // 单人打出记录弹层开关(版图/明细切换旁的"打出"按钮)
+  const [discardOpen, setDiscardOpen] = useState(false);
+  // 前几回合动作下拉(第二行末尾箭头)
+  const [historyOpen, setHistoryOpen] = useState(false);
   // 堆叠视图:版图(官方玩家面板美术)/明细(#19 列表)——记住玩家选择
   // (jsdom 等环境无 localStorage,降级为会话内状态)
   const storage = typeof localStorage === 'undefined' ? null : localStorage;
@@ -256,7 +267,33 @@ export function PlayerBoard({
     remainingByTile.set(key, (remainingByTile.get(key) ?? 0) + 1);
   }
 
+  // 单人打出记录数据(稀疏数组,按座位号入桶)
+  const playedCardsAll: Card[][] =
+    playedCards !== undefined ? Object.assign([], { [seat]: playedCards }) as Card[][] : [];
+
   if (compact) {
+    // 第一行:顺位 + 名称 + 钱(椭圆底);行末"打出"按钮
+    const rank = state.turnOrder.indexOf(seat) + 1;
+    // 本时代行动按回合分组(最新轮在前);本回合行动取当前轮组——
+    // 刷新后 log 只剩残尾,但 eraActions 是服务端全量簿记,记录不丢
+    const rounds: { round: number; actions: { action: Action; moneyDelta: number }[] }[] = [];
+    {
+      const ea = eraActions ?? [];
+      const apr = (r: number): number => (state.era === 'canal' && r === 1 ? 1 : 2);
+      let i = 0;
+      for (let r = 1; i < ea.length; r += 1) {
+        const slice = ea.slice(i, i + apr(r));
+        if (slice.length === 0) break;
+        rounds.push({ round: r, actions: slice });
+        i += apr(r);
+      }
+      rounds.reverse();
+    }
+    const acts = rounds.find((r) => r.round === state.round)?.actions ?? [];
+    const actionCardsText = (a: Action): string =>
+      a.type === 'scout'
+        ? a.cardIds.map((id) => cardName(cardFromId(id))).join('+')
+        : cardName(cardFromId(a.cardId));
     return (
       <section
         className={`player-board compact${pulse ? ' pulse' : ''}${activeTurn ? ' active-turn' : ''}`}
@@ -264,86 +301,89 @@ export function PlayerBoard({
         style={pulse || activeTurn ? ({ '--pulse-color': PLAYER_COLORS[seat] ?? '#f0c964' } as CSSProperties) : undefined}
       >
         <div className="compact-head">
+          <span className="compact-rank" style={{ borderColor: PLAYER_COLORS[seat] }} data-testid={`compact-rank-${seat}`}>
+            {rank > 0 ? `#${rank}` : '—'}
+          </span>
           <ColorDot seat={seat} />
           <span className="player-name">{playerName(room, seat)}</span>
           <AIBadge room={room} seat={seat} />
-          <span className={`level-chip${seat === state.turnOrder[state.currentPlayerIdx] ? ' current' : ''}`}>
-            收入等级 {level}
-          </span>
-          <span className="head-money">
-            <img className="coin-icon" src="/assets/coins/1.png" alt="" />£{self.money}
-          </span>
-          <span className="head-vp">{self.vp} 分</span>
+          <span className="head-money money-oval">£{self.money}</span>
+          {playedCards !== undefined ? (
+            <button
+              type="button"
+              className="discard-open-btn"
+              data-testid={`discard-open-${seat}`}
+              title="按顺序查看该玩家本时代打出的全部牌"
+              onClick={() => setDiscardOpen(true)}
+            >
+              打出
+            </button>
+          ) : null}
         </div>
-        <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
-          <div className="board-stack-head">
-            <span className="stack-view-toggle" role="group" aria-label="堆叠视图切换">
-              <button
-                type="button"
-                className={matView ? 'active' : ''}
-                data-testid={`stack-view-mat-${seat}`}
-                onClick={() => setMatView(true)}
-              >
-                版图
-              </button>
-              <button
-                type="button"
-                className={matView ? '' : 'active'}
-                data-testid={`stack-view-list-${seat}`}
-                onClick={() => setMatView(false)}
-              >
-                明细
-              </button>
-            </span>
+        <div className="compact-round" data-testid={`compact-round-${seat}`}>
+          <div className="compact-round-acts">
+            {acts.length === 0 ? (
+              <span className="compact-round-line">本回合未行动</span>
+            ) : (
+              acts.map((a, i) => (
+                <span className="compact-round-line" key={i}>
+                  {describeAction(a.action)}
+                  {a.moneyDelta !== 0 ? (
+                    <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
+                      {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : `−£${-a.moneyDelta}`}
+                    </em>
+                  ) : null}
+                  <em className="compact-history-card">{actionCardsText(a.action)}</em>
+                </span>
+              ))
+            )}
           </div>
-          {matView ? (
-            <PlayerMat
-              tiles={self.tiles}
-              playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
-              colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
-            />
-          ) : (
-            INDUSTRY_ORDER.map((ind) => (
-              <div key={ind} className="board-ind">
-                <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
-                  {industryName(ind)}
-                </span>
-                {buildStatus?.[ind] !== undefined ? (
-                  <span
-                    className={`board-ind-status${buildStatus[ind]!.startsWith('✓') ? ' ok' : ''}`}
-                    data-testid={`build-status-${seat}-${ind}`}
-                  >
-                    {buildStatus[ind]}
-                  </span>
-                ) : null}
-                <span className="board-ind-list">
-                  {TILES.filter((t) => t.industry === ind).map((def) => {
-                    const remaining = remainingByTile.get(`${ind}-${def.level}`) ?? 0;
-                    const cost =
-                      `£${def.costMoney}` +
-                      (def.costCoal > 0 ? ` 煤${def.costCoal}` : '') +
-                      (def.costIron > 0 ? ` 铁${def.costIron}` : '');
-                    return (
-                      <span
-                        key={def.level}
-                        className={`stack-tile${remaining === 0 ? ' exhausted' : ''}`}
-                        data-testid={`player-board-stack-${seat}-${ind}-${def.level}`}
-                        title={`${industryName(ind)} Lv${def.level}｜建造成本 ${cost}｜翻面得 ${def.vp} 分、收入 +${def.incomeAdvance} 级`}
-                      >
-                        <img
-                          src={`/assets/tiles/${ind}-${def.level}-${colorKey}.png`}
-                          alt={`${industryName(ind)} Lv${def.level}`}
-                        />
-                        <span className="stack-tile-count">×{remaining}</span>
-                        <span className="stack-tile-sub">Lv{def.level}</span>
-                      </span>
-                    );
-                  })}
-                </span>
-              </div>
-            ))
-          )}
+          <button
+            type="button"
+            className="history-toggle"
+            data-testid={`history-toggle-${seat}`}
+            aria-expanded={historyOpen}
+            title="展开前几回合的动作"
+            onClick={() => setHistoryOpen(!historyOpen)}
+          >
+            {historyOpen ? '▾' : '▸'}
+          </button>
         </div>
+        {historyOpen ? (
+          <div className="compact-history" data-testid={`compact-history-${seat}`}>
+            {rounds.length === 0 ? (
+              <p className="era-actions-empty">本时代尚未行动</p>
+            ) : (
+              rounds.map((r) => (
+                <div key={r.round} className="compact-history-round">
+                  <span className="compact-history-label">第 {r.round} 轮</span>
+                  {r.actions.map((a, i) => (
+                    <span key={i} className="compact-history-act">
+                      {describeAction(a.action)}
+                      <em className="compact-history-card">{actionCardsText(a.action)}</em>
+                    </span>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        ) : null}
+        <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
+          <PlayerMat
+            tiles={self.tiles}
+            playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
+            colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
+          />
+        </div>
+        {discardOpen ? (
+          <DiscardModal
+            state={state}
+            playedCards={playedCardsAll}
+            room={room}
+            onlySeat={seat}
+            onClose={() => setDiscardOpen(false)}
+          />
+        ) : null}
       </section>
     );
   }
@@ -427,6 +467,17 @@ export function PlayerBoard({
           <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
             <div className="board-stack-head">
               <h4>面板堆叠（未建）</h4>
+              {playedCards !== undefined ? (
+                <button
+                  type="button"
+                  className="discard-open-btn"
+                  data-testid={`discard-open-${seat}`}
+                  title="查看该玩家本时代打出的牌"
+                  onClick={() => setDiscardOpen(true)}
+                >
+                  打出
+                </button>
+              ) : null}
               <span className="stack-view-toggle" role="group" aria-label="堆叠视图切换">
                 <button
                   type="button"
@@ -497,6 +548,15 @@ export function PlayerBoard({
             )}
           </div>
         </div>
+      ) : null}
+      {discardOpen ? (
+        <DiscardModal
+          state={state}
+          playedCards={playedCardsAll}
+          room={room}
+          onlySeat={seat}
+          onClose={() => setDiscardOpen(false)}
+        />
       ) : null}
     </section>
   );

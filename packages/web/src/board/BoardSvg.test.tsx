@@ -38,13 +38,10 @@ describe('<BoardSvg>', () => {
     expect(
       track?.querySelector(`[data-turn-seat="${state.turnOrder[1]!}"]`)?.classList.contains('thinking'),
     ).toBe(true);
-    // 花费 £7:按 15/5/1 面额分解 = 5+1+1 共 3 枚 + 数字
+    // 花费 £7:黄色加大数字,不再叠钱币堆
     const spent = track?.querySelector(`[data-testid="turn-spent-${cur}"]`);
     expect(spent).not.toBeNull();
-    const coinImgs = [...(spent?.querySelectorAll('image') ?? [])].map((img) =>
-      img.getAttribute('href'),
-    );
-    expect(coinImgs).toEqual(['/assets/coins/5.png', '/assets/coins/1.png', '/assets/coins/1.png']);
+    expect(spent?.querySelectorAll('image')).toHaveLength(0);
     expect(spent?.textContent).toContain('£7');
     // 未花费的玩家无椭圆块
     expect(container.querySelector(`[data-testid="turn-spent-${state.turnOrder[2]!}"]`)).toBeNull();

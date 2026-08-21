@@ -58,8 +58,10 @@ export interface Snapshot {
   legalActions: Action[];
   /** 各座位本时代已打出的牌（按打出顺序；Wild 弃置回供应区不入列）。 */
   playedCards: Card[][];
-  /** 各座位本时代的全部行动（按顺序；"本时代行动"折叠记录用）。 */
-  eraActions: Action[][];
+  /** 各座位本时代的全部行动(按顺序)及该行动的**实际现金变化**(结算时记录,
+   *  含市价煤铁/建成卖市场收入——面板行动行的盈亏以此为准确值)。
+   *  时代切换清空、resetTurn 回滚、重放重建。 */
+  eraActions: { action: Action; moneyDelta: number }[][];
 }
 
 /** 'g_' + 8 字节 base64url（11 字符），crypto 随机。测试里应显式传 gameId。 */
@@ -77,7 +79,7 @@ export class GameSession {
    * 回合备份：每个回合第 1 个行动前的状态引用(GameState 不可变,引用即快照)与
    * 当时 seq。供 resetTurn 撤销本回合全部行动(server 扣住回合期间可反悔)。
    */
-  private turnBackup: { state: GameState; seq: number; played: Card[][]; actions: Action[][] } | null = null;
+  private turnBackup: { state: GameState; seq: number; played: Card[][]; actions: { action: Action; moneyDelta: number }[][] } | null = null;
   /**
    * 各座位本时代已打出的牌（按打出顺序）：实体弃牌堆公开规则的按玩家视图。
    * Wild 卡弃置回供应区不入列；时代切换时（弃牌合洗进新牌堆）清空重计。
@@ -85,10 +87,11 @@ export class GameSession {
    */
   private playedThisEra: Card[][];
   /**
-   * 各座位本时代的全部行动（按顺序）:面板下方"本时代行动"折叠记录的数据源。
+   * 各座位本时代的全部行动（按顺序）及其实际现金变化:面板行动行的盈亏显示
+   * 以此为准(客户端按当前盘面近似推算会和历史市价脱节,造成显示与实际结算不一致)。
    * 与 playedThisEra 同生命周期(时代切换清空、resetTurn 回滚、重放重建)。
    */
-  private eraActions: Action[][];
+  private eraActions: { action: Action; moneyDelta: number }[][];
 
   constructor(
     db: Db,
@@ -155,11 +158,15 @@ export class GameSession {
       { persist: false },
     );
     try {
-      for (const { action } of listActions(db, gameId)) {
+      for (const { player, action } of listActions(db, gameId)) {
         session.recordPlayed(action);
-        session.eraActions[session.currentSeat]?.push(action);
+        const moneyBefore = session.gameState.players[player]!.money;
         const eraBefore = session.gameState.era;
         session.gameState = applyAction(session.gameState, action);
+        session.eraActions[player]?.push({
+          action,
+          moneyDelta: session.gameState.players[player]!.money - moneyBefore,
+        });
         if (session.gameState.era !== eraBefore) {
           session.playedThisEra = session.playedThisEra.map(() => []);
           session.eraActions = session.eraActions.map(() => []);
@@ -229,10 +236,15 @@ export class GameSession {
       };
     }
     this.recordPlayed(action);
-    this.eraActions[this.currentSeat]?.push(action);
+    const actingSeat = this.currentSeat; // 行动者(应用后 currentSeat 已轮到下家)
+    const moneyBefore = this.gameState.players[actingSeat]!.money;
     const eraBefore = this.gameState.era;
     appendAction(this.db, this.gameId, this.seq, seat, action);
     this.gameState = next;
+    this.eraActions[actingSeat]?.push({
+      action,
+      moneyDelta: this.gameState.players[actingSeat]!.money - moneyBefore,
+    });
     if (this.gameState.era !== eraBefore) {
       // 时代切换:弃牌合洗,出牌/行动记录重计
       this.playedThisEra = this.playedThisEra.map(() => []);

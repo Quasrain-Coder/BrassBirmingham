@@ -37,10 +37,10 @@ import {
   merchantAnchor,
 } from './geometry';
 import type { SlotRect } from './geometry';
-import { LOCATION_ZH } from '../game/display';
+import { LOCATION_ZH, merchantName } from '../game/display';
 
 /** 官方玩家色：P0 紫 / P1 黄 / P2 橙 / P3 青（与官方板块底色一致）。 */
-export const PLAYER_COLORS = ['#8e6bb0', '#d9a832', '#c05a30', '#4fa3a5'];
+export const PLAYER_COLORS = ['#8e6bb0', '#d9a832', '#c05a30', '#f0ece2'];
 /** 玩家色英文键（素材文件名用）。 */
 export const PLAYER_COLOR_KEYS = ['purple', 'yellow', 'orange', 'teal'] as const;
 
@@ -100,7 +100,7 @@ function playerColor(player: PlayerIndex): string {
 }
 
 /** 啤酒立桶全场统一尺寸(酒厂/商人位相同)。 */
-const BEER_TOKEN_SIZE = 76;
+const BEER_TOKEN_SIZE = 84;
 
 /**
  * 立起的啤酒桶（与版图印刷图案区分）：原木琥珀桶身 + 椭圆顶面 + 桶箍两道 +
@@ -117,11 +117,11 @@ function StandingBeer({ cx, cy, size }: { cx: number; cy: number; size: number }
     <g className="board-merchant-beer" pointerEvents="none">
       {/* 底部投影 */}
       <ellipse cx={cx} cy={bottom + ry * 0.8} rx={rx * 1.2} ry={ry} fill="#000" opacity={0.45} />
-      {/* 桶身(原木琥珀) */}
+      {/* 桶身(明亮金黄,与暗色版图底色拉开) */}
       <path
         d={`M ${cx - rx} ${top} L ${cx - rx} ${bottom} A ${rx} ${ry} 0 0 0 ${cx + rx} ${bottom} L ${cx + rx} ${top} Z`}
-        fill="#9c6f30"
-        stroke="#45300c"
+        fill="#c78f2e"
+        stroke="#3d2706"
         strokeWidth={s * 0.045}
       />
       {/* 侧面高光 */}
@@ -147,8 +147,8 @@ function StandingBeer({ cx, cy, size }: { cx: number; cy: number; size: number }
         stroke="#45300c"
         strokeWidth={s * 0.035}
       />
-      {/* 顶面(亮一档的原木色,立体感来源) */}
-      <ellipse cx={cx} cy={top} rx={rx} ry={ry} fill="#c1903f" stroke="#45300c" strokeWidth={s * 0.045} />
+      {/* 顶面(亮金,立体感来源) */}
+      <ellipse cx={cx} cy={top} rx={rx} ry={ry} fill="#e9b94c" stroke="#3d2706" strokeWidth={s * 0.045} />
     </g>
   );
 }
@@ -522,11 +522,16 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
         })}
       </g>
 
-      {/* 商人位：官方商人板块贴框 + 啤酒桶格(立桶 + 剩余数 token);卖出流可点选 */}
+      {/* 商人位：官方商人板块贴框 + 啤酒桶格(立桶);英文名下方标中文 */}
       <g className="board-merchants">
         {(Object.keys(MERCHANTS) as MerchantId[]).map((id) => {
           const geom = MERCHANT_GEOM[id];
           const m = state.merchants[id];
+          const tilesCx = geom.tiles.reduce((s, r) => s + r.x + r.w / 2, 0) / geom.tiles.length;
+          const tilesTop = Math.min(...geom.tiles.map((r) => r.y));
+          // 中文标紧贴英文铭牌下方:oxford/gloucester 的铭牌在更高处(下方是奖励徽),
+          // 与其余商人位共用 tilesTop-18 会错落到奖励徽下方,故单独上移
+          const labelDy = id === 'oxford' || id === 'gloucester' ? -74 : -18;
           return (
             <g
               className="board-merchant-group"
@@ -535,6 +540,19 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
               style={onMerchantClick ? { cursor: 'pointer' } : undefined}
               onClick={onMerchantClick ? () => onMerchantClick(id) : undefined}
             >
+              <text
+                x={tilesCx}
+                y={tilesTop + labelDy}
+                textAnchor="middle"
+                fontSize={40}
+                fill="#e3d3a8"
+                stroke="#14100a"
+                strokeWidth={7}
+                paintOrder="stroke"
+                pointerEvents="none"
+              >
+                {merchantName(id)}
+              </text>
               {geom.tiles.map((r, ti) => {
                 const type = m?.tiles[ti];
                 if (type === undefined) return null;
@@ -558,29 +576,6 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                   <StandingBeer key={`${id}-beer-${bi}`} cx={r.x + r.w / 2} cy={r.y + r.h / 2} size={BEER_TOKEN_SIZE} />
                 );
               })}
-              {/* 剩余酒数 token(该商人位总桶数) */}
-              {(m?.beer ?? 0) > 0 && geom.beer.length > 0 ? (
-                <g className="merchant-beer-count" data-testid={`merchant-beer-${id}`}>
-                  <rect
-                    x={geom.beer[geom.beer.length - 1]!.x + geom.beer[geom.beer.length - 1]!.w + 8}
-                    y={geom.beer[geom.beer.length - 1]!.y + geom.beer[geom.beer.length - 1]!.h / 2 - 26}
-                    width={86}
-                    height={52}
-                    rx={12}
-                    fill="#14100a"
-                    opacity={0.9}
-                  />
-                  <text
-                    x={geom.beer[geom.beer.length - 1]!.x + geom.beer[geom.beer.length - 1]!.w + 51}
-                    y={geom.beer[geom.beer.length - 1]!.y + geom.beer[geom.beer.length - 1]!.h / 2 + 12}
-                    textAnchor="middle"
-                    fontSize={34}
-                    fill="#f3e9c8"
-                  >
-                    ×{m!.beer}
-                  </text>
-                </g>
-              ) : null}
             </g>
           );
         })}
@@ -738,13 +733,6 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
           const isCurrent = (highlightSeat ?? state.turnOrder[state.currentPlayerIdx]) === seat;
           const thinking = thinkingSeats?.includes(seat) ?? false;
           const colorKey = PLAYER_COLOR_KEYS[seat] ?? 'purple';
-          // 钱币按 15/5/1 面额分解堆叠(最多 5 枚)
-          const coins: number[] = [];
-          for (let rest = spent; rest > 0 && coins.length < 5; ) {
-            const d = rest >= 15 ? 15 : rest >= 5 ? 5 : 1;
-            coins.push(d);
-            rest -= d;
-          }
           return (
             <g
               key={`turn-${seat}`}
@@ -779,21 +767,20 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                   strokeWidth={11}
                 />
               ) : null}
-              {spent > 0 ? (
+              {/* 本轮已行动(含 0 开销的纯贷款)即显示钱数椭圆;未行动不显示 */}
+              {spent > 0 || rank < state.currentPlayerIdx || (rank === state.currentPlayerIdx && state.actionsThisTurn > 0) ? (
                 <g className="turn-money-oval" data-testid={`turn-spent-${seat}`}>
                   <ellipse cx={m.x} cy={m.y} rx={108} ry={56} fill="#14100a" opacity={0.88} stroke="#8a6d3b" strokeWidth={3} />
-                  {coins.map((d, i) => (
-                    <image key={i} href={`/assets/coins/${d}.png`} x={m.x - 86 + i * 30} y={m.y - 18} width={36} height={36} />
-                  ))}
+                  {/* 钱数:黄色加大居中(深色描边保证可读;不再叠钱币堆) */}
                   <text
-                    x={m.x + 10}
-                    y={m.y + 17}
+                    x={m.x}
+                    y={m.y + 21}
                     textAnchor="middle"
-                    fontSize={50}
-                    fill="#ff5040"
+                    fontSize={62}
+                    fill="#ffd94d"
                     fontWeight={800}
                     stroke="#14100a"
-                    strokeWidth={7}
+                    strokeWidth={8}
                     paintOrder="stroke"
                   >
                     £{spent}
@@ -859,16 +846,21 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
         </g>
       ) : null}
 
-      {/* VP / 收入轨玩家标记 */}
+      {/* VP / 收入轨玩家标记：VP 用六边形(与收入圆形区分);收入圆形加大,x 与 VP 同列 */}
       <g className="board-tracks" pointerEvents="none">
         {state.players.map((p, i) => {
           const vp = VP_TRACK[p.vp % 100]!;
           const inc = INCOME_TRACK[Math.max(0, Math.min(99, p.incomeSpace))]!;
           const dx = (i - 1.5) * 30;
+          const r = 36;
+          const hex = Array.from({ length: 6 }, (_, k) => {
+            const a = (Math.PI / 3) * k - Math.PI / 6;
+            return `${vp.x + dx + r * Math.cos(a)},${vp.y + r * Math.sin(a)}`;
+          }).join(' ');
           return (
             <g key={`track-${i}`}>
-              <circle cx={vp.x + dx} cy={vp.y} r={34} fill={playerColor(i)} stroke="#14100a" strokeWidth={6} />
-              <circle cx={inc.x + dx * 0.6} cy={inc.y} r={24} fill={playerColor(i)} stroke="#f3e9c8" strokeWidth={5} />
+              <polygon points={hex} fill={playerColor(i)} stroke="#14100a" strokeWidth={6} />
+              <circle cx={inc.x + dx} cy={inc.y} r={30} fill={playerColor(i)} stroke="#f3e9c8" strokeWidth={5} />
             </g>
           );
         })}

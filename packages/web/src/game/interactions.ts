@@ -568,7 +568,7 @@ export function beerRemaining(
  */
 export function reconstructEraLog(
   state: FilteredState,
-  eraActions: readonly (readonly Action[])[],
+  eraActions: readonly (readonly { action: Action; moneyDelta: number }[])[],
 ): { player: PlayerIndex; action: Action }[] {
   const out: { player: PlayerIndex; action: Action }[] = [];
   const idx = eraActions.map(() => 0);
@@ -577,9 +577,9 @@ export function reconstructEraLog(
     let any = false;
     for (const seat of state.turnOrder) {
       for (let k = 0; k < perRound(round); k += 1) {
-        const a = eraActions[seat]?.[idx[seat]!];
-        if (a === undefined) break;
-        out.push({ player: seat, action: a });
+        const e = eraActions[seat]?.[idx[seat]!];
+        if (e === undefined) break;
+        out.push({ player: seat, action: e.action });
         idx[seat]! += 1;
         any = true;
       }

@@ -17,10 +17,9 @@ import { ActionBar, useActionDraft } from './ActionBar';
 import { AIIndicator } from './AIIndicator';
 import { DiscardModal } from './DiscardModal';
 import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
-import { describeAction } from './display';
+import { describeAction, cardName } from './display';
 import { buildabilityFor, reconstructEraLog } from './interactions';
 import { ScoreModal, useScoreHistory } from './ScoreTable';
-import { EraActions, RoundInfo } from './WideLayout';
 import { SPOTLIGHT_DURATION_MS, spotlightOf } from './spotlight';
 import type { GameStore, GameStoreState, LogEntry } from './store';
 import { useGameStore } from './store';
@@ -36,7 +35,9 @@ interface GameBoardProps {
   thinkingSeats: PlayerIndex[];
   gameOver: GameStoreState['gameOver'];
   turnHold: PlayerIndex | null;
-  /** 当前快照 seq(宽屏布局的本回合信息行用)。 */
+  /** 宽屏面板固定座次(store 持久,断线重连/刷新不重置)。 */
+  fixedSeats: PlayerIndex[];
+  /** 本回合操作行(宽屏紧凑面板第二行):行动日志/本时代行动/当前 seq。 */
   seq: number;
   /** 其他玩家当前的暂存预览(座位 → 预览)。 */
   remoteDrafts: Partial<Record<PlayerIndex, DraftPreview>>;
@@ -44,8 +45,8 @@ interface GameBoardProps {
   resetNotice: { seat: PlayerIndex; n: number } | null;
   /** 各座位本时代已打出的牌(打出记录弹层用)。 */
   playedCards: Card[][];
-  /** 各座位本时代的全部行动("本时代行动"折叠记录用)。 */
-  eraActions: Action[][];
+  /** 各座位本时代的全部行动及实际现金变化(面板/日志用)。 */
+  eraActions: { action: Action; moneyDelta: number }[][];
 }
 
 /** 非本人回合的固定空数组：避免每渲染新引用触发 useActionDraft 的重置 effect 死循环。 */
@@ -63,6 +64,7 @@ function GameBoard({
   gameOver,
   turnHold,
   seq,
+  fixedSeats,
   remoteDrafts,
   resetNotice,
   playedCards,
@@ -72,11 +74,7 @@ function GameBoard({
   // 上家回合仍被扣住(turnHold)时,即使轮到自己也不能行动——服务端会拒
   // (awaiting-turn-confirm);此时按"等待确认"显示,避免误以为行动被退回
   const myTurn = current === seat && gameOver === null && turnHold === null;
-  // 宽屏四个侧列面板按**初始顺位**固定位置(不随每轮顺位重排而换位);
-  // 信息行里的顺位徽标仍按当前轮顺位显示。
-  const fixedSeatsRef = useRef<PlayerIndex[] | null>(null);
-  if (fixedSeatsRef.current === null) fixedSeatsRef.current = [...state.turnOrder];
-  const fixedSeats = fixedSeatsRef.current;
+  // 面板按开局座次固定(store 持久);顺位徽标仍按当前轮顺位显示
   // 面板按本轮顺位排布:顺位在自己之前的排在版图上区,自己锚定在手牌/行动条旁
   // (默认展开),之后的排在自己单元之后——每轮顺位变化时两侧名单随之重排。
   const myPos = state.turnOrder.indexOf(seat);
@@ -301,6 +299,22 @@ function GameBoard({
       }
     />
   );
+  // 宽屏手牌标题条:地图下方一行文字标签(可点选),全屏不滚动也能看到手牌构成
+  const handStripEl = (
+    <div className="hand-strip" data-testid="hand-strip">
+      {hand.map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          className={`hand-strip-chip${selectedCard === c.id ? ' selected' : ''}`}
+          data-testid={`hand-strip-${c.id}`}
+          onClick={myTurn ? () => store.selectCard(c.id === selectedCard ? null : c.id) : undefined}
+        >
+          {cardName(c)}
+        </button>
+      ))}
+    </div>
+  );
   const actionEl = (
     <ActionBar
       myTurn={myTurn}
@@ -384,24 +398,21 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} />
-                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} active={highlightSeat === i} />
-                <EraActions seat={i} actions={eraActions[i] ?? []} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} />
               </div>
             ))}
           </aside>
           <div className="wide-center">
             <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
             {boardEl}
+            {handStripEl}
             {handEl}
             {actionEl}
           </div>
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} />
-                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} active={highlightSeat === i} />
-                <EraActions seat={i} actions={eraActions[i] ?? []} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} />
               </div>
             ))}
           </aside>
@@ -410,18 +421,18 @@ function GameBoard({
         <>
           <div className="player-boards">
             {seatsBefore.map((i) => (
-              <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} buildStatus={i === seat ? buildability : undefined} />
+              <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} />
             ))}
           </div>
           <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
           {boardEl}
           {handEl}
           {actionEl}
-          <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} buildStatus={buildability} />
+          <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} buildStatus={buildability} playedCards={playedCards[seat] ?? []} />
           {seatsAfter.length > 0 ? (
             <div className="player-boards player-boards-after">
               {seatsAfter.map((i) => (
-                <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} buildStatus={i === seat ? buildability : undefined} />
+                <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} />
               ))}
             </div>
           ) : null}
@@ -454,6 +465,7 @@ export function GameScreen({ store }: { store: GameStore }): ReactElement {
       gameOver={s.gameOver}
       turnHold={s.turnHold}
       seq={s.seq}
+      fixedSeats={s.fixedSeats ?? s.snapshot.turnOrder}
       remoteDrafts={s.remoteDrafts}
       resetNotice={s.resetNotice}
       playedCards={s.playedCards}

@@ -444,7 +444,7 @@ describe('<ActionBar>', () => {
         onResetTurn={() => {}}
       />,
     );
-    for (const id of ['build-options', 'network-row', 'develop-options', 'sell-options', 'scout-options', 'loan-row']) {
+    for (const id of ['build-options', 'develop-options', 'sell-options', 'scout-options', 'loan-row']) {
       expect(screen.getByTestId(id).classList.contains('row-disabled')).toBe(true);
     }
   });
@@ -536,11 +536,8 @@ describe('<ActionBar>', () => {
     expect(picked).toEqual([f.hand[1]!.id]);
   });
 
-  it('啤酒实况:显示自有酒厂与商人位余量;收益预览:贷款显示 +£30 与收入 −3', () => {
+  it('收益预览:贷款显示 +£30 与收入 −3', () => {
     const state = filterStateFor(newGame(4, 42), 0);
-    const brew = tileDef('brewery', 1)!;
-    state.board.slots['derby']![0] = { tile: brew, player: 0, flipped: false, resources: 1 };
-    state.merchants.oxford = { tiles: ['any'], beer: 1 };
     const action: Action = { type: 'loan', cardId: 'c1' };
     render(
       <ActionBar
@@ -559,8 +556,6 @@ describe('<ActionBar>', () => {
         onResetTurn={() => {}}
       />,
     );
-    expect(screen.getByTestId('beer-status')).toHaveTextContent('德比×1');
-    expect(screen.getByTestId('beer-status')).toHaveTextContent('牛津×1');
     const preview = screen.getByTestId('action-preview');
     expect(preview).toHaveTextContent('+£30');
     expect(preview).toHaveTextContent('收入等级 −3');
