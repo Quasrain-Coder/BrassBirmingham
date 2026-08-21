@@ -198,7 +198,8 @@ function ResourceTokens({ cx, cy, industry, count }: { cx: number; cy: number; i
     const y = cy + SLOT_SIZE / 2 - 66 + row * 46;
     tokens.push(
       industry === 'brewery' ? (
-        <image key={i} href="/assets/beer.png" x={x - 26} y={y - 26} width={52} height={52} />
+        // 酒厂商用立桶(与商人位同款):1-2 桶直观可见
+        <StandingBeer key={i} r={{ x: x - 26, y: y - 26, w: 52, h: 52 }} />
       ) : (
         <Cube key={i} x={x} y={y} size={44} fill={industry === 'coal' ? '#1f2329' : '#c76b2a'} />
       ),

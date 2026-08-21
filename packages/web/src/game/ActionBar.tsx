@@ -702,20 +702,24 @@ export function ActionBar({
 
         {(() => {
           const sellRowDisabled = draft.sellSingles.length === 0 && draft.sellFullSet === null && draft.sellGroups.length === 0;
+          // 该板块当前真能卖向的商人(可达+收货+啤酒总量够),建筑行只列非空的
+          const feasibleMerchants = (t: SlotRef, beerToFlip: number): MerchantId[] =>
+            merchantsForTile(state, t).filter((id) => {
+              const src = beerSourcesFor(state, seat, id);
+              const total =
+                (src.merchantBarrel ? 1 : 0) +
+                src.own.reduce((s, b) => s + b.barrels, 0) +
+                src.opponent.reduce((s, b) => s + b.barrels, 0);
+              return total >= beerToFlip;
+            });
           const sellableNow = sellableTilesFor(state, seat).filter(
-            (t) => !draft.sellGroups.some((g) => g.tile.location === t.location && g.tile.slotIndex === t.slotIndex),
+            (t) =>
+              !draft.sellGroups.some((g) => g.tile.location === t.location && g.tile.slotIndex === t.slotIndex) &&
+              feasibleMerchants(t, t.beerToFlip).length > 0,
           );
           const curPlaced = draft.sellTile !== null ? state.board.slots[draft.sellTile.location]?.[draft.sellTile.slotIndex] : null;
           const curNeed = curPlaced?.tile.beerToFlip ?? 0;
-          const curMerchants =
-            draft.sellTile !== null
-              ? merchantsForTile(state, draft.sellTile).filter((id) => {
-                  // 啤酒可行性:商人桶(≤1)+自家酒厂+连通对手酒厂 ≥ 需求
-                  const src = beerSourcesFor(state, seat, id);
-                  const total = (src.merchantBarrel ? 1 : 0) + src.own.reduce((s, b) => s + b.barrels, 0) + src.opponent.reduce((s, b) => s + b.barrels, 0);
-                  return total >= curNeed;
-                })
-              : [];
+          const curMerchants = draft.sellTile !== null ? feasibleMerchants(draft.sellTile, curNeed) : [];
           const curBeerSources = draft.sellMerchant !== null ? beerSourcesFor(state, seat, draft.sellMerchant) : null;
           const breweryUsed = new Map<string, number>();
           for (const b of draft.sellBeer) {

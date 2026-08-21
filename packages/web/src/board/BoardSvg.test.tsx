@@ -143,8 +143,8 @@ describe('<BoardSvg>', () => {
       container.querySelectorAll('g[data-location="birmingham"] .tile-resource-tokens rect'),
     ).toHaveLength(6); // 3 方块 ×（本体+高光）
     expect(
-      container.querySelectorAll('g[data-location="derby"] .tile-resource-tokens image'),
-    ).toHaveLength(1);
+      container.querySelectorAll('g[data-location="derby"] .tile-resource-tokens .board-merchant-beer'),
+    ).toHaveLength(1); // 酒厂商用立桶(自绘,非贴图)
   });
 
   it('煤/铁市场按 filled 渲染方块（初始煤 13 铁 8）', () => {
