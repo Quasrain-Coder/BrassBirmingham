@@ -39,7 +39,7 @@ import {
 } from './interactions';
 import type { BuildAction, SellAction } from './interactions';
 import { cardName, industryName, locationName, merchantName } from './display';
-import { previewOf } from './preview';
+import { moneyDelta, previewOf } from './preview';
 
 export interface UseActionDraftArgs {
   legalActions: Action[];
@@ -367,10 +367,30 @@ export function ActionBar({
   onEndTurn,
   onResetTurn,
 }: ActionBarProps): ReactElement {
+  // 现金实时标记:显眼处常驻;暂存行动时预览结算后的现金(取消/重置即恢复)
+  const money = state.players[seat]?.money ?? 0;
+  const projected =
+    draft.resolved !== null ? money + moneyDelta(draft.resolved, state, seat) : null;
+  const moneyChip = (showProjection: boolean): ReactElement => (
+    <span className="action-money" data-testid="action-money">
+      <img className="coin-icon" src="/assets/coins/1.png" alt="" />
+      £{money}
+      {showProjection && projected !== null && projected !== money ? (
+        <span className={`action-money-delta ${projected > money ? 'pos' : 'neg'}`}>
+          → £{projected}
+        </span>
+      ) : null}
+    </span>
+  );
+
   // 回合打满待确认:显式"结束回合"放行;"重置本回合"撤销重来
   if (turnHold === seat) {
     return (
       <section className="action-bar turn-hold" data-testid="action-bar">
+        <div className="action-bar-head">
+          <h3>行动</h3>
+          {moneyChip(false)}
+        </div>
         <p data-testid="turn-hold-hint">本回合行动已完成。确认后进入下一位玩家;也可以重置本回合重新行动。</p>
         <div className="action-confirm">
           <button type="button" data-testid="end-turn" onClick={onEndTurn}>
@@ -386,6 +406,10 @@ export function ActionBar({
   if (!myTurn) {
     return (
       <section className="action-bar" data-testid="action-bar">
+        <div className="action-bar-head">
+          <h3>行动</h3>
+          {moneyChip(false)}
+        </div>
         <p data-testid="waiting" className={turnHold !== null ? 'waiting-hold' : undefined}>
           {turnHold !== null ? `等待 ${waitingFor} 确认回合…` : `等待 ${waitingFor} 行动…`}
         </p>
@@ -441,7 +465,10 @@ export function ActionBar({
 
   return (
     <section className="action-bar" data-testid="action-bar">
-      <h3>行动</h3>
+      <div className="action-bar-head">
+        <h3>行动</h3>
+        {moneyChip(true)}
+      </div>
       {/* 啤酒实况常驻显示(项 5) */}
       <p className="beer-status" data-testid="beer-status">
         啤酒：{ownBreweries.length > 0 ? `酒厂 ${ownBreweries.join('、')}` : '无酒厂余量'}

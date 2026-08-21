@@ -390,6 +390,35 @@ describe('<ActionBar>', () => {
     }
   });
 
+  it('现金实时标记:默认显示当前现金;暂存贷款后预览 +£30,取消恢复', () => {
+    const state = filterStateFor(newGame(4, 42), 0);
+    const loan: Action = { type: 'loan', cardId: 'c1' };
+    const barProps = {
+      myTurn: true,
+      waitingFor: '甲',
+      selectedCard: 'c1',
+      hand: [],
+      state,
+      turnHold: null,
+      seat: 0 as const,
+      canResetTurn: false,
+      onConfirm: () => {},
+      onCancel: () => {},
+      onEndTurn: () => {},
+      onResetTurn: () => {},
+    };
+    const { rerender } = render(<ActionBar {...barProps} draft={draftFixture()} />);
+    const chip = screen.getByTestId('action-money');
+    expect(chip).toHaveTextContent('£17');
+    expect(chip).not.toHaveTextContent('→');
+    // 暂存贷款 → 预览 £17 → £47
+    rerender(<ActionBar {...barProps} draft={draftFixture({ resolved: loan, candidates: [loan] })} />);
+    expect(screen.getByTestId('action-money')).toHaveTextContent('£17→ £47');
+    // 取消(resolved 清空)→ 恢复 £17
+    rerender(<ActionBar {...barProps} draft={draftFixture()} />);
+    expect(screen.getByTestId('action-money')).not.toHaveTextContent('→');
+  });
+
   it('resolved 后确认钮显示行动描述，点击触发 onConfirm', () => {
     const action: Action = { type: 'loan', cardId: 'c1' };
     let confirmed = 0;

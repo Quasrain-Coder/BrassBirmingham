@@ -1562,6 +1562,42 @@ body {
   margin: 0 0 8px;
 }
 
+/* 行动条头部:标题左,现金实时标记右(显眼大金 chip) */
+.action-bar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.action-money {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #f0c964;
+  letter-spacing: 0.02em;
+}
+
+.action-money .coin-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.action-money-delta {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.action-money-delta.neg {
+  color: #e0705c;
+}
+
+.action-money-delta.pos {
+  color: #58c47b;
+}
+
 .action-hint {
   color: #b3a888;
   margin: 4px 0;
