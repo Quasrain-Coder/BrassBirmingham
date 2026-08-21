@@ -29,23 +29,26 @@ export function RoundInfo({
   seq,
   log,
   room,
+  active,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
   seq: number;
   log: LogEntry[];
   room: RoomState | null;
+  /** 高亮覆盖(跟随播报舞台);缺省按当前行动玩家。 */
+  active?: boolean | undefined;
 }): ReactElement {
   const p = state.players[seat]!;
   const rank = state.turnOrder.indexOf(seat) + 1;
   const start = roundStartSeq(state, seq);
   const acts = log.filter((e) => e.seq >= start && e.player === seat);
-  const active = state.turnOrder[state.currentPlayerIdx] === seat;
+  const isActive = active ?? state.turnOrder[state.currentPlayerIdx] === seat;
   return (
     <div
-      className={`round-info${active ? ' active' : ''}`}
+      className={`round-info${isActive ? ' active' : ''}`}
       data-testid={`round-info-${seat}`}
-      style={active ? ({ '--pulse-color': PLAYER_COLORS[seat] } as CSSProperties) : undefined}
+      style={isActive ? ({ '--pulse-color': PLAYER_COLORS[seat] } as CSSProperties) : undefined}
     >
       <span className="round-info-rank" style={{ borderColor: PLAYER_COLORS[seat] }}>
         {rank === -1 ? '—' : `#${rank}`}

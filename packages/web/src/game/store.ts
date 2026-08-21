@@ -524,6 +524,10 @@ export class GameStore {
         const prevCurrent = prev?.turnOrder[prev.currentPlayerIdx];
         const nextCurrent = msg.state.turnOrder[msg.state.currentPlayerIdx];
         const turnChanged = prev !== null && prevCurrent !== nextCurrent;
+        // resetTurn 回滚后,seq >= 快照 seq 的日志条目是"已被撤销的行动",剔除
+        // (否则序号复用时会把已撤销行动再次播报;快照 seq = 下一个行动的 seq)
+        const trimmedLog =
+          msg.seq <= this.state.seq ? this.state.log.filter((e) => e.seq < msg.seq) : this.state.log;
         this.patch({
           snapshot: msg.state,
           legalActions: msg.legalActions,
@@ -531,6 +535,7 @@ export class GameStore {
           turnHold: msg.turnHold ?? null,
           playedCards: msg.playedCards ?? this.state.playedCards,
           eraActions: msg.eraActions ?? this.state.eraActions,
+          ...(trimmedLog !== this.state.log ? { log: trimmedLog } : {}),
           ...(turnChanged ? { remoteDrafts: {} } : {}),
         });
         break;

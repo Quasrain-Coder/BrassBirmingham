@@ -80,6 +80,8 @@ export interface BoardSvgProps {
   spotlight?: ActionSpotlight | null | undefined;
   /** AI 思考中的座位（顺位轨头像呼吸灯）。 */
   thinkingSeats?: readonly PlayerIndex[] | undefined;
+  /** 高亮座位(顺位轨头像光圈):跟随播报舞台;缺省按当前行动玩家。 */
+  highlightSeat?: PlayerIndex | null | undefined;
   /** 建造预览:非贴合预览 token 盖在目标槽位(确认前,切换城市即跟随)。 */
   buildPreview?: { location: LocationId; slotIndex: number; industry: IndustryType; player: PlayerIndex } | null | undefined;
   /** 啤酒匹配线(resolved 卖货):啤酒来源 → 卖货地点(虚线动效)。 */
@@ -189,7 +191,7 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
   );
 }
 
-export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPreview, beerMatches, linkPreview, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
+export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinkingSeats, buildPreview, beerMatches, linkPreview, onSlotClick, onLinkClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const highlightedLocations = new Set(highlights?.locations ?? []);
@@ -702,7 +704,7 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
           const b = TURN_BARRELS[rank]!;
           const m = TURN_MONEY[rank]!;
           const spent = state.players[seat]!.spentThisRound;
-          const isCurrent = state.turnOrder[state.currentPlayerIdx] === seat;
+          const isCurrent = (highlightSeat ?? state.turnOrder[state.currentPlayerIdx]) === seat;
           const thinking = thinkingSeats?.includes(seat) ?? false;
           const colorKey = PLAYER_COLOR_KEYS[seat] ?? 'purple';
           // 钱币按 15/5/1 面额分解堆叠(最多 5 枚)
@@ -752,7 +754,17 @@ export function BoardSvg({ state, highlights, spotlight, thinkingSeats, buildPre
                   {coins.map((d, i) => (
                     <image key={i} href={`/assets/coins/${d}.png`} x={m.x - 86 + i * 30} y={m.y - 18} width={36} height={36} />
                   ))}
-                  <text x={m.x + 64} y={m.y + 13} textAnchor="middle" fontSize={34} fill="#f0d89a" fontWeight={700}>
+                  <text
+                    x={m.x + 10}
+                    y={m.y + 17}
+                    textAnchor="middle"
+                    fontSize={50}
+                    fill="#ff5040"
+                    fontWeight={800}
+                    stroke="#14100a"
+                    strokeWidth={7}
+                    paintOrder="stroke"
+                  >
                     £{spent}
                   </text>
                 </g>

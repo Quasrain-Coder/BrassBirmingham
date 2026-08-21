@@ -225,6 +225,47 @@ describe('<GameScreen>', () => {
     }
   });
 
+  it('播报流:一帧内多条行动逐条入队,不丢中间播报', () => {
+    vi.useFakeTimers();
+    try {
+      const { store, ws, game } = setup(true);
+      render(<GameScreen store={store} />);
+      const p0 = game.turnOrder[0]!;
+      const p1 = game.turnOrder[1]!;
+      // 同一帧内连发两条 action_applied(模拟 AI 连动)
+      act(() => {
+        ws.emit({
+          type: 'action_applied',
+          protocolVersion: PROTOCOL_VERSION,
+          seq: 1,
+          player: p0,
+          action: { type: 'loan', cardId: 'c0' },
+          events: [],
+        });
+        ws.emit({
+          type: 'action_applied',
+          protocolVersion: PROTOCOL_VERSION,
+          seq: 2,
+          player: p1,
+          action: { type: 'pass', cardId: 'c1' },
+          events: [],
+        });
+      });
+      // 第一条立即播;第二条排队,5 秒后接棒
+      expect(screen.getByTestId('action-spotlight')).toHaveTextContent('贷款');
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.getByTestId('action-spotlight')).toHaveTextContent('过');
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.queryByTestId('action-spotlight')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('离开对局：点按钮 → 发 leave 帧并回到大厅态', () => {
     const { store, ws } = setup(true);
     render(<GameScreen store={store} />);

@@ -156,18 +156,23 @@ function GameBoard({
     else stageQueueRef.current.push(item);
   };
 
-  // 最新一条 action_applied → 行动聚光灯入队
-  const lastEntry = log[log.length - 1];
-  const lastSeq = lastEntry?.seq;
+  // 行动聚光灯：逐条消费日志流(不以"最后一条"为触发键——AI 行动一帧内连发时,
+  // React 合并渲染会让中间行动丢播报;每条行动都入队,各播 5 秒)。
+  // resetTurn 后序号回退(seq 变小):重置消费水位;store 已剔除被撤销的日志条目。
+  const consumedSeqRef = useRef(-1);
   useEffect(() => {
-    if (lastEntry === undefined) return;
-    pushStage({
-      kind: 'action',
-      ...spotlightOf(lastEntry.player, lastEntry.action),
-      text: describeAction(lastEntry.action),
-    });
+    if (seq < consumedSeqRef.current) consumedSeqRef.current = seq - 1;
+    for (const e of log) {
+      if (e.seq <= consumedSeqRef.current) continue;
+      consumedSeqRef.current = e.seq;
+      pushStage({
+        kind: 'action',
+        ...spotlightOf(e.player, e.action),
+        text: describeAction(e.action),
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastSeq]);
+  }, [log, seq]);
 
   // 新一轮/新时代红字播放入队：round 递增或 era 切换时触发;首帧不播
   const prevRoundRef = useRef<{ era: string; round: number } | null>(null);
@@ -201,6 +206,10 @@ function GameBoard({
     stage?.kind === 'action' ? stage : null;
   const roundBanner: string | null = stage?.kind === 'round' ? stage.text : null;
 
+  // 高亮跟随播报:播谁的行动就高亮谁(5 秒全程,直到播完才切换);队列空时回到
+  // 实际当前玩家——人类回合于是从思考一直亮到点"结束回合"。面板发光与头像光圈统一。
+  const highlightSeat: PlayerIndex = spotlight !== null ? spotlight.player : current;
+
   // 布局模式:经典 / 宽屏(27 寸全屏,地图居中,左右两列面板全部铺开)
   const storage = typeof localStorage === 'undefined' ? null : localStorage;
   const [layoutWide, setLayoutWideState] = useState<boolean>(() => storage?.getItem('brass-layout') === 'wide');
@@ -233,6 +242,7 @@ function GameBoard({
         state={state}
         highlights={myTurn ? draft.highlights : undefined}
         spotlight={spotlight}
+        highlightSeat={highlightSeat}
         thinkingSeats={thinkingSeats}
         buildPreview={ghostBuild}
         beerMatches={ghostBeerMatches.length > 0 ? ghostBeerMatches : undefined}
@@ -351,8 +361,8 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={current === i} compact buildStatus={i === seat ? buildability : undefined} />
-                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} />
+                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} active={highlightSeat === i} />
                 <EraActions seat={i} actions={eraActions[i] ?? []} />
               </div>
             ))}
@@ -366,8 +376,8 @@ function GameBoard({
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={current === i} compact buildStatus={i === seat ? buildability : undefined} />
-                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} />
+                <RoundInfo state={state} seat={i} seq={seq} log={log} room={room} active={highlightSeat === i} />
                 <EraActions seat={i} actions={eraActions[i] ?? []} />
               </div>
             ))}
