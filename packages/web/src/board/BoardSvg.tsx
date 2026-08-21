@@ -37,7 +37,7 @@ import {
   merchantAnchor,
 } from './geometry';
 import type { SlotRect } from './geometry';
-import { LOCATION_ZH } from '../game/display';
+import { LOCATION_ZH, merchantName } from '../game/display';
 
 /** 官方玩家色：P0 紫 / P1 黄 / P2 橙 / P3 青（与官方板块底色一致）。 */
 export const PLAYER_COLORS = ['#8e6bb0', '#d9a832', '#c05a30', '#f0ece2'];
@@ -522,11 +522,13 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
         })}
       </g>
 
-      {/* 商人位：官方商人板块贴框 + 啤酒桶格(立桶 + 剩余数 token);卖出流可点选 */}
+      {/* 商人位：官方商人板块贴框 + 啤酒桶格(立桶);英文名下方标中文 */}
       <g className="board-merchants">
         {(Object.keys(MERCHANTS) as MerchantId[]).map((id) => {
           const geom = MERCHANT_GEOM[id];
           const m = state.merchants[id];
+          const tilesCx = geom.tiles.reduce((s, r) => s + r.x + r.w / 2, 0) / geom.tiles.length;
+          const tilesTop = Math.min(...geom.tiles.map((r) => r.y));
           return (
             <g
               className="board-merchant-group"
@@ -535,6 +537,19 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
               style={onMerchantClick ? { cursor: 'pointer' } : undefined}
               onClick={onMerchantClick ? () => onMerchantClick(id) : undefined}
             >
+              <text
+                x={tilesCx}
+                y={tilesTop - 18}
+                textAnchor="middle"
+                fontSize={40}
+                fill="#e3d3a8"
+                stroke="#14100a"
+                strokeWidth={7}
+                paintOrder="stroke"
+                pointerEvents="none"
+              >
+                {merchantName(id)}
+              </text>
               {geom.tiles.map((r, ti) => {
                 const type = m?.tiles[ti];
                 if (type === undefined) return null;
@@ -563,7 +578,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
         })}
       </g>
 
-      {/* 煤/铁市场：已填格叠方块 + 英文印刷下方中文标注 */}
+      {/* 煤/铁市场：已填格叠方块 */}
       <g className="board-markets" pointerEvents="none">
         {COAL_MARKET_CELLS.map((p, i) =>
           i >= coalFilledFrom ? <Cube key={`coal-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#1f2329" /> : null,
@@ -571,8 +586,6 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
         {IRON_MARKET_CELLS.map((p, i) =>
           i >= ironFilledFrom ? <Cube key={`iron-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#c76b2a" /> : null,
         )}
-        <text x={4495} y={3212} textAnchor="middle" fontSize={38} fill="#d8c9a0" stroke="#14100a" strokeWidth={6} paintOrder="stroke">煤炭市场</text>
-        <text x={4712} y={3212} textAnchor="middle" fontSize={38} fill="#d8c9a0" stroke="#14100a" strokeWidth={6} paintOrder="stroke">铁矿市场</text>
       </g>
 
       {/* 连线 token 顶层渲染（不被板块图遮挡） */}
@@ -830,17 +843,21 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
         </g>
       ) : null}
 
-      {/* VP / 收入轨玩家标记 */}
+      {/* VP / 收入轨玩家标记：VP 用六边形(与收入圆形区分);收入圆形加大,x 与 VP 同列 */}
       <g className="board-tracks" pointerEvents="none">
         {state.players.map((p, i) => {
           const vp = VP_TRACK[p.vp % 100]!;
           const inc = INCOME_TRACK[Math.max(0, Math.min(99, p.incomeSpace))]!;
           const dx = (i - 1.5) * 30;
+          const r = 36;
+          const hex = Array.from({ length: 6 }, (_, k) => {
+            const a = (Math.PI / 3) * k - Math.PI / 6;
+            return `${vp.x + dx + r * Math.cos(a)},${vp.y + r * Math.sin(a)}`;
+          }).join(' ');
           return (
             <g key={`track-${i}`}>
-              <circle cx={vp.x + dx} cy={vp.y} r={34} fill={playerColor(i)} stroke="#14100a" strokeWidth={6} />
-              {/* 收入标记:加大并整体右移(原偏小且普遍偏左) */}
-              <circle cx={inc.x + dx * 0.6 + 44} cy={inc.y} r={30} fill={playerColor(i)} stroke="#f3e9c8" strokeWidth={5} />
+              <polygon points={hex} fill={playerColor(i)} stroke="#14100a" strokeWidth={6} />
+              <circle cx={inc.x + dx} cy={inc.y} r={30} fill={playerColor(i)} stroke="#f3e9c8" strokeWidth={5} />
             </g>
           );
         })}

@@ -17,8 +17,6 @@ import { cardFaceKey, cardFromId, cardName, describeAction, industryName, locati
 import { INDUSTRY_ORDER } from './interactions';
 import { DiscardModal } from './DiscardModal';
 import { PlayerMat } from './PlayerMat';
-import { moneyDelta } from './preview';
-import { roundStartSeq } from './WideLayout';
 import type { LogEntry } from './store';
 
 /** 座位显示名：有房间信息用昵称，否则 玩家{seat+1}。 */
@@ -221,9 +219,7 @@ export function PlayerBoard({
   activeTurn = false,
   buildStatus,
   playedCards,
-  log,
   eraActions,
-  seq,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -240,10 +236,8 @@ export function PlayerBoard({
   buildStatus?: Partial<Record<IndustryType, string>> | undefined;
   /** 该座位本时代已打出的牌(右上"打出"按钮的单人记录用)。 */
   playedCards?: Card[] | undefined;
-  /** 本回合操作行(宽屏紧凑面板第二行):行动日志/本时代行动/当前 seq。 */
-  log?: LogEntry[] | undefined;
-  eraActions?: Action[] | undefined;
-  seq?: number | undefined;
+  /** 本时代全部行动及实际现金变化(服务端结算时记录,面板行动行的盈亏准确值)。 */
+  eraActions?: { action: Action; moneyDelta: number }[] | undefined;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
   // 单人打出记录弹层开关(版图/明细切换旁的"打出"按钮)
@@ -280,11 +274,9 @@ export function PlayerBoard({
   if (compact) {
     // 第一行:顺位 + 名称 + 钱(椭圆底);行末"打出"按钮
     const rank = state.turnOrder.indexOf(seat) + 1;
-    // 本回合行动:每动一行,动作后跟开销/收入,再跟出牌文本;末尾历史下拉箭头
-    const start = roundStartSeq(state, seq ?? 0);
-    const acts = log?.filter((e) => e.seq >= start && e.player === seat) ?? [];
-    // 前几回合动作:eraActions 按回合结构分组(最新轮在前)
-    const rounds: { round: number; actions: Action[] }[] = [];
+    // 本时代行动按回合分组(最新轮在前);本回合行动取当前轮组——
+    // 刷新后 log 只剩残尾,但 eraActions 是服务端全量簿记,记录不丢
+    const rounds: { round: number; actions: { action: Action; moneyDelta: number }[] }[] = [];
     {
       const ea = eraActions ?? [];
       const apr = (r: number): number => (state.era === 'canal' && r === 1 ? 1 : 2);
@@ -297,6 +289,7 @@ export function PlayerBoard({
       }
       rounds.reverse();
     }
+    const acts = rounds.find((r) => r.round === state.round)?.actions ?? [];
     const actionCardsText = (a: Action): string =>
       a.type === 'scout'
         ? a.cardIds.map((id) => cardName(cardFromId(id))).join('+')
@@ -332,20 +325,17 @@ export function PlayerBoard({
             {acts.length === 0 ? (
               <span className="compact-round-line">本回合未行动</span>
             ) : (
-              acts.map((a, i) => {
-                const delta = moneyDelta(a.action, state, seat);
-                return (
-                  <span className="compact-round-line" key={i}>
-                    {describeAction(a.action)}
-                    {delta !== 0 ? (
-                      <em className={`compact-round-delta ${delta > 0 ? 'pos' : 'neg'}`}>
-                        {delta > 0 ? `+£${delta}` : `−£${-delta}`}
-                      </em>
-                    ) : null}
-                    <em className="compact-history-card">{actionCardsText(a.action)}</em>
-                  </span>
-                );
-              })
+              acts.map((a, i) => (
+                <span className="compact-round-line" key={i}>
+                  {describeAction(a.action)}
+                  {a.moneyDelta !== 0 ? (
+                    <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
+                      {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : `−£${-a.moneyDelta}`}
+                    </em>
+                  ) : null}
+                  <em className="compact-history-card">{actionCardsText(a.action)}</em>
+                </span>
+              ))
             )}
           </div>
           <button
@@ -369,8 +359,8 @@ export function PlayerBoard({
                   <span className="compact-history-label">第 {r.round} 轮</span>
                   {r.actions.map((a, i) => (
                     <span key={i} className="compact-history-act">
-                      {describeAction(a)}
-                      <em className="compact-history-card">{actionCardsText(a)}</em>
+                      {describeAction(a.action)}
+                      <em className="compact-history-card">{actionCardsText(a.action)}</em>
                     </span>
                   ))}
                 </div>

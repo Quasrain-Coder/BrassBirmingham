@@ -340,9 +340,12 @@ describe('reconstructEraLog(行动日志补全)', () => {
     const order = state.turnOrder;
     const mk = (id: string): Action => ({ type: 'pass', cardId: id });
     // 首轮每座位 1 条,次轮每座位 2 条(按座位号入桶)
-    const eraActions: Action[][] = [];
+    const eraActions: { action: Action; moneyDelta: number }[][] = [];
     order.forEach((seat) => {
-      eraActions[seat] = [mk(`r1-${seat}`), mk(`r2a-${seat}`), mk(`r2b-${seat}`)];
+      eraActions[seat] = [mk(`r1-${seat}`), mk(`r2a-${seat}`), mk(`r2b-${seat}`)].map((action) => ({
+        action,
+        moneyDelta: 0,
+      }));
     });
     const out = reconstructEraLog(state, eraActions);
     expect(out.map((e) => e.player)).toEqual([
@@ -362,9 +365,10 @@ describe('reconstructEraLog(行动日志补全)', () => {
     const state = filterStateFor(newGame(4, 42), 0);
     const order = state.turnOrder;
     const mk = (id: string): Action => ({ type: 'pass', cardId: id });
-    const eraActions: Action[][] = [];
+    const eraActions: { action: Action; moneyDelta: number }[][] = [];
     order.forEach((seat, i) => {
-      eraActions[seat] = i === 0 ? [mk(`r1-${seat}`), mk(`r2-${seat}`)] : [mk(`r1-${seat}`)];
+      const list = i === 0 ? [mk(`r1-${seat}`), mk(`r2-${seat}`)] : [mk(`r1-${seat}`)];
+      eraActions[seat] = list.map((action) => ({ action, moneyDelta: 0 }));
     });
     const out = reconstructEraLog(state, eraActions);
     expect(out.map((e) => (e.action as { cardId: string }).cardId)).toEqual([

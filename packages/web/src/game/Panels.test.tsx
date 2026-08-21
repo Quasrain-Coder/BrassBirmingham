@@ -305,12 +305,9 @@ describe('<PlayerBoard> 紧凑面板两行收口', () => {
     state.players[1]!.money = 23;
     state.players[1]!.spentThisRound = 4;
     const seat = 1;
-    const log: LogEntry[] = [
-      { seq: 0, player: seat, action: { type: 'loan', cardId: 'loc-derby-0' }, events: [] },
-    ];
     const eraActions = [
-      { type: 'loan' as const, cardId: 'loc-derby-0' },
-      { type: 'build' as const, cardId: 'loc-birmingham-1', location: 'birmingham' as const, industry: 'cotton' as const },
+      { action: { type: 'loan' as const, cardId: 'loc-derby-0' }, moneyDelta: 30 },
+      { action: { type: 'build' as const, cardId: 'loc-birmingham-1', location: 'birmingham' as const, industry: 'cotton' as const }, moneyDelta: -12 },
     ];
     render(
       <PlayerBoard
@@ -319,9 +316,7 @@ describe('<PlayerBoard> 紧凑面板两行收口', () => {
         room={roomFixture()}
         compact
         playedCards={[]}
-        log={log}
         eraActions={eraActions}
-        seq={1}
       />,
     );
     // 第一行:顺位 + 名称 + 钱;无收入等级/分数

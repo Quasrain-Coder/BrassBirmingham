@@ -203,8 +203,8 @@ export interface GameStoreState {
   takenOver: boolean;
   /** 各座位本时代已打出的牌（快照附带；按打出顺序,Wild 不入列）。 */
   playedCards: Card[][];
-  /** 各座位本时代的全部行动（快照附带;"本时代行动"折叠记录用）。 */
-  eraActions: Action[][];
+  /** 各座位本时代的全部行动（快照附带）及实际现金变化。 */
+  eraActions: { action: Action; moneyDelta: number }[][];
   /** 宽屏面板固定座次:首个快照落地后不再变化(顺位每轮重算也不动;
    *  存 store 而非组件 ref——断线重连导致 GameBoard 重挂载时不被重置)。 */
   fixedSeats: PlayerIndex[] | null;

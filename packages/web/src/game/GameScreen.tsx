@@ -45,8 +45,8 @@ interface GameBoardProps {
   resetNotice: { seat: PlayerIndex; n: number } | null;
   /** 各座位本时代已打出的牌(打出记录弹层用)。 */
   playedCards: Card[][];
-  /** 各座位本时代的全部行动("本时代行动"折叠记录用)。 */
-  eraActions: Action[][];
+  /** 各座位本时代的全部行动及实际现金变化(面板/日志用)。 */
+  eraActions: { action: Action; moneyDelta: number }[][];
 }
 
 /** 非本人回合的固定空数组：避免每渲染新引用触发 useActionDraft 的重置 effect 死循环。 */
@@ -398,7 +398,7 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} log={log} eraActions={eraActions[i] ?? []} seq={seq} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} />
               </div>
             ))}
           </aside>
@@ -412,7 +412,7 @@ function GameBoard({
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} log={log} eraActions={eraActions[i] ?? []} seq={seq} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} />
               </div>
             ))}
           </aside>
