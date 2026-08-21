@@ -529,6 +529,9 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
           const m = state.merchants[id];
           const tilesCx = geom.tiles.reduce((s, r) => s + r.x + r.w / 2, 0) / geom.tiles.length;
           const tilesTop = Math.min(...geom.tiles.map((r) => r.y));
+          // 中文标紧贴英文铭牌下方:oxford/gloucester 的铭牌在更高处(下方是奖励徽),
+          // 与其余商人位共用 tilesTop-18 会错落到奖励徽下方,故单独上移
+          const labelDy = id === 'oxford' || id === 'gloucester' ? -74 : -18;
           return (
             <g
               className="board-merchant-group"
@@ -539,7 +542,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
             >
               <text
                 x={tilesCx}
-                y={tilesTop - 18}
+                y={tilesTop + labelDy}
                 textAnchor="middle"
                 fontSize={40}
                 fill="#e3d3a8"
@@ -847,7 +850,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
       <g className="board-tracks" pointerEvents="none">
         {state.players.map((p, i) => {
           const vp = VP_TRACK[p.vp % 100]!;
-          const inc = INCOME_TRACK[Math.max(0, Math.min(40, p.incomeSpace))]!;
+          const inc = INCOME_TRACK[Math.max(0, Math.min(99, p.incomeSpace))]!;
           const dx = (i - 1.5) * 30;
           const r = 36;
           const hex = Array.from({ length: 6 }, (_, k) => {

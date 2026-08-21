@@ -356,6 +356,13 @@ const VP_SIDES: RingSide[] = [
   { from: { x: 4975, y: 1370 }, to: { x: 4975, y: 4610 }, count: 25 },
   { from: { x: 4620, y: 4985 }, to: { x: 1320, y: 4980 }, count: 26 },
 ];
+/** 收入轨（内环小圆，与 VP 环共用走向）：每侧 25 格。 */
+const INCOME_SIDES: RingSide[] = [
+  { from: { x: 1175, y: 4740 }, to: { x: 1175, y: 1370 }, count: 25 },
+  { from: { x: 1325, y: 1200 }, to: { x: 4992, y: 1200 }, count: 25 },
+  { from: { x: 4855, y: 1505 }, to: { x: 4855, y: 4745 }, count: 25 },
+  { from: { x: 4620, y: 4935 }, to: { x: 1320, y: 4935 }, count: 25 },
+];
 
 function ringPositions(sides: RingSide[]): Point[] {
   const out: Point[] = [];
@@ -370,28 +377,8 @@ function ringPositions(sides: RingSide[]): Point[] {
 
 /** VP 0–99 → 外环圆心。 */
 export const VP_TRACK: Point[] = ringPositions(VP_SIDES);
-
-/** 版图中心（6144 坐标系），收入槽内缩偏移用。 */
-const BOARD_CENTER: Point = { x: 3072, y: 3072 };
-
-/**
- * 收入格（引擎 space 0..40，level=space-10）→ 印刷收入圆槽中心。
- * 收入轨与 VP 环同条带蛇形排布：level L 的金币圆槽贴着 VP (3L-1) 格
- * （实测:L16 在右上角、L17-23 沿右缘下行、L30 在底边），圆槽位于 VP 格
- * 靠版图中心一侧约 90px 处。负 level(贷款下限 -10)夹到 VP 0 附近。
- */
-export const INCOME_TRACK: Point[] = Array.from({ length: 41 }, (_, space) => {
-  const level = space - 10;
-  const vpSpace = Math.max(0, Math.min(99, 3 * level - 1));
-  const base = VP_TRACK[vpSpace]!;
-  const dxC = BOARD_CENTER.x - base.x;
-  const dyC = BOARD_CENTER.y - base.y;
-  const len = Math.hypot(dxC, dyC) || 1;
-  return {
-    x: Math.round(base.x + (dxC / len) * 90),
-    y: Math.round(base.y + (dyC / len) * 90),
-  };
-});
+/** 收入格 0–99 → 内环圆心（与引擎收入 space 索引一致）。 */
+export const INCOME_TRACK: Point[] = ringPositions(INCOME_SIDES);
 
 /**
  * 39 条连线的路径中点（TTS 触发器仿射投影，键 = 引擎 `LINKS` 0 基下标）。
