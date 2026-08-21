@@ -1696,6 +1696,23 @@ body {
   font-size: 0.92em;
 }
 
+/* 行级显隐小开关(建造行全局收起/展开) */
+.action-choices .row-toggle {
+  margin-left: auto;
+  padding: 1px 9px;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: transparent;
+  color: #b3a888;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.action-choices .row-toggle:hover {
+  border-color: #c9a86a;
+  color: #f3ead4;
+}
+
 .action-choices button {
   padding: 5px 12px;
   border: 1px solid #6b5b3e;

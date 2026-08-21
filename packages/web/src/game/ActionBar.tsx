@@ -583,18 +583,16 @@ export function ActionBar({
   // 建造行产业按钮:候选中的产业去重(按候选出现序)
   const buildIndustries = [...new Set(builds.map((a) => a.industry))];
 
-  // 啤酒实况:自己的酒厂桶(无需连通)+ 各商人位余桶
-  const ownBreweries = Object.entries(state.board.slots)
-    .map(([loc, slotsOfLoc]) => {
-      const total = slotsOfLoc
-        .filter((t) => t && t.player === seat && !t.flipped && t.tile.industry === 'brewery')
-        .reduce((s, t) => s + (t?.resources ?? 0), 0);
-      return total > 0 ? `${locationName(loc)}×${total}` : null;
-    })
-    .filter((x): x is string => x !== null);
-  const merchantBeers = Object.entries(state.merchants)
-    .filter(([, m]) => m.beer > 0)
-    .map(([mid, m]) => `${merchantName(mid)}×${m.beer}`);
+  // 建造行全局显隐(localStorage 记住;朋友局可整行收起,地图点选建造不受影响)
+  const storage = typeof localStorage === 'undefined' ? null : localStorage;
+  const [buildRowHidden, setBuildRowHidden] = useState<boolean>(
+    () => storage?.getItem('brass-build-row') === 'hidden',
+  );
+  const toggleBuildRow = (): void => {
+    const v = !buildRowHidden;
+    setBuildRowHidden(v);
+    storage?.setItem('brass-build-row', v ? 'hidden' : 'visible');
+  };
 
   // 不可执行原因提示(项 1/4):选了牌但没有任何建造/卖货目标时,说明原因
   const hasSellableOnBoard = Object.values(state.board.slots).some((slotsOfLoc) =>
@@ -624,16 +622,24 @@ export function ActionBar({
         <h3>行动</h3>
         {moneyChip(true)}
       </div>
-      {/* 啤酒实况常驻显示(项 5) */}
-      <p className="beer-status" data-testid="beer-status">
-        啤酒：{ownBreweries.length > 0 ? `酒厂 ${ownBreweries.join('、')}` : '无酒厂余量'}
-        {merchantBeers.length > 0 ? `｜商人 ${merchantBeers.join('、')}` : ''}
-      </p>
       {selectedCard === null ? (
         <p data-testid="select-card-hint">从手牌中选一张牌，棋盘将高亮可执行的目标。</p>
       ) : null}
       <div className="action-sections">
-        {/* 建造行:常驻;产业按钮带 等级+花费,点选后棋盘高亮只留该产业槽位 */}
+        {/* 建造行:常驻可整行收起(全局记住);产业按钮带 等级+花费 */}
+        {buildRowHidden ? (
+          <div className="action-choices" data-testid="build-options">
+            <button
+              type="button"
+              className="row-toggle"
+              data-testid="build-row-toggle"
+              title="展开建造行"
+              onClick={toggleBuildRow}
+            >
+              建造 ▸
+            </button>
+          </div>
+        ) : (
         <div className={`action-choices${builds.length === 0 ? ' row-disabled' : ''}`} data-testid="build-options">
           <span>建造：</span>
           {buildIndustries.length === 0 ? (
@@ -658,7 +664,17 @@ export function ActionBar({
             })
           )}
           {builds.length > 0 ? <span className="action-row-hint">再点棋盘高亮槽位</span> : null}
+          <button
+            type="button"
+            className="row-toggle"
+            data-testid="build-row-toggle"
+            title="隐藏建造行(全局记住,再点'建造 ▸'可展开)"
+            onClick={toggleBuildRow}
+          >
+            −
+          </button>
         </div>
+        )}
         {draft.buildChoices.length > 0 ? (
           <div className="action-choices" data-testid="build-choices">
             <span>该槽位可建：</span>
@@ -673,19 +689,6 @@ export function ActionBar({
             ))}
           </div>
         ) : null}
-
-        <div className={`action-choices${networks.length === 0 ? ' row-disabled' : ''}`} data-testid="network-row">
-          <span>连接：</span>
-          {networks.length === 0 ? (
-            <span className="action-row-none">—</span>
-          ) : (
-            <span className="action-row-hint" data-testid="network-progress">
-              已选 {draft.pickedLinks.length} 条
-              {draft.networkCanExtend ? '（可继续点第二条）' : ''}
-              ；点高亮边，点末条撤销。
-            </span>
-          )}
-        </div>
 
         <div className={`action-choices${draft.developChoices.length === 0 ? ' row-disabled' : ''}`} data-testid="develop-options">
           <span>研发{draft.developChoices.length > 0 ? '（1-2 块；同产业再点一次 = 研发两块）' : ''}：</span>
