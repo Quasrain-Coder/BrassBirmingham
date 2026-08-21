@@ -181,3 +181,63 @@ describe('sell 组合式校验(自由子集)', () => {
     ).toThrowError(expect.objectContaining({ code: 'illegal-sell' }) as Error);
   });
 });
+
+describe('applyAction 顶层闸门(自定义 sell/显式 slotIndex)', () => {
+  it('自定义 sell(带 beerSources 的自由组合)经 applyAction 落账', async () => {
+    const { applyAction } = await import('../src/apply.js');
+    const s = newGame(4, 9);
+    const me = s.turnOrder[s.currentPlayerIdx]!;
+    oneCard(s, me);
+    withTileAt(s, me, 'birmingham', 'cotton', 0);
+    withTileAt(s, me, 'derby', 'brewery', 0);
+    withLink(s, 5);
+    setMerchant(s, 'oxford', ['any'], 0);
+    const next = applyAction(s, {
+      type: 'sell',
+      cardId: 'c1',
+      sales: [
+        {
+          location: 'birmingham',
+          slotIndex: 0,
+          merchant: 'oxford',
+          useMerchantBeer: false,
+          beerSources: [{ kind: 'brewery', location: 'derby', slotIndex: 0 }],
+        },
+      ],
+    });
+    expect(next.board.slots['birmingham']![0]!.flipped).toBe(true);
+    expect(next.players[me]!.hand.every((c) => c.id !== 'c1')).toBe(true); // 行动卡已弃
+  });
+
+  it('卡不在手的 sell → illegal-action', async () => {
+    const { applyAction } = await import('../src/apply.js');
+    const s = newGame(4, 9);
+    const me = s.turnOrder[s.currentPlayerIdx]!;
+    oneCard(s, me);
+    withTileAt(s, me, 'birmingham', 'cotton', 0);
+    withLink(s, 5);
+    setMerchant(s, 'oxford', ['any'], 0);
+    expect(() =>
+      applyAction(s, {
+        type: 'sell',
+        cardId: 'not-in-hand',
+        sales: [{ location: 'birmingham', slotIndex: 0, merchant: 'oxford', useMerchantBeer: false }],
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'illegal-action' }) as Error);
+  });
+
+  it('build 显式 slotIndex 经 applyAction 落正确槽位', async () => {
+    const { applyAction } = await import('../src/apply.js');
+    const s = newGame(4, 7);
+    const me = s.turnOrder[s.currentPlayerIdx]!;
+    s.players[me]!.hand = [{ id: 'loc-uttoxeter-test', kind: 'location', location: 'uttoxeter' }];
+    const next = applyAction(s, {
+      type: 'build',
+      cardId: 'loc-uttoxeter-test',
+      industry: 'brewery',
+      location: 'uttoxeter',
+      slotIndex: 1,
+    });
+    expect(next.board.slots['uttoxeter']![1]?.tile.industry).toBe('brewery');
+  });
+});

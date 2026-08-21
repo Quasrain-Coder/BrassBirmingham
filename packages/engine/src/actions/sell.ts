@@ -208,8 +208,9 @@ export function enumerateSells(state: GameState, player: PlayerIndex): Action[] 
  * 图标匹配 ③啤酒（显式 beerSources 或自动解析）按顺序试消耗可行。
  * 模拟推进啤酒消耗(多组共享酒库存),全部通过才放行;任何一步非法抛
  * IllegalActionError('illegal-sell'/'insufficient-beer'/'illegal-beer-sources'…)。
+ * 注:行动卡在手校验在 apply.ts 的 isLegalAction 一并做。
  */
-function validateSales(state: GameState, player: PlayerIndex, action: SellAction): void {
+export function validateSales(state: GameState, player: PlayerIndex, action: SellAction): void {
   if (action.sales.length === 0) {
     throw new IllegalActionError('illegal-sell', 'illegal-sell: empty sales');
   }
