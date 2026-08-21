@@ -1557,6 +1557,17 @@ body {
   font-weight: 600;
 }
 
+/* 卖出子步骤(板块/贸易商/酒):缩进+左边线,表达从属于"出售"的层级 */
+.sell-builder {
+  margin-left: 1.4em;
+  padding-left: 0.9em;
+  border-left: 2px solid #3a3226;
+}
+
+.sell-builder .action-choices {
+  margin: 4px 0;
+}
+
 /* 行动条:统一字号体系——面板内文字/按钮同一基准字号,颜色区分层级 */
 .action-bar {
   border: 1px solid #3a3226;
