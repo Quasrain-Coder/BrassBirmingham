@@ -44,6 +44,45 @@ body {
   gap: 12px;
 }
 
+/* 宽屏布局:占满视口宽度(27 寸全屏/小屏都不留白) */
+.game-screen.wide {
+  max-width: none;
+}
+
+/* 宽屏侧列紧凑面板:单行头部(不换行,名字截断) */
+.player-board.compact {
+  border: 1px solid #3a3226;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(38, 34, 27, 0.7), rgba(26, 29, 35, 0.85));
+  overflow: hidden;
+}
+
+.player-board.compact .compact-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  border-bottom: 1px solid #3a3226;
+  font-size: 0.85rem;
+}
+
+.player-board.compact .compact-head .player-name {
+  max-width: 7em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.player-board.compact .board-stack {
+  padding: 6px 8px 8px;
+}
+
+.player-board.compact .board-stack-head {
+  justify-content: flex-end;
+}
+
 .hand-bar .own-hand {
   display: flex;
   flex-wrap: wrap;
@@ -813,6 +852,79 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* 宽屏布局(27 寸全屏):地图居中,左右两列玩家面板(铺开+缩放适配),面板下本回合信息行 */
+.game-screen.wide .wide-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(240px, 300px);
+  gap: 14px;
+  align-items: start;
+}
+
+.wide-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wide-seat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 侧列面板缩放适配:内容字号略降,面板图随列宽自适应 */
+.wide-col .player-board {
+  font-size: 0.92rem;
+}
+
+.wide-col .player-mat {
+  border-radius: 8px;
+}
+
+/* 面板下方本回合信息行 */
+.round-info {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 1px solid #3a3226;
+  border-radius: 8px;
+  background: rgba(23, 26, 31, 0.7);
+  font-size: 0.78rem;
+  color: #9aa4b2;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.round-info-rank {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  border: 2px solid #7f8c8d;
+  border-radius: 50%;
+  font-weight: 700;
+  color: #f3ead4;
+}
+
+.round-info-spent {
+  color: #c9b98a;
+  flex: none;
+}
+
+.round-info-acts {
+  color: #8f96a3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* 经典布局容器(原样) */
+.game-screen:not(.wide) .player-boards {
+  /* no-op: 保持现状,仅作选择器锚点 */
 }
 
 /* 版图容器 + 左下角顺位叠加层 */
@@ -1645,6 +1757,19 @@ body {
 /* 行动播报:行动方面板描边脉冲(玩家色,约 5s 随聚光灯结束) */
 .player-board.pulse {
   animation: panel-pulse 0.9s ease-in-out infinite alternate;
+}
+
+/* 当前回合玩家面板:稳态持续发光(思考/行动全程,区别于脉冲) */
+.player-board.active-turn {
+  box-shadow:
+    0 0 0 2px var(--pulse-color, #f0c964),
+    0 0 16px 2px var(--pulse-color, #f0c964);
+}
+
+/* 本回合信息行:当前回合玩家高亮 */
+.round-info.active {
+  border-color: var(--pulse-color, #f0c964);
+  box-shadow: 0 0 10px 0 var(--pulse-color, #f0c964);
 }
 
 @keyframes panel-pulse {

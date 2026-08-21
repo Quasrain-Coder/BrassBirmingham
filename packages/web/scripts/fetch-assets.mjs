@@ -135,15 +135,19 @@ job('players/*.png', async (sharp) => {
   }
 });
 
-// ---- 啤酒桶图标：从 Brewery I 板块圆形裁出（紧圈木桶，少带底色）----
+// ---- 啤酒桶图标：从版图 Oxford 啤酒格的印刷酒桶裁出（中性深色,任何玩家色板块上都清晰）----
 job('beer.png', async (sharp) => {
-  const url = manifest.tiles['brewery|1|purple'].front;
-  const img = sharp(await download(url)).resize(128, 128);
-  const circle = Buffer.from(
-    `<svg><circle cx="64" cy="64" r="46" fill="#fff"/></svg>`,
-  );
-  await img
-    .composite([{ input: circle, blend: 'dest-in' }])
+  const raw = await download(manifest.board);
+  const barrel = await sharp(raw)
+    .extract({ left: 4486, top: 4298, width: 58, height: 76 })
+    .resize({ height: 108 })
+    .png()
+    .toBuffer();
+  const meta = await sharp(barrel).metadata();
+  const left = Math.round((128 - (meta.width ?? 82)) / 2);
+  const top = Math.round((128 - (meta.height ?? 108)) / 2);
+  await sharp({ create: { width: 128, height: 128, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: barrel, left, top }])
     .png()
     .toFile(join(OUT, 'beer.png'));
 });
