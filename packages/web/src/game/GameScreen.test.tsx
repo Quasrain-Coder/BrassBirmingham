@@ -191,7 +191,7 @@ describe('<GameScreen>', () => {
     }
   });
 
-  it('他人暂存:暂存播报同步(改动替换/清除撤下),重置本回合全场播报', () => {
+  it('他人暂存:不播报(仅幽灵落子);重置本回合全场播报', () => {
     vi.useFakeTimers();
     try {
       const { store, ws, game, seat } = setup(false); // 非本人回合:当前玩家是别人
@@ -199,52 +199,27 @@ describe('<GameScreen>', () => {
       expect(otherSeat).not.toBe(seat);
       render(<GameScreen store={store} />);
 
-      // 他人暂存 → 暂存播报出现(虚线"暂存"样式)
+      // 他人暂存 → 不出现任何暂存播报(临时动作不播报,确认后才播)
       act(() => {
         ws.emit({
           type: 'player_draft',
           protocolVersion: PROTOCOL_VERSION,
           seat: otherSeat,
-          draft: { text: '建造伯明翰棉纺厂' },
-        });
-      });
-      expect(screen.getByTestId('draft-spotlight')).toHaveTextContent('建造伯明翰棉纺厂');
-      // 改动 → 直接替换为新播报
-      act(() => {
-        ws.emit({
-          type: 'player_draft',
-          protocolVersion: PROTOCOL_VERSION,
-          seat: otherSeat,
-          draft: { text: '贷款 £30（收入 −3 级）' },
-        });
-      });
-      expect(screen.getByTestId('draft-spotlight')).toHaveTextContent('贷款');
-      // 清除 → 撤下
-      act(() => {
-        ws.emit({
-          type: 'player_draft',
-          protocolVersion: PROTOCOL_VERSION,
-          seat: otherSeat,
-          draft: null,
+          draft: { links: [5], text: '建设连接 1 条（待定）' },
         });
       });
       expect(screen.queryByTestId('draft-spotlight')).toBeNull();
+      expect(screen.queryByTestId('action-spotlight')).toBeNull();
 
-      // 再暂存 → 重置本回合:暂存撤下 + 全场播报"已重置本回合"
-      act(() => {
-        ws.emit({
-          type: 'player_draft',
-          protocolVersion: PROTOCOL_VERSION,
-          seat: otherSeat,
-          draft: { text: '建造斯托克煤矿' },
-        });
-      });
-      expect(screen.getByTestId('draft-spotlight')).toBeInTheDocument();
+      // 重置本回合 → 全场播报"已重置本回合"
       act(() => {
         ws.emit({ type: 'turn_reset', protocolVersion: PROTOCOL_VERSION, seat: otherSeat });
       });
-      expect(screen.queryByTestId('draft-spotlight')).toBeNull();
       expect(screen.getByTestId('round-banner')).toHaveTextContent('已重置本回合');
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.queryByTestId('round-banner')).toBeNull();
     } finally {
       vi.useRealTimers();
     }

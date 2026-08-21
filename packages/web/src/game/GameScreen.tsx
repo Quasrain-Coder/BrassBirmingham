@@ -130,15 +130,13 @@ function GameBoard({
     store.sendDraft(ownDraft);
   }, [store, ownDraft]);
 
-  // 播报舞台：三类播报同一舞台——行动聚光灯(action)/轮次·时代·重置播报(round)/
-  // 他人暂存播报(draft)。同一时刻只播一条,每条 5 秒:
-  // - action/round:空闲即播,否则排队(串行,不叠加);
-  // - draft:立即抢占在播条目——"已暂存就播报,改操作直接替换"(被抢占的在播
-  //   条目丢弃,队列不动);确认行动时该玩家的 draft 原位转正为 action。
+  // 播报舞台：两类播报同一舞台串行播放——行动聚光灯(action)/轮次·时代·重置播报(round)。
+  // 同一时刻只播一条,每条 5 秒;播报中到达的新条目排队等播完。
+  // 注:他人的**暂存**不播报(只在地图上渲染幽灵落子),确认后的行动才播(action);
+  // "重置本回合"保留全场播报(round)。
   type StageItem =
     | (ActionSpotlight & { kind: 'action'; text: string })
-    | { kind: 'round'; text: string }
-    | { kind: 'draft'; seat: PlayerIndex; text: string };
+    | { kind: 'round'; text: string };
   const [stage, setStage] = useState<StageItem | null>(null);
   const stageQueueRef = useRef<StageItem[]>([]);
   const stageRef = useRef<StageItem | null>(null);
@@ -157,26 +155,17 @@ function GameBoard({
     if (stageRef.current === null) setStageBoth(item);
     else stageQueueRef.current.push(item);
   };
-  const preemptStage = (item: StageItem): void => setStageBoth(item);
-  const clearDraftStage = (draftSeat: PlayerIndex): void => {
-    if (stageRef.current?.kind === 'draft' && stageRef.current.seat === draftSeat) advanceStage();
-  };
 
-  // 最新一条 action_applied → 行动聚光灯(在播该玩家暂存播报时原位转正,否则排队)
+  // 最新一条 action_applied → 行动聚光灯入队
   const lastEntry = log[log.length - 1];
   const lastSeq = lastEntry?.seq;
   useEffect(() => {
     if (lastEntry === undefined) return;
-    const item: StageItem = {
+    pushStage({
       kind: 'action',
       ...spotlightOf(lastEntry.player, lastEntry.action),
       text: describeAction(lastEntry.action),
-    };
-    if (stageRef.current?.kind === 'draft' && stageRef.current.seat === lastEntry.player) {
-      setStageBoth(item);
-    } else {
-      pushStage(item);
-    }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastSeq]);
 
@@ -194,24 +183,13 @@ function GameBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.era, state.round]);
 
-  // 他人暂存(当前行动方非本人时):播报立即抢占/替换;清除时若在播则切下一条
+  // 他人暂存(当前行动方非本人时):只取幽灵落子数据,不入播报舞台
   const remoteDraftSeat = current !== seat ? current : null;
   const remoteDraft = remoteDraftSeat !== null ? remoteDrafts[remoteDraftSeat] : undefined;
-  const remoteDraftText = remoteDraft?.text ?? null;
-  useEffect(() => {
-    if (remoteDraftSeat === null) return;
-    if (remoteDraftText === null) {
-      clearDraftStage(remoteDraftSeat);
-      return;
-    }
-    preemptStage({ kind: 'draft', seat: remoteDraftSeat, text: remoteDraftText });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remoteDraftText, remoteDraftSeat]);
 
-  // "X 已重置本回合"全场播报(清其暂存播报后入队)
+  // "X 已重置本回合"全场播放入队
   useEffect(() => {
     if (resetNotice === null) return;
-    clearDraftStage(resetNotice.seat);
     pushStage({
       kind: 'round',
       text: `${playerName(room ?? undefined, resetNotice.seat)} 已重置本回合`,
@@ -222,8 +200,6 @@ function GameBoard({
   const spotlight: (ActionSpotlight & { text: string }) | null =
     stage?.kind === 'action' ? stage : null;
   const roundBanner: string | null = stage?.kind === 'round' ? stage.text : null;
-  const draftBanner: { seat: PlayerIndex; text: string } | null =
-    stage?.kind === 'draft' ? stage : null;
 
   // 布局模式:经典 / 宽屏(27 寸全屏,地图居中,左右两列面板全部铺开)
   const storage = typeof localStorage === 'undefined' ? null : localStorage;
@@ -271,15 +247,6 @@ function GameBoard({
             style={{ background: PLAYER_COLORS[spotlight.player] ?? '#7f8c8d' }}
           />
           {playerName(room ?? undefined, spotlight.player)}：{spotlight.text}
-        </div>
-      ) : null}
-      {draftBanner !== null ? (
-        <div className="action-spotlight-banner draft-banner" data-testid="draft-spotlight">
-          <span
-            className="spotlight-dot"
-            style={{ background: PLAYER_COLORS[draftBanner.seat] ?? '#7f8c8d' }}
-          />
-          {playerName(room ?? undefined, draftBanner.seat)}：{draftBanner.text}（暂存）
         </div>
       ) : null}
       {roundBanner !== null ? (

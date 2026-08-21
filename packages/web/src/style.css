@@ -954,6 +954,7 @@ body {
 
 /* 面板下方本回合信息行 */
 .round-info {
+  position: relative;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -965,7 +966,6 @@ body {
   font-size: 0.78rem;
   color: #9aa4b2;
   white-space: nowrap;
-  overflow: hidden;
 }
 
 .round-info-rank {
@@ -988,6 +988,32 @@ body {
   color: #8f96a3;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 行动省略时的即时完整浮层(悬停行动文字即出,替代原生 title 的 1s 延迟) */
+.round-info-tip {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 30;
+  max-width: 340px;
+  padding: 5px 12px;
+  border: 1px solid #6b5b3e;
+  border-radius: 8px;
+  background: rgba(20, 16, 10, 0.96);
+  color: #f3ead4;
+  font-size: 0.8rem;
+  white-space: normal;
+  line-height: 1.5;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.08s ease;
+}
+
+.round-info-acts:hover ~ .round-info-tip {
+  opacity: 1;
+  visibility: visible;
 }
 
 
@@ -1050,14 +1076,6 @@ body {
   border-radius: 50%;
   border: 2px solid #14100a;
   flex: none;
-}
-
-/* 他人暂存播报:与行动播报同位,虚线边框 + 斜体示意"未定" */
-.action-spotlight-banner.draft-banner {
-  border-style: dashed;
-  border-color: #8a8068;
-  font-style: italic;
-  color: #d8cdb4;
 }
 
 /* 新一轮/新时代播报:红字横幅(约 5 秒淡出,与行动横幅错位下排) */

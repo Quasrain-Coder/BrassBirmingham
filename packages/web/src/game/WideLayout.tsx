@@ -51,12 +51,12 @@ export function RoundInfo({
         {rank === -1 ? '—' : `#${rank}`}
       </span>
       <span className="round-info-spent">开销 £{p.spentThisRound}</span>
-      <span
-        className="round-info-acts"
-        title={acts.length > 0 ? acts.map((a) => describeAction(a.action)).join('；') : '本回合未行动'}
-      >
+      <span className="round-info-acts">
         {acts.length > 0 ? acts.map((a) => describeAction(a.action)).join('；') : '本回合未行动'}
       </span>
+      {acts.length > 0 ? (
+        <span className="round-info-tip">{acts.map((a) => describeAction(a.action)).join('；')}</span>
+      ) : null}
     </div>
   );
 }
