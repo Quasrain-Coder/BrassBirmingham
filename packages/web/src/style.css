@@ -857,9 +857,16 @@ body {
 /* 宽屏布局(27 寸全屏):地图居中,左右两列玩家面板(铺开+缩放适配),面板下本回合信息行 */
 .game-screen.wide .wide-grid {
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(240px, 300px);
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr) minmax(280px, 360px);
   gap: 14px;
   align-items: start;
+}
+
+/* 地图按视口高度比例缩放:方形版图宽 ≈ min(中列宽, 76vh),不再随宽屏无限拉伸 */
+.game-screen.wide .wide-center .board-svg {
+  display: block;
+  margin: 0 auto;
+  width: min(100%, 76vh);
 }
 
 .wide-col {
