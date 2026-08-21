@@ -189,11 +189,11 @@ export function HandBar({
                   type="button"
                   data-testid={`hand-card-${card.id}`}
                   className={classes}
-                  title={cardName(card)}
                   onClick={() => onSelect?.(card.id)}
                 >
                   <img className="hand-card-art" src={cardImageSrc(card)} alt={cardName(card)} />
                   <span className="hand-card-name">{cardName(card)}</span>
+                  <span className="card-tip">{cardName(card)}</span>
                   {isWild ? <span className="wild-badge">百搭</span> : null}
                 </button>
               );

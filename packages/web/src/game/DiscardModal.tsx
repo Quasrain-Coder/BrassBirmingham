@@ -51,21 +51,20 @@ export function DiscardModal({
                 </div>
                 <div className="discard-cards">
                   {faceDown === 1 ? (
-                    <img
-                      className="discard-card discard-card-back"
-                      src="/assets/cards/back.png"
-                      alt="开局暗置"
-                      title="开局暗置（不公开）"
-                    />
+                    <span className="discard-cell">
+                      <img
+                        className="discard-card discard-card-back"
+                        src="/assets/cards/back.png"
+                        alt="开局暗置"
+                      />
+                      <span className="card-tip">开局暗置（不公开）</span>
+                    </span>
                   ) : null}
                   {cards.map((c) => (
-                    <img
-                      key={c.id}
-                      className="discard-card"
-                      src={cardImageSrc(c)}
-                      alt={cardName(c)}
-                      title={cardName(c)}
-                    />
+                    <span className="discard-cell" key={c.id}>
+                      <img className="discard-card" src={cardImageSrc(c)} alt={cardName(c)} />
+                      <span className="card-tip">{cardName(c)}</span>
+                    </span>
                   ))}
                 </div>
               </div>

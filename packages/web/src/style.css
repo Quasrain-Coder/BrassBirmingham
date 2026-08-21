@@ -1295,6 +1295,46 @@ body {
   border-style: dashed;
 }
 
+/* 自绘即时浮层(原生 title 有 ~1s 延迟):手牌/打出记录卡面悬停即出 */
+.card-tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  padding: 3px 10px;
+  border: 1px solid #6b5b3e;
+  border-radius: 6px;
+  background: rgba(20, 16, 10, 0.95);
+  color: #f3ead4;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.08s ease;
+}
+
+.hand-card:hover .card-tip,
+.discard-cell:hover .card-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.discard-cell {
+  position: relative;
+  display: inline-block;
+}
+
+/* 弹层有 overflow-y:auto,向上浮层会被裁——打出记录的浮层改为向下 */
+.discard-cell .card-tip {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
 .score-table {
   width: 100%;
   margin: 10px 0;
