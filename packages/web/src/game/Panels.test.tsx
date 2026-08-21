@@ -290,7 +290,7 @@ describe('<LogPanel>', () => {
     expect(entries).toHaveLength(3);
     expect(entries[0]).toHaveTextContent('#0');
     expect(entries[0]).toHaveTextContent('乙');
-    expect(entries[0]).toHaveTextContent('建造 煤矿（伯明翰）');
+    expect(entries[0]).toHaveTextContent('建造 伯明翰煤矿');
     expect(entries[1]).toHaveTextContent('贷款');
     expect(entries[2]).toHaveTextContent('侦察');
   });
