@@ -155,10 +155,50 @@ export function useActionDraft({
   }, [state, seat]);
 
   const highlights = useMemo<BoardHighlights>(() => {
-    // 已进入卖出选择(选了板块或已有组):去掉建造/连接高亮,只留可卖板块与啤酒源
-    const selling = sellTile !== null || sellGroups.length > 0;
+    // 已暂存一步(选好建造/卖出组/点完边):清掉其他行动的高亮——
+    // 放入路后不再显示城市/建造高亮;拖入建筑后不再显示路边高亮
+    const emptyBeer: NonNullable<BoardHighlights['beerSources']> = { locations: [], merchants: [] };
+    // 啤酒源高亮(match 效果):卖货/铁路双轨候选存在时,自己酒厂(无需连通)与有桶商人位
+    const computeBeerSources = (): NonNullable<BoardHighlights['beerSources']> => {
+      const out: NonNullable<BoardHighlights['beerSources']> = { locations: [], merchants: [] };
+      const needsBeer = candidates.some(
+        (a) => a.type === 'sell' || (a.type === 'network' && a.links.length === 2),
+      );
+      if (needsBeer) {
+        for (const [loc, slotsOfLoc] of Object.entries(state.board.slots)) {
+          if (
+            slotsOfLoc.some(
+              (t) => t && t.player === seat && !t.flipped && t.tile.industry === 'brewery' && t.resources > 0,
+            )
+          ) {
+            out.locations!.push(loc as LocationId);
+          }
+        }
+        for (const [mid, m] of Object.entries(state.merchants)) {
+          if (m.beer > 0) out.merchants!.push(mid as keyof typeof state.merchants);
+        }
+      }
+      return out;
+    };
+    if (chosen !== null) {
+      return {
+        slots: [],
+        links: [],
+        locations: [],
+        beerSources: chosen.type === 'sell' ? computeBeerSources() : emptyBeer,
+      };
+    }
+    if (sellTile !== null || sellGroups.length > 0) {
+      // 卖出组进行中:只留可卖板块与啤酒源
+      return {
+        slots: sellSlotTargets(candidates),
+        links: [],
+        locations: [],
+        beerSources: computeBeerSources(),
+      };
+    }
     const targets = targetsFor(selectedCard, legalActions);
-    let buildSlots = selling ? [] : buildSlotTargets(targets, state.board.slots);
+    let buildSlots = buildSlotTargets(targets, state.board.slots);
     // 产业预选:高亮只留能落该产业的槽位
     if (buildIndustry !== null) {
       const ind = buildIndustry;
@@ -169,30 +209,14 @@ export function useActionDraft({
           ).length > 0,
       );
     }
-    const slots = [...buildSlots, ...sellSlotTargets(candidates)];
+    const links = [...extendableLinks(candidates, pickedLinks)];
+    // 已放入路边:只留可继续点的边与啤酒源,其余高亮全清
+    const slots =
+      pickedLinks.length > 0 ? [] : [...buildSlots, ...sellSlotTargets(candidates)];
     // 可建城市级高亮:所有可放置地点(与槽位高亮互补,找城更快)
-    const locations = [...new Set(buildSlots.map((s) => s.location))];
-    // 啤酒源高亮(match 效果):卖货/铁路双轨候选存在时,自己酒厂(无需连通)与有桶商人位
-    const needsBeer = candidates.some(
-      (a) => a.type === 'sell' || (a.type === 'network' && a.links.length === 2),
-    );
-    const beerSources: NonNullable<BoardHighlights['beerSources']> = { locations: [], merchants: [] };
-    if (needsBeer) {
-      for (const [loc, slotsOfLoc] of Object.entries(state.board.slots)) {
-        if (
-          slotsOfLoc.some(
-            (t) => t && t.player === seat && !t.flipped && t.tile.industry === 'brewery' && t.resources > 0,
-          )
-        ) {
-          beerSources.locations!.push(loc as LocationId);
-        }
-      }
-      for (const [mid, m] of Object.entries(state.merchants)) {
-        if (m.beer > 0) beerSources.merchants!.push(mid as keyof typeof state.merchants);
-      }
-    }
-    return { slots, links: [...extendableLinks(candidates, pickedLinks)], locations, beerSources };
-  }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks, buildIndustry]);
+    const locations = pickedLinks.length > 0 ? [] : [...new Set(buildSlots.map((s) => s.location))];
+    return { slots, links, locations, beerSources: computeBeerSources() };
+  }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks, buildIndustry, chosen, sellTile, sellGroups]);
 
   const networkMatch = matchNetwork(candidates, pickedLinks);
   const sell = sellOptions(candidates);
