@@ -167,10 +167,20 @@ describe('<App> 路由', () => {
     expect(screen.queryByTestId('create-form')).not.toBeInTheDocument();
   });
 
-  it('终局：显示胜者与各座位分数；返回大厅清空 token 并回到大厅', () => {
+  it('终局:保留对局界面,横幅显示胜者;离开对局清空 token 并回到大厅', () => {
     const { store, storage } = setup();
     const ws = renderInRoom(store);
     expect(storage.getItem('brass:token:ABCD23')).toBe('tok-me');
+    act(() => {
+      const game = newGame(4, 42);
+      ws.emit({
+        type: 'snapshot',
+        protocolVersion: PROTOCOL_VERSION,
+        seq: 1,
+        state: filterStateFor(game, 0),
+        legalActions: [],
+      });
+    });
     act(() => {
       ws.emit({
         type: 'game_over',
@@ -179,11 +189,13 @@ describe('<App> 路由', () => {
         finalScores: [80, 95, 70, 60],
       });
     });
-    expect(screen.getByRole('heading', { name: '对局结束' })).toBeInTheDocument();
-    expect(screen.getByTestId('winner')).toHaveTextContent('乙');
-    expect(screen.getByTestId('final-scores')).toHaveTextContent('甲：80');
-    expect(screen.getByTestId('final-scores')).toHaveTextContent('丁：60');
-    fireEvent.click(screen.getByTestId('back-lobby'));
+    // 不再切换终局画面:对局界面保留,顶部横幅展示胜者与分数
+    expect(document.querySelector('.game-screen')).not.toBeNull();
+    expect(screen.getByTestId('game-over')).toHaveTextContent('乙');
+    expect(screen.getByTestId('game-over')).toHaveTextContent('80 / 95 / 70 / 60');
+    act(() => {
+      store.leaveRoom();
+    });
     expect(screen.getByTestId('create-form')).toBeInTheDocument();
     expect(storage.getItem('brass:token:ABCD23')).toBeNull();
     expect(store.getState().gameOver).toBeNull();

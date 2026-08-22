@@ -11,7 +11,7 @@ import type { Action, Card, PlayerIndex } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { ActionDraft } from './ActionBar';
 import { SellDetails } from './ActionBar';
-import { cardName, describeAction, industryName } from './display';
+import { cardName, describeAction, industryName, locationName } from './display';
 import { moneyDelta, previewOf } from './preview';
 
 export type TopActionKind = 'build' | 'develop' | 'sell' | 'scout' | 'loan' | null;
@@ -90,7 +90,11 @@ export function TopActionBar({
       <section className="action-bar top-action-bar" data-testid="action-bar">
         <div className="top-action-row">
           <span className="top-action-hint" data-testid="waiting">
-            {turnHold !== null ? `等待 ${waitingFor} 确认回合…` : `等待 ${waitingFor} 行动…`}
+            {state.phase === 'game-over'
+              ? '对局已结束,可自由查看版图与记录'
+              : turnHold !== null
+                ? `等待 ${waitingFor} 确认回合…`
+                : `等待 ${waitingFor} 行动…`}
           </span>
           <span className="top-action-money">{moneyChip}</span>
         </div>
@@ -201,6 +205,31 @@ export function TopActionBar({
         </button>
         <span className="top-action-money">{moneyChip}</span>
       </div>
+
+      {/* 双轨选酒行:与底部 ActionBar 同款(选完两条路后出现;不可用商人桶) */}
+      {draft.networkBeerOptions.length > 0 ? (
+        <div className="action-choices top-detail-row" data-testid="network-beer-options">
+          <span>双轨酒（选 1 桶）：</span>
+          {draft.networkBeerOptions.map((o) => (
+            <button
+              key={`${o.location}:${o.slotIndex}`}
+              type="button"
+              data-testid={`network-beer-${o.location}-${o.slotIndex}`}
+              className={
+                draft.networkBeer?.location === o.location && draft.networkBeer.slotIndex === o.slotIndex
+                  ? 'selected'
+                  : undefined
+              }
+              onClick={() => draft.pickNetworkBeer(o)}
+            >
+              {o.own ? '自家' : '对手'}·{locationName(o.location)}（{o.barrels} 桶）
+            </button>
+          ))}
+          {draft.networkBeer === null ? (
+            <span className="action-row-none">不选则按序自动消耗</span>
+          ) : null}
+        </div>
+      ) : null}
 
       {active === 'build' ? (
         <div className="action-choices top-detail-row" data-testid="build-options">

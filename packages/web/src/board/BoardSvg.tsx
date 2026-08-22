@@ -344,17 +344,18 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                   ) : null}
                 </>
               ) : null}
-              {/* 透明粗热区（保留 data-link-index 契约） */}
-              <line
+              {/* 透明粗热区（保留 data-link-index 契约）——沿印刷路径的折线,
+                  不能用 a→b 直弦:大弯连线(gloucester-redditch 凸出 413、
+                  coventry-nuneaton 268、stafford-stone 225)印刷路径会整个落在弦外 */}
+              <polyline
                 className={cls}
                 data-link-index={i}
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
+                points={pts}
+                fill="none"
                 stroke="transparent"
                 strokeWidth={160}
                 strokeLinecap="round"
+                strokeLinejoin="round"
                 onClick={onLinkClick ? () => onLinkClick(i) : undefined}
               />
               {extras.map((extra) => {
@@ -572,9 +573,9 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                 );
               })}
               {geom.beer.map((r, bi) => {
-                // 啤酒格:有桶画"立桶"(空的格保持印刷空框);与酒厂商用同尺寸。
+                // 啤酒格:按板块格逐格渲染(桶绑在格旁,空的格保持印刷空框);与酒厂商用同尺寸。
                 // 选酒只认酒桶图标点击(商品图案=选贸易商,分离)
-                const filled = bi < (m?.beer ?? 0);
+                const filled = m?.barrels?.[bi] === true;
                 return (
                   <g key={`${id}-beer-${bi}`}>
                     {filled ? (
@@ -694,7 +695,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
             if (!beerSourceMerchants.has(id)) return [];
             const m = state.merchants[id];
             return MERCHANT_GEOM[id].beer.flatMap((r, bi) => {
-              if (bi >= (m?.beer ?? 0)) return [];
+              if (m?.barrels?.[bi] !== true) return [];
               return [
                 <rect
                   key={`beer-src-m-${id}-${bi}`}

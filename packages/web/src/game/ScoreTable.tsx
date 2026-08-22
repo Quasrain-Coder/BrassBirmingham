@@ -56,6 +56,59 @@ export interface EraScoreEntry {
   breakdown: Map<PlayerIndex, EraScoreRow>;
 }
 
+export interface ProvisionalRow {
+  /** 分数轨分(上时代总分 + 已得贸易商 VP 奖励)。 */
+  trackVp: number;
+  linkVp: number;
+  industryVp: number;
+  /** ≥2 级翻面板块的 VP(这些板块在铁路时代末还会再计一次分)。 */
+  industryVpL2: number;
+}
+
+/**
+ * 暂定总分(实时):点击弹窗时按当前快照计算——轨迹分 + 当前所有翻面产业分 +
+ * 当前所有连接分。只反映已落库的行动(回合内已提交的行动在快照里自然计入;
+ * 若被 resetTurn 撤回,快照回滚后自然消失,无需特判)。
+ * 口径:时代进行中,合计 = 轨迹分 + 连接 + 产业(= 假设时代立刻结束的总分);
+ * 终局(phase==='game-over')时这些分项已并入轨迹——轨迹列改显"前段累计"
+ * (轨迹 − 连接 − 产业),合计 = 轨迹分本身,不再双重计分。
+ */
+export function computeProvisional(state: FilteredState): Map<PlayerIndex, ProvisionalRow> {
+  const out = new Map<PlayerIndex, ProvisionalRow>();
+  for (let p = 0; p < state.playerCount; p++) {
+    out.set(p as PlayerIndex, {
+      trackVp: state.players[p]!.vp,
+      linkVp: 0,
+      industryVp: 0,
+      industryVpL2: 0,
+    });
+  }
+  const iconsAt = (locId: string): number => {
+    let n = 0;
+    for (const t of state.board.slots[locId as keyof typeof state.board.slots] ?? []) {
+      if (t && t.flipped) n += t.tile.linkIcons;
+    }
+    return n;
+  };
+  for (const link of state.board.links) {
+    const def = LINKS[link.linkIndex]!;
+    const endpoints = [def.a, def.b, ...(LINK_EXTRA_ENDPOINTS[link.linkIndex] ?? [])];
+    const row = out.get(link.player)!;
+    for (const ep of endpoints) {
+      if (ep in LOCATIONS) row.linkVp += iconsAt(ep);
+    }
+  }
+  for (const slots of Object.values(state.board.slots)) {
+    for (const t of slots) {
+      if (t && t.flipped) {
+        out.get(t.player)!.industryVp += t.tile.vp;
+        if (t.tile.level >= 2) out.get(t.player)!.industryVpL2 += t.tile.vp;
+      }
+    }
+  }
+  return out;
+}
+
 /** 时代切换侦测:返回时代切换前的快照(canal→rail 或 进入 game-over 时)。 */
 export function usePreviousSnapshot(state: FilteredState): FilteredState | undefined {
   const ref = useRef<FilteredState>(undefined);
@@ -87,7 +140,7 @@ export function ScoreModal({
           </button>
         </header>
         {entries.length === 0 ? (
-          <p className="board-empty">尚未到时代末结算;当前只显示总分。</p>
+          <p className="board-empty">尚未到时代末结算;下方为暂定总分(实时)。</p>
         ) : (
           entries.map((entry) => (
             <table className="score-table" key={entry.label} data-testid="score-table">
@@ -116,18 +169,48 @@ export function ScoreModal({
             </table>
           ))
         )}
-        <table className="score-table score-total">
-          <caption>当前总分</caption>
+        <table className="score-table score-total" data-testid="score-provisional">
+          <caption>
+            {state.phase === 'game-over'
+              ? '终局总分（轨迹列 = 前段累计，合计 = 轨迹分）'
+              : `暂定总分（实时·含已确认行动）${state.era === 'canal' ? '：≥2 级翻面板块在铁路末会再计一次分' : ''}`}
+          </caption>
+          <thead>
+            <tr>
+              <th>玩家</th>
+              <th>轨迹分</th>
+              <th>连接分</th>
+              <th>产业分</th>
+              <th>{state.era === 'canal' ? '合计(至运河末)' : '合计'}</th>
+              {state.era === 'canal' ? <th>合计(含铁路末)</th> : null}
+            </tr>
+          </thead>
           <tbody>
-            {state.players.map((p, i) => (
-              <tr key={i}>
-                <td>
-                  <span className="color-dot" style={{ background: PLAYER_COLORS[i] }} />
-                  {playerName(room ?? undefined, i as PlayerIndex)}
-                </td>
-                <td>{p.vp} 分</td>
-              </tr>
-            ))}
+            {[...computeProvisional(state).entries()].map(([p, row]) => {
+              // 终局:引擎计分后 links 已从版图移除,连接/产业列改取时代末构成记录
+              // (与上方"铁路时代末"表同源);轨迹列 = 前段累计,合计 = 轨迹分本身
+              const settled = state.phase === 'game-over';
+              const lastBreakdown =
+                settled && entries.length > 0 ? entries[entries.length - 1]!.breakdown.get(p) : undefined;
+              const linkCol = settled ? (lastBreakdown?.linkVp ?? row.linkVp) : row.linkVp;
+              const indCol = settled ? (lastBreakdown?.industryVp ?? row.industryVp) : row.industryVp;
+              const trackCol = settled ? row.trackVp - linkCol - indCol : row.trackVp;
+              return (
+                <tr key={p} data-player={p}>
+                  <td>
+                    <span className="color-dot" style={{ background: PLAYER_COLORS[p] }} />
+                    {playerName(room ?? undefined, p)}
+                  </td>
+                  <td>{trackCol}</td>
+                  <td>{linkCol}</td>
+                  <td>{indCol}</td>
+                  <td>{trackCol + linkCol + indCol}</td>
+                  {state.era === 'canal' ? (
+                    <td>{trackCol + linkCol + indCol + row.industryVpL2}</td>
+                  ) : null}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </section>
