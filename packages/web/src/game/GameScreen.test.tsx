@@ -78,7 +78,6 @@ describe('<GameScreen>', () => {
   it('本人回合：选牌 → 棋盘高亮；贷款 → 确认提交 submit_action 帧', () => {
     const { store, ws, game, seat } = setup(true);
     const { container } = render(<GameScreen store={store} />);
-    expect(screen.getByTestId('select-card-hint')).toBeInTheDocument();
 
     // 选一张有 loan 行动的牌（每张牌都有）
     const legal = store.getState().legalActions;
@@ -139,7 +138,10 @@ describe('<GameScreen>', () => {
     const { store, game, ws } = setup(true);
     const { container } = render(<GameScreen store={store} />);
     expect(container.querySelector('.wide-grid')).toBeNull();
-    fireEvent.click(screen.getByTestId('toggle-layout'));
+    // 偏好设置弹窗里切换视图 → 宽屏
+    fireEvent.click(screen.getByTestId('open-prefs'));
+    fireEvent.click(screen.getByTestId('pref-layout').querySelector('.pref-slide')!);
+    fireEvent.click(screen.getByTestId('prefs-close'));
     const grid = container.querySelector('.wide-grid');
     expect(grid).not.toBeNull();
     // 4p:左列 2 个席位、右列 2 个席位,面板全部铺开(defaultOpen)
@@ -150,8 +152,10 @@ describe('<GameScreen>', () => {
     expect(rank1).toHaveTextContent('#1');
     const round1 = screen.getByTestId(`compact-round-${game.turnOrder[0]!}`);
     expect(round1).toHaveTextContent('本回合未行动');
-    // 再点一次回到经典布局
-    fireEvent.click(screen.getByTestId('toggle-layout'));
+    // 再切回经典布局
+    fireEvent.click(screen.getByTestId('open-prefs'));
+    fireEvent.click(screen.getByTestId('pref-layout').querySelector('.pref-slide')!);
+    fireEvent.click(screen.getByTestId('prefs-close'));
     expect(container.querySelector('.wide-grid')).toBeNull();
     void ws;
   });
@@ -276,12 +280,15 @@ describe('<GameScreen>', () => {
     }
   });
 
-  it('离开对局：点按钮 → 发 leave 帧并回到大厅态', () => {
+  it('离开对局：点按钮 → 弹防呆确认,再点离开发 leave 帧并回到大厅态', () => {
     const { store, ws } = setup(true);
     render(<GameScreen store={store} />);
     const leave = screen.getByTestId('leave-game');
     expect(leave).toBeInTheDocument();
     fireEvent.click(leave);
+    // 防呆弹窗出现,尚未发 leave 帧
+    expect(screen.getByTestId('leave-confirm')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('leave-confirm-yes'));
     const frame = JSON.parse(ws.sent[ws.sent.length - 1]!) as { type: string; token: string };
     expect(frame.type).toBe('leave');
     expect(frame.token).toBe('tok');

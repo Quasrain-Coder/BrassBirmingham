@@ -8,7 +8,7 @@
  * 煤/铁市场与收入轨已搬上官方版图（BoardSvg），不再有独立侧边栏组件。
  */
 import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties, ReactElement } from 'react';
+import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import { INCOME_LEVEL_SPACES, MERCHANTS, TILES, incomeLevelAt } from '@brass/engine';
 import type { Action, Card, IndustryType, MerchantId, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
@@ -163,25 +163,49 @@ export function HandBar({
   seat,
   selectedCard,
   onSelect,
+  overlay = false,
+  scoutMode,
+  handRaise = 'single',
 }: {
   state: FilteredState;
   seat: PlayerIndex;
   selectedCard?: string | null;
   onSelect?: ((cardId: string) => void) | undefined;
+  /** 宽屏:绝对定位叠在地图下缘,只露卡牌顶部,悬停整张浮出。 */
+  overlay?: boolean | undefined;
+  /** 搜寻选牌模式:点手牌 = 选/弃搜寻弃牌(与搜寻行的卡牌按钮绑定)。 */
+  scoutMode?: { picks: string[]; onToggle: (cardId: string) => void } | null | undefined;
+  /** 卡牌悬浮效果(偏好设置):single=悬停提起单张;all=悬停整排提起,选中单张固定。 */
+  handRaise?: 'single' | 'all' | undefined;
 }): ReactElement {
   const self = state.players[seat];
+  // 已有选定(行动牌或搜寻弃牌)时,其余牌悬停不再提起;被选中的牌保持提起(固定悬浮)
+  const hasSelection =
+    scoutMode !== null && scoutMode !== undefined
+      ? scoutMode.picks.length > 0
+      : selectedCard !== null && selectedCard !== undefined;
+  const noRaise = overlay === true && handRaise === 'single' && hasSelection;
+  const modeAll = overlay === true && handRaise === 'all';
+  const classes = [
+    'hand-bar',
+    overlay ? 'overlay' : '',
+    modeAll ? 'mode-all' : '',
+    hasSelection ? 'has-selection' : '',
+    noRaise ? 'no-raise' : '',
+  ]
+    .filter((c) => c !== '')
+    .join(' ');
   return (
-    <section className="hand-bar">
-      <h3>手牌</h3>
+    <section className={classes}>
       <div className="own-hand">
         {self?.hand.kind === 'full'
           ? self.hand.cards.map((card) => {
               const isWild = card.kind === 'wild-location' || card.kind === 'wild-industry';
-              const classes = [
-                'hand-card',
-                isWild ? 'wild' : '',
-                selectedCard === card.id ? 'selected' : '',
-              ]
+              const selected =
+                scoutMode !== null && scoutMode !== undefined
+                  ? scoutMode.picks.includes(card.id)
+                  : selectedCard === card.id;
+              const classes = ['hand-card', isWild ? 'wild' : '', selected ? 'selected' : '']
                 .filter((c) => c !== '')
                 .join(' ');
               return (
@@ -190,7 +214,11 @@ export function HandBar({
                   type="button"
                   data-testid={`hand-card-${card.id}`}
                   className={classes}
-                  onClick={() => onSelect?.(card.id)}
+                  onClick={() =>
+                    scoutMode !== null && scoutMode !== undefined
+                      ? scoutMode.onToggle(card.id)
+                      : onSelect?.(card.id)
+                  }
                 >
                   <img className="hand-card-art" src={cardImageSrc(card)} alt={cardName(card)} />
                   <span className="hand-card-name">{cardName(card)}</span>
@@ -220,6 +248,11 @@ export function PlayerBoard({
   buildStatus,
   playedCards,
   eraActions,
+  onTileDragStart,
+  hiddenTopInd,
+  stackView,
+  developPicks,
+  developBinRef,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -236,8 +269,18 @@ export function PlayerBoard({
   buildStatus?: Partial<Record<IndustryType, string>> | undefined;
   /** 该座位本时代已打出的牌(右上"打出"按钮的单人记录用)。 */
   playedCards?: Card[] | undefined;
-  /** 本时代全部行动及实际现金变化(服务端结算时记录,面板行动行的盈亏准确值)。 */
-  eraActions?: { action: Action; moneyDelta: number }[] | undefined;
+  /** 本时代全部行动及实际现金变化(服务端结算时记录;note='round-income' 为轮末收入)。 */
+  eraActions?: { action: Action; moneyDelta: number; note?: 'round-income' }[] | undefined;
+  /** 按下产业栈顶板块开始拖拽(宽屏拖拽建造/研发,仅紧凑面板用)。 */
+  onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>) => void) | undefined;
+  /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失)。 */
+  hiddenTopInd?: IndustryType | null | undefined;
+  /** 个人版图风格(偏好设置收口):mat=桌游风格;list=列表风格(原"明细")。 */
+  stackView?: 'mat' | 'list' | undefined;
+  /** 研发暂存中的产业(每个出现一次 = 暂存移除 1 块;版面计数同步 -1,归零置灰)。 */
+  developPicks?: IndustryType[] | undefined;
+  /** 垃圾桶(研发拖放目标)的容器 ref——只有拖到垃圾桶上松手才算研发。 */
+  developBinRef?: React.LegacyRef<HTMLDivElement> | undefined;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
   // 单人打出记录弹层开关(版图/明细切换旁的"打出"按钮)
@@ -266,6 +309,13 @@ export function PlayerBoard({
     const key = `${def.industry}-${def.level}`;
     remainingByTile.set(key, (remainingByTile.get(key) ?? 0) + 1);
   }
+  // 研发暂存同步减量(每暂存一次该产业,其最低级剩余 -1;归零显示耗尽)
+  for (const ind of developPicks ?? []) {
+    const top = TILES.filter((t) => t.industry === ind)
+      .map((d) => d.level)
+      .find((lv) => (remainingByTile.get(`${ind}-${lv}`) ?? 0) > 0);
+    if (top !== undefined) remainingByTile.set(`${ind}-${top}`, (remainingByTile.get(`${ind}-${top}`) ?? 1) - 1);
+  }
 
   // 单人打出记录数据(稀疏数组,按座位号入桶)
   const playedCardsAll: Card[][] =
@@ -276,20 +326,52 @@ export function PlayerBoard({
     const rank = state.turnOrder.indexOf(seat) + 1;
     // 本时代行动按回合分组(最新轮在前);本回合行动取当前轮组——
     // 刷新后 log 只剩残尾,但 eraActions 是服务端全量簿记,记录不丢
-    const rounds: { round: number; actions: { action: Action; moneyDelta: number }[] }[] = [];
+    const rounds: { round: number; actions: { action: Action; moneyDelta: number; note?: 'round-income' }[] }[] = [];
     {
       const ea = eraActions ?? [];
       const apr = (r: number): number => (state.era === 'canal' && r === 1 ? 1 : 2);
-      let i = 0;
-      for (let r = 1; i < ea.length; r += 1) {
-        const slice = ea.slice(i, i + apr(r));
-        if (slice.length === 0) break;
-        rounds.push({ round: r, actions: slice });
-        i += apr(r);
+      // 与 DiscardModal.buildRounds 同一 walk 方案:note 条目附进当前轮,不占名额
+      let current: { round: number; actions: { action: Action; moneyDelta: number; note?: 'round-income' }[] } | null = null;
+      let used = 0;
+      for (const a of ea) {
+        if (a.note === 'round-income') {
+          current?.actions.push(a);
+          continue;
+        }
+        if (current === null || used >= apr(current.round)) {
+          current = { round: rounds.length + 1, actions: [] };
+          rounds.push(current);
+          used = 0;
+        }
+        current.actions.push(a);
+        used += 1;
       }
       rounds.reverse();
     }
-    const acts = rounds.find((r) => r.round === state.round)?.actions ?? [];
+    // 轮末收入合计 → 轮标签后缀(着色与行动盈亏一致):"（收入 +£30）/（收入 −£3）/（收入 +£0）"
+    const incomeSuffixOf = (entries: { moneyDelta: number; note?: 'round-income' }[]): ReactNode => {
+      let sum = 0;
+      let has = false;
+      for (const e of entries) {
+        if (e.note === 'round-income') {
+          sum += e.moneyDelta;
+          has = true;
+        }
+      }
+      if (!has) return null;
+      return (
+        <>
+          （收入{' '}
+          <em className={`compact-round-delta ${sum >= 0 ? 'pos' : 'neg'}`}>
+            {sum >= 0 ? `+£${sum}` : `−£${-sum}`}
+          </em>
+          ）
+        </>
+      );
+    };
+    const acts = (rounds.find((r) => r.round === state.round)?.actions ?? []).filter(
+      (a) => a.note !== 'round-income',
+    );
     const actionCardsText = (a: Action): string =>
       a.type === 'scout'
         ? a.cardIds.map((id) => cardName(cardFromId(id))).join('+')
@@ -328,11 +410,9 @@ export function PlayerBoard({
               acts.map((a, i) => (
                 <span className="compact-round-line" key={i}>
                   {describeAction(a.action)}
-                  {a.moneyDelta !== 0 ? (
-                    <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
-                      {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : `−£${-a.moneyDelta}`}
-                    </em>
-                  ) : null}
+                  <em className={`compact-round-delta ${a.moneyDelta >= 0 ? 'pos' : 'neg'}`}>
+                    {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '+£0'}
+                  </em>
                   <em className="compact-history-card">{actionCardsText(a.action)}</em>
                 </span>
               ))
@@ -356,24 +436,107 @@ export function PlayerBoard({
             ) : (
               rounds.map((r) => (
                 <div key={r.round} className="compact-history-round">
-                  <span className="compact-history-label">第 {r.round} 轮</span>
-                  {r.actions.map((a, i) => (
-                    <span key={i} className="compact-history-act">
-                      {describeAction(a.action)}
-                      <em className="compact-history-card">{actionCardsText(a.action)}</em>
-                    </span>
-                  ))}
+                  <span className="compact-history-label">
+                    第 {r.round} 轮{incomeSuffixOf(r.actions)}
+                  </span>
+                  {r.actions
+                    .filter((a) => a.note !== 'round-income')
+                    .map((a, i) => (
+                      <span key={i} className="compact-history-act">
+                        {describeAction(a.action)}
+                        <em className="compact-history-card">{actionCardsText(a.action)}</em>
+                      </span>
+                    ))}
                 </div>
               ))
             )}
           </div>
         ) : null}
         <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
-          <PlayerMat
-            tiles={self.tiles}
-            playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
-            colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
-          />
+          <div
+            className="develop-bin"
+            data-testid={`develop-bin-${seat}`}
+            ref={developBinRef}
+            title="拖到此处研发(移除该产业最低级板块)"
+          >
+            <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+              <path
+                d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+          {(stackView ?? 'mat') === 'mat' ? (
+            <PlayerMat
+              tiles={self.tiles}
+              playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
+              colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
+              onTileDragStart={onTileDragStart}
+              hiddenTopInd={hiddenTopInd}
+              stagedRemovals={developPicks}
+            />
+          ) : (
+            INDUSTRY_ORDER.map((ind) => {
+              // 栈顶(有剩余的最低级)可拖拽:拖到地图城市=建造,拖出地图/版图=研发
+              const topLevel = TILES.filter((t) => t.industry === ind)
+                .map((d) => d.level)
+                .find((lv) => (remainingByTile.get(`${ind}-${lv}`) ?? 0) > 0);
+              return (
+              <div key={ind} className="board-ind">
+                <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
+                  {industryName(ind)}
+                </span>
+                {buildStatus?.[ind] !== undefined ? (
+                  <span
+                    className={`board-ind-status${buildStatus[ind]!.startsWith('✓') ? ' ok' : ''}`}
+                    data-testid={`build-status-${seat}-${ind}`}
+                  >
+                    {buildStatus[ind]}
+                  </span>
+                ) : null}
+                <span className="board-ind-list">
+                  {TILES.filter((t) => t.industry === ind).map((def) => {
+                    const remaining = remainingByTile.get(`${ind}-${def.level}`) ?? 0;
+                    const cost =
+                      `£${def.costMoney}` +
+                      (def.costCoal > 0 ? ` 煤${def.costCoal}` : '') +
+                      (def.costIron > 0 ? ` 铁${def.costIron}` : '');
+                    const isTop = def.level === topLevel;
+                    const dragging = isTop && hiddenTopInd === ind;
+                    return (
+                      <span
+                        key={def.level}
+                        className={`stack-tile${remaining === 0 ? ' exhausted' : ''}`}
+                        data-testid={`player-board-stack-${seat}-${ind}-${def.level}`}
+                        title={`${industryName(ind)} Lv${def.level}｜建造成本 ${cost}｜翻面得 ${def.vp} 分、收入 +${def.incomeAdvance} 级`}
+                        style={{
+                          ...(isTop && onTileDragStart !== undefined && remaining > 0 ? { cursor: 'grab' } : {}),
+                          ...(dragging ? { opacity: 0.25 } : {}),
+                        }}
+                        onPointerDown={
+                          isTop && onTileDragStart !== undefined && remaining > 0
+                            ? (e) => onTileDragStart(ind, e)
+                            : undefined
+                        }
+                      >
+                        <img
+                          src={`/assets/tiles/${ind}-${def.level}-${colorKey}.png`}
+                          alt={`${industryName(ind)} Lv${def.level}`}
+                        />
+                        <span className="stack-tile-count">×{remaining}</span>
+                        <span className="stack-tile-sub">Lv{def.level}</span>
+                      </span>
+                    );
+                  })}
+                </span>
+              </div>
+              );
+            })
+          )}
         </div>
         {discardOpen ? (
           <DiscardModal
@@ -559,6 +722,49 @@ export function PlayerBoard({
         />
       ) : null}
     </section>
+  );
+}
+
+/** 行动日志弹窗(宽屏顶部"行动日志"按钮打开;经典布局仍用底部 LogPanel)。 */
+export function LogModal({
+  log,
+  room,
+  onClose,
+}: {
+  log: LogEntry[];
+  room?: RoomState | undefined;
+  onClose: () => void;
+}): ReactElement {
+  return (
+    <div className="modal-backdrop" data-testid="log-modal" onClick={onClose}>
+      <section className="score-modal log-modal" onClick={(e) => e.stopPropagation()}>
+        <header className="score-modal-head">
+          <h3>行动日志</h3>
+          <button type="button" className="modal-close" data-testid="log-modal-close" onClick={onClose}>
+            ×
+          </button>
+        </header>
+        {log.length === 0 ? (
+          <p data-testid="log-empty">暂无行动</p>
+        ) : (
+          <ol className="log-scroll log-modal-scroll">
+            {log.map((entry) => {
+              const bonus = merchantBonusNote(entry.events);
+              return (
+                <li key={entry.seq} data-testid="log-entry">
+                  #{entry.seq} {playerName(room, entry.player)}：{actionSummary(entry.action)}
+                  {bonus !== null ? <span className="log-bonus">（{bonus}）</span> : null}
+                  {entry.degraded === true ? <span className="degraded-badge">（已降级）</span> : null}
+                  {entry.reason !== undefined ? (
+                    <blockquote className="log-reason">{entry.reason}</blockquote>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
+    </div>
   );
 }
 

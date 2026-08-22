@@ -1690,7 +1690,7 @@ body {
   margin: 8px 0;
 }
 
-/* 行首标签(研发:/侦察:/出售:…):弱化色,与按钮同字号 */
+/* 行首标签(研发:/搜寻:/出售:…):弱化色,与按钮同字号 */
 .action-choices > span:first-child {
   color: #b3a888;
 }
@@ -2420,4 +2420,535 @@ body {
 .compact-history-act .compact-history-card {
   margin-left: auto;
   text-align: right;
+}
+
+/* ---- 宽屏顶部行动栏(固定屏幕不滚动重构) ---- */
+.top-action-bar {
+  padding: 8px 14px;
+}
+
+.top-action-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.top-action-row > button {
+  padding: 5px 14px;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: rgba(23, 26, 31, 0.7);
+  color: #d8cdb4;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.top-action-row > button:hover:not(:disabled) {
+  border-color: #c9a86a;
+  color: #f3ead4;
+}
+
+.top-action-row > button.selected {
+  border-color: #e3c58f;
+  background: rgba(201, 168, 106, 0.16);
+  color: #f3ead4;
+  box-shadow: 0 0 0 1px rgba(201, 168, 106, 0.4);
+}
+
+.top-action-row > button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.top-action-row .top-confirm {
+  border: none;
+  border-radius: 6px;
+  background: #c9a86a;
+  color: #1a1d23;
+  font-weight: 600;
+}
+
+.top-action-row .top-confirm:disabled {
+  background: #4a5160;
+  color: #9aa4b2;
+}
+
+.top-action-spacer {
+  flex: 1 1 auto;
+}
+
+.top-action-money {
+  margin-left: 4px;
+}
+
+.top-action-hint {
+  color: #b3a888;
+}
+
+.top-detail-row {
+  margin: 8px 0 0;
+}
+
+.log-modal {
+  width: min(92vw, 720px);
+}
+
+.log-modal-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 手牌固定在视口底部:无论页面怎么滚,始终露约 1/3 牌顶;
+   悬停提起(已有选中牌时其余牌不再提起),被选中的牌固定提起 */
+.hand-bar.overlay {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 30;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.hand-bar.overlay .own-hand {
+  justify-content: center;
+}
+
+.hand-bar.overlay .hand-card {
+  pointer-events: auto;
+  /* 默认露出长度:约 1/4 牌顶(原 38% 的 3/4) */
+  transform: translateY(72%);
+  transition: transform 0.15s ease;
+}
+
+.hand-bar.overlay:not(.no-raise) .hand-card:hover,
+.hand-bar.overlay .hand-card.selected {
+  transform: translateY(0);
+}
+
+/* 面板拖拽建造/研发:跟随指针的板块 ghost(与被拖 token 本体同尺寸,贴光标中心) */
+.tile-drag-ghost {
+  position: fixed;
+  z-index: 50;
+  border-radius: 8px;
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+/* 宽屏工具按钮行:右对齐,位于右侧版面上方 */
+.wide-util-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  white-space: nowrap;
+}
+
+/* 手牌行宽度对齐地图(宽屏中列约 50% 视口宽):几张牌合计与地图同宽 */
+.hand-bar.overlay {
+  left: 25%;
+  right: 25%;
+}
+
+/* 偏好设置弹窗:滑动开关行 */
+.prefs-modal {
+  min-width: 380px;
+}
+
+.pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.pref-side {
+  min-width: 96px;
+  color: #8a8068;
+  font-size: 0.9rem;
+  transition: color 0.12s ease;
+}
+
+.pref-side:last-child {
+  text-align: left;
+}
+
+.pref-side:first-child {
+  text-align: right;
+}
+
+.pref-side.active {
+  color: #f3ead4;
+  font-weight: 600;
+}
+
+.pref-slide {
+  position: relative;
+  width: 52px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: rgba(23, 26, 31, 0.8);
+  cursor: pointer;
+}
+
+.pref-knob {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #c9a86a;
+  transition: transform 0.15s ease;
+}
+
+.pref-slide.right .pref-knob {
+  transform: translateX(25px);
+}
+
+/* 卡牌悬浮:集体悬浮模式——未选中时悬停整排提起;有选中时仅选中牌固定提起 */
+.hand-bar.overlay.mode-all:not(.has-selection):hover .hand-card {
+  transform: translateY(0);
+}
+
+/* 宽屏顶行:行动按钮行全宽居中,偏好设置等工具按钮钉在最右(左右版面统一从顶行下开始) */
+.wide-topline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.wide-topline > .top-action-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wide-topline > .wide-util-row {
+  flex: none;
+  margin-left: auto;
+  padding-bottom: 0;
+}
+
+/* 窄屏兼容:一行放不下时拆两行——偏好设置等在上(右对齐),行动按钮行在下 */
+@media (max-width: 1560px) {
+  .wide-topline {
+    flex-direction: column;
+  }
+
+  .wide-topline > .wide-util-row {
+    order: -1;
+    align-self: flex-end;
+  }
+
+  .wide-topline > .top-action-bar {
+    width: 100%;
+  }
+}
+
+/* 顶行三列与内容网格同构:房间号左列、行动行居中列(从地图左缘起排)、工具按钮右列右对齐 */
+.wide-topline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  flex-wrap: unset;
+  align-items: center;
+  gap: 12px;
+}
+
+.wide-topline-left {
+  white-space: nowrap;
+}
+
+.wide-topline > .wide-util-row {
+  justify-content: flex-end;
+  margin-left: 0;
+}
+
+/* 行动行按钮无论是否已选牌:位置与风格保持一致(置灰不淡化) */
+.top-action-row > button:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+/* 窄屏仍拆两行:工具按钮在上,行动行在下 */
+@media (max-width: 1560px) {
+  .wide-topline {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .wide-topline-left {
+    display: none;
+  }
+}
+
+/* 左列:离开对局居中于左上角版面上方 */
+.wide-topline-left {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* 离开对局防呆确认弹窗 */
+.leave-confirm-modal {
+  min-width: 320px;
+}
+
+.leave-confirm-text {
+  margin: 4px 0 14px;
+  color: #d8cdb4;
+}
+
+.leave-confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.leave-confirm-danger {
+  padding: 6px 18px;
+  border: none;
+  border-radius: 6px;
+  background: #c0392b;
+  color: #fdf0ec;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.leave-confirm-danger:hover {
+  background: #d24637;
+}
+
+/* 行动日志弹窗:上卡牌、下各玩家行动记录 */
+.action-log-modal {
+  width: min(94vw, 1280px);
+  max-height: 88vh;
+}
+
+.action-log-history {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #3a3226;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.78rem;
+}
+
+/* 左列:房间号绝对左对齐,离开对局居中 */
+.wide-topline-left {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+
+.wide-topline-left .game-room-code {
+  justify-self: start;
+}
+
+.wide-topline-left > button {
+  grid-column: 2;
+  justify-self: center;
+}
+
+/* 金钱标记钉在行动行最右:等待/自己行动/确认回合各状态位置一致 */
+.top-action-row .top-action-money {
+  margin-left: auto;
+}
+
+/* 行动日志弹窗:风格 A 的上下统一分隔线 */
+.action-log-divider {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid #6b5b3e;
+}
+
+/* 行动日志弹窗:风格 B(回合分组) */
+.action-log-group {
+  border: 1px solid #3a3226;
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.action-log-group-label {
+  color: #b3a888;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.action-log-group-cards {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.action-log-group-cards img {
+  width: 96px;
+  height: auto;
+  border-radius: 7px;
+  border: 1px solid #4a3f2c;
+  display: block;
+}
+
+/* 研发垃圾桶:版图右下角的研发拖放目标 */
+.board-stack {
+  position: relative;
+}
+
+.develop-bin {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1.5px dashed #8a6d3b;
+  border-radius: 10px;
+  background: rgba(20, 16, 10, 0.75);
+  color: #c9a86a;
+}
+
+/* "提示卡"悬浮窗:锚定按钮附近,不居中 */
+.hint-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+}
+
+.hint-popup {
+  position: fixed;
+  z-index: 40;
+  padding: 10px 14px;
+  border: 1px solid #6b5b3e;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #23262e, #1a1d23);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.6);
+  font-size: 0.82rem;
+}
+
+.hint-popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  color: #e3d3a8;
+  font-weight: 600;
+}
+
+.hint-section {
+  margin-top: 8px;
+}
+
+.hint-section h4 {
+  margin: 0 0 4px;
+  color: #b3a888;
+  font-size: 0.78rem;
+}
+
+.hint-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.hint-chip {
+  padding: 2px 8px;
+  border: 1px solid #3f3a2e;
+  border-radius: 999px;
+  background: rgba(23, 26, 31, 0.7);
+  color: #d8cdb4;
+  white-space: nowrap;
+}
+
+/* 顶行按钮高度统一(离开对局与偏好设置同高对齐) */
+.wide-util-row .btn-ghost,
+.wide-topline-left .btn-ghost {
+  padding: 5px 14px;
+}
+
+/* 整体上抬:缩小顶行与地图之间的空隙,地图向上挪一点 */
+.game-screen.wide {
+  gap: 8px;
+}
+
+.game-screen.wide .wide-grid {
+  gap: 10px;
+}
+
+.top-action-bar {
+  padding: 6px 14px;
+}
+
+/* 偏好设置行首描述列 */
+.pref-desc {
+  min-width: 112px;
+  color: #9aa4b2;
+  font-size: 0.82rem;
+  text-align: right;
+}
+
+/* 行动日志上下分隔模式:整窗统一滚轮,列内不单独滚动 */
+.action-log-history.no-scroll {
+  max-height: none;
+  overflow-y: visible;
+}
+
+/* 行动日志卡组:按回合逐行,每行不换行(搜寻 4 张一行,超出横向滚动) */
+.action-log-group-cards {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+/* 行动日志:行动行一律单行不换行;列宽加大保证四列行动对齐 */
+.action-log-modal .compact-history-act {
+  white-space: nowrap;
+}
+
+.action-log-modal .discard-columns {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.action-log-round-row {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed #3a3226;
+}
+
+.action-log-round-row:last-child {
+  border-bottom: none;
+}
+
+/* 行动日志弹窗:列内不出现竖向小滚轮——CSS 规则 overflow-x:auto 时
+   overflow-y:visible 会按规范计算成 auto,必须显式 hidden 才能消除竖条 */
+.action-log-modal .discard-col,
+.action-log-modal .discard-columns,
+.action-log-modal .action-log-round-row,
+.action-log-modal .action-log-group-cards {
+  overflow-y: hidden;
 }

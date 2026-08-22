@@ -16,6 +16,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
+import { reachableFrom } from '@brass/engine';
 import type { Action, BeerSourceRef, Card, IndustryType, LocationId, MerchantId, PlayerIndex } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { BoardHighlights, SlotRef } from '../board/BoardSvg';
@@ -29,6 +30,7 @@ import {
   developOptions,
   explicitBuildSlot,
   extendableLinks,
+  feasibleSellMerchants,
   matchDevelop,
   matchNetwork,
   matchScout,
@@ -84,8 +86,10 @@ export interface ActionDraft {
   /** 组完整(建筑+贸易商+啤酒够数)时收下本组,开始下一组。 */
   commitSellGroup: () => void;
   removeSellGroup: (i: number) => void;
-  /** 图上点贸易商位:未选建筑无效;未选贸易商=选定;同商人再点=切商人桶;不同=换。 */
+  /** 图上点贸易商位(商品图案):未选建筑无效;未选贸易商=选定;不同=换;不再兼任酒桶选择。 */
   clickMerchant: (id: MerchantId) => void;
+  /** 图上点贸易商酒桶图标:选该商人的桶为啤酒来源(须先选建筑;该商人有桶才有效)。 */
+  clickMerchantBeer: (id: MerchantId) => void;
   /** 槽位歧义（一槽多产业）时的待选 build。 */
   buildChoices: BuildAction[];
   /** 建造预览（非贴合的预览 token 盖在目标槽位，切换城市即跟随）。 */
@@ -155,10 +159,83 @@ export function useActionDraft({
   }, [state, seat]);
 
   const highlights = useMemo<BoardHighlights>(() => {
-    // 已进入卖出选择(选了板块或已有组):去掉建造/连接高亮,只留可卖板块与啤酒源
-    const selling = sellTile !== null || sellGroups.length > 0;
+    // 已暂存一步(选好建造/卖出组/点完边):清掉其他行动的高亮——
+    // 放入路后不再显示城市/建造高亮;拖入建筑后不再显示路边高亮
+    const emptyBeer: NonNullable<BoardHighlights['beerSources']> = { locations: [], merchants: [] };
+    // 啤酒源高亮(match 效果):
+    // - 选了板块未选贸易商:圈出**真能收这块货**的贸易商(sellMerchants,整位圈);
+    // - 选了贸易商:圈该商人的酒桶(各桶位) + 可用酒厂(自家全图 + 连通该商人的对手酒厂);
+    // - 非卖出流(如铁路双轨):自有酒厂 + 全部有桶商人位(原行为)。
+    const computeBeerSources = (): NonNullable<BoardHighlights['beerSources']> => {
+      const out: NonNullable<BoardHighlights['beerSources']> = { locations: [], merchants: [] };
+      const needsBeer = candidates.some(
+        (a) => a.type === 'sell' || (a.type === 'network' && a.links.length === 2),
+      );
+      if (!needsBeer) return out;
+      if (sellMerchant !== null) {
+        // 已选贸易商:桶位 = 该商人;酒厂 = 自家(无需连通) + 连通该商人的对手酒厂
+        out.merchants!.push(sellMerchant);
+        const reach = reachableFrom(state as unknown as import('@brass/engine').GameState, [sellMerchant]);
+        for (const [loc, slotsOfLoc] of Object.entries(state.board.slots)) {
+          const hasUsable = slotsOfLoc.some(
+            (t) =>
+              t &&
+              !t.flipped &&
+              t.tile.industry === 'brewery' &&
+              t.resources > 0 &&
+              (t.player === seat || (t.player !== seat && reach.has(loc as LocationId))),
+          );
+          if (hasUsable) out.locations!.push(loc as LocationId);
+        }
+        return out;
+      }
+      // 未选贸易商(或铁路双轨):自家酒厂 + 全部有桶商人位
+      for (const [loc, slotsOfLoc] of Object.entries(state.board.slots)) {
+        if (
+          slotsOfLoc.some(
+            (t) => t && t.player === seat && !t.flipped && t.tile.industry === 'brewery' && t.resources > 0,
+          )
+        ) {
+          out.locations!.push(loc as LocationId);
+        }
+      }
+      for (const [mid, m] of Object.entries(state.merchants)) {
+        if (m.beer > 0) out.merchants!.push(mid as keyof typeof state.merchants);
+      }
+      return out;
+    };
+    // 可售贸易商高亮(整位圈,非酒桶):选板块后能收这块货的贸易商
+    const sellMerchants =
+      sellMerchant !== null
+        ? [sellMerchant]
+        : sellTile !== null
+          ? (() => {
+              const placed = state.board.slots[sellTile.location]?.[sellTile.slotIndex];
+              if (placed == null) return [];
+              return feasibleSellMerchants(state, seat, sellTile, placed.tile.beerToFlip);
+            })()
+          : [];
+    if (chosen !== null) {
+      return {
+        slots: [],
+        links: [],
+        locations: [],
+        beerSources: chosen.type === 'sell' ? computeBeerSources() : emptyBeer,
+        sellMerchants,
+      };
+    }
+    if (sellTile !== null || sellGroups.length > 0) {
+      // 卖出组进行中:只留可卖板块与啤酒源
+      return {
+        slots: sellSlotTargets(candidates),
+        links: [],
+        locations: [],
+        beerSources: computeBeerSources(),
+        sellMerchants,
+      };
+    }
     const targets = targetsFor(selectedCard, legalActions);
-    let buildSlots = selling ? [] : buildSlotTargets(targets, state.board.slots);
+    let buildSlots = buildSlotTargets(targets, state.board.slots);
     // 产业预选:高亮只留能落该产业的槽位
     if (buildIndustry !== null) {
       const ind = buildIndustry;
@@ -169,30 +246,14 @@ export function useActionDraft({
           ).length > 0,
       );
     }
-    const slots = [...buildSlots, ...sellSlotTargets(candidates)];
+    const links = [...extendableLinks(candidates, pickedLinks)];
+    // 已放入路边:只留可继续点的边与啤酒源,其余高亮全清
+    const slots =
+      pickedLinks.length > 0 ? [] : [...buildSlots, ...sellSlotTargets(candidates)];
     // 可建城市级高亮:所有可放置地点(与槽位高亮互补,找城更快)
-    const locations = [...new Set(buildSlots.map((s) => s.location))];
-    // 啤酒源高亮(match 效果):卖货/铁路双轨候选存在时,自己酒厂(无需连通)与有桶商人位
-    const needsBeer = candidates.some(
-      (a) => a.type === 'sell' || (a.type === 'network' && a.links.length === 2),
-    );
-    const beerSources: NonNullable<BoardHighlights['beerSources']> = { locations: [], merchants: [] };
-    if (needsBeer) {
-      for (const [loc, slotsOfLoc] of Object.entries(state.board.slots)) {
-        if (
-          slotsOfLoc.some(
-            (t) => t && t.player === seat && !t.flipped && t.tile.industry === 'brewery' && t.resources > 0,
-          )
-        ) {
-          beerSources.locations!.push(loc as LocationId);
-        }
-      }
-      for (const [mid, m] of Object.entries(state.merchants)) {
-        if (m.beer > 0) beerSources.merchants!.push(mid as keyof typeof state.merchants);
-      }
-    }
-    return { slots, links: [...extendableLinks(candidates, pickedLinks)], locations, beerSources };
-  }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks, buildIndustry]);
+    const locations = pickedLinks.length > 0 ? [] : [...new Set(buildSlots.map((s) => s.location))];
+    return { slots, links, locations, beerSources: computeBeerSources(), sellMerchants };
+  }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks, buildIndustry, chosen, sellTile, sellGroups, sellMerchant]);
 
   const networkMatch = matchNetwork(candidates, pickedLinks);
   const sell = sellOptions(candidates);
@@ -292,12 +353,15 @@ export function useActionDraft({
   const clickMerchant = (id: MerchantId): void => {
     if (!candidates.some((a) => a.type === 'sell')) return;
     if (sellTile === null) return; // 顺序约束:先选建筑,否则无效
-    if (sellMerchant === null) {
-      pickSellMerchant(id);
-      return;
-    }
-    if (sellMerchant === id) toggleSellMerchantBarrel();
-    else pickSellMerchant(id);
+    pickSellMerchant(id);
+  };
+
+  const clickMerchantBeer = (id: MerchantId): void => {
+    if (!candidates.some((a) => a.type === 'sell')) return;
+    if (sellTile === null) return; // 顺序约束:先选建筑,否则无效
+    if (state.merchants[id].beer <= 0) return; // 该商人无桶,点了无效
+    if (sellMerchant !== id) pickSellMerchant(id); // 顺带切到该商人
+    toggleSellMerchantBarrel(); // 选/取消该商人的桶(与酒行按钮同状态)
   };
 
   const clickSlot = (location: LocationId, slotIndex: number): void => {
@@ -471,6 +535,7 @@ export function useActionDraft({
     commitSellGroup,
     removeSellGroup,
     clickMerchant,
+    clickMerchantBeer,
     buildChoices,
     buildPreview,
     buildIndustry,
@@ -542,10 +607,7 @@ export function ActionBar({
   if (turnHold === seat) {
     return (
       <section className="action-bar turn-hold" data-testid="action-bar">
-        <div className="action-bar-head">
-          <h3>行动</h3>
-          {moneyChip(false)}
-        </div>
+        <div className="action-bar-head">{moneyChip(false)}</div>
         <p data-testid="turn-hold-hint">本回合行动已完成。确认后进入下一位玩家;也可以重置本回合重新行动。</p>
         <div className="action-confirm">
           <button type="button" data-testid="end-turn" onClick={onEndTurn}>
@@ -561,10 +623,7 @@ export function ActionBar({
   if (!myTurn) {
     return (
       <section className="action-bar" data-testid="action-bar">
-        <div className="action-bar-head">
-          <h3>行动</h3>
-          {moneyChip(false)}
-        </div>
+        <div className="action-bar-head">{moneyChip(false)}</div>
         <p data-testid="waiting" className={turnHold !== null ? 'waiting-hold' : undefined}>
           {turnHold !== null ? `等待 ${waitingFor} 确认回合…` : `等待 ${waitingFor} 行动…`}
         </p>
@@ -618,13 +677,7 @@ export function ActionBar({
 
   return (
     <section className="action-bar" data-testid="action-bar">
-      <div className="action-bar-head">
-        <h3>行动</h3>
-        {moneyChip(true)}
-      </div>
-      {selectedCard === null ? (
-        <p data-testid="select-card-hint">从手牌中选一张牌，棋盘将高亮可执行的目标。</p>
-      ) : null}
+      <div className="action-bar-head">{moneyChip(true)}</div>
       <div className="action-sections">
         {/* 建造行:常驻可整行收起(全局记住);产业按钮带 等级+花费 */}
         {buildRowHidden ? (
@@ -713,18 +766,108 @@ export function ActionBar({
           )}
         </div>
 
-        {(() => {
+        <SellDetails draft={draft} state={state} seat={seat} />
+
+        <div className={`action-choices${draft.scoutAvailable ? '' : ' row-disabled'}`} data-testid="scout-options">
+          <span>搜寻{draft.scoutAvailable ? `：选 3 张弃牌（已选 ${draft.scoutPicks.length}/3）` : '：'}</span>
+          {!draft.scoutAvailable ? (
+            <span className="action-row-none">—</span>
+          ) : (
+            hand.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                data-testid={`scout-card-${c.id}`}
+                className={draft.scoutPicks.includes(c.id) ? 'selected' : undefined}
+                disabled={draft.scoutPicks.length >= 3 && !draft.scoutPicks.includes(c.id)}
+                onClick={() => draft.toggleScoutCard(c.id)}
+              >
+                {cardName(c)}
+              </button>
+            ))
+          )}
+        </div>
+
+        <div className={`action-choices${loan === undefined && !onlyPass ? ' row-disabled' : ''}`} data-testid="loan-row">
+          <span>贷款：</span>
+          {loan === undefined && !onlyPass ? (
+            <span className="action-row-none">—</span>
+          ) : (
+            <>
+              {loan !== undefined ? (
+                <button type="button" data-testid="quick-loan" onClick={() => draft.choose(loan)}>
+                  £30（收入 −3 级）
+                </button>
+              ) : null}
+              {/* 过:仅当该牌没有任何其他可执行行动时兜底出现,防死锁 */}
+              {onlyPass && pass !== undefined ? (
+                <button type="button" data-testid="quick-pass" onClick={() => draft.choose(pass)}>
+                  {describeAction(pass)}
+                </button>
+              ) : null}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="action-confirm">
+        {hints.map((h) => (
+          <p className="action-blocked-hint" data-testid="blocked-hint" key={h}>
+            {h}
+          </p>
+        ))}
+        {preview !== null && (preview.gains.length > 0 || preview.costs.length > 0) ? (
+          <p className="action-preview" data-testid="action-preview">
+            {preview.gains.length > 0 ? `收益：${preview.gains.join('、')}` : ''}
+            {preview.gains.length > 0 && preview.costs.length > 0 ? '｜' : ''}
+            {preview.costs.length > 0 ? `花费：${preview.costs.join('、')}` : ''}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          data-testid="confirm-action"
+          disabled={draft.resolved === null}
+          onClick={onConfirm}
+        >
+          {draft.resolved === null ? '确认（先完成选择）' : `确认：${describeAction(draft.resolved)}`}
+        </button>
+        <button
+          type="button"
+          data-testid="cancel-draft"
+          title="清空当前未确认的选择（不影响已提交的行动）"
+          onClick={onCancel}
+        >
+          取消选择
+        </button>
+        <button
+          type="button"
+          data-testid="reset-turn"
+          className="btn-ghost"
+          disabled={!canResetTurn}
+          title={canResetTurn ? '撤销本回合已提交的全部行动,回到回合初' : '本回合还没有可撤回的行动'}
+          onClick={onResetTurn}
+        >
+          重置本回合
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** 卖出分组选择器(经典 ActionBar 与宽屏 TopActionBar 共用)。 */
+export function SellDetails({
+  draft,
+  state,
+  seat,
+}: {
+  draft: ActionDraft;
+  state: FilteredState;
+  seat: PlayerIndex;
+}): ReactElement {
           const sellRowDisabled = draft.sellSingles.length === 0 && draft.sellFullSet === null && draft.sellGroups.length === 0;
-          // 该板块当前真能卖向的商人(可达+收货+啤酒总量够),建筑行只列非空的
+          // 该板块当前真能卖向的商人(与地图高亮同一份判定),建筑行只列非空的
           const feasibleMerchants = (t: SlotRef, beerToFlip: number): MerchantId[] =>
-            merchantsForTile(state, t).filter((id) => {
-              const src = beerSourcesFor(state, seat, id);
-              const total =
-                (src.merchantBarrel ? 1 : 0) +
-                src.own.reduce((s, b) => s + b.barrels, 0) +
-                src.opponent.reduce((s, b) => s + b.barrels, 0);
-              return total >= beerToFlip;
-            });
+            feasibleSellMerchants(state, seat, t, beerToFlip);
           const sellableNow = sellableTilesFor(state, seat).filter(
             (t) =>
               !draft.sellGroups.some((g) => g.tile.location === t.location && g.tile.slotIndex === t.slotIndex) &&
@@ -866,90 +1009,4 @@ export function ActionBar({
               ) : null}
             </>
           );
-        })()}
-
-        <div className={`action-choices${draft.scoutAvailable ? '' : ' row-disabled'}`} data-testid="scout-options">
-          <span>侦察{draft.scoutAvailable ? `：选 3 张弃牌（已选 ${draft.scoutPicks.length}/3）` : '：'}</span>
-          {!draft.scoutAvailable ? (
-            <span className="action-row-none">—</span>
-          ) : (
-            hand.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                data-testid={`scout-card-${c.id}`}
-                className={draft.scoutPicks.includes(c.id) ? 'selected' : undefined}
-                disabled={draft.scoutPicks.length >= 3 && !draft.scoutPicks.includes(c.id)}
-                onClick={() => draft.toggleScoutCard(c.id)}
-              >
-                {cardName(c)}
-              </button>
-            ))
-          )}
-        </div>
-
-        <div className={`action-choices${loan === undefined && !onlyPass ? ' row-disabled' : ''}`} data-testid="loan-row">
-          <span>贷款：</span>
-          {loan === undefined && !onlyPass ? (
-            <span className="action-row-none">—</span>
-          ) : (
-            <>
-              {loan !== undefined ? (
-                <button type="button" data-testid="quick-loan" onClick={() => draft.choose(loan)}>
-                  £30（收入 −3 级）
-                </button>
-              ) : null}
-              {/* 过:仅当该牌没有任何其他可执行行动时兜底出现,防死锁 */}
-              {onlyPass && pass !== undefined ? (
-                <button type="button" data-testid="quick-pass" onClick={() => draft.choose(pass)}>
-                  {describeAction(pass)}
-                </button>
-              ) : null}
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="action-confirm">
-        {hints.map((h) => (
-          <p className="action-blocked-hint" data-testid="blocked-hint" key={h}>
-            {h}
-          </p>
-        ))}
-        {preview !== null && (preview.gains.length > 0 || preview.costs.length > 0) ? (
-          <p className="action-preview" data-testid="action-preview">
-            {preview.gains.length > 0 ? `收益：${preview.gains.join('、')}` : ''}
-            {preview.gains.length > 0 && preview.costs.length > 0 ? '｜' : ''}
-            {preview.costs.length > 0 ? `花费：${preview.costs.join('、')}` : ''}
-          </p>
-        ) : null}
-        <button
-          type="button"
-          data-testid="confirm-action"
-          disabled={draft.resolved === null}
-          onClick={onConfirm}
-        >
-          {draft.resolved === null ? '确认（先完成选择）' : `确认：${describeAction(draft.resolved)}`}
-        </button>
-        <button
-          type="button"
-          data-testid="cancel-draft"
-          title="清空当前未确认的选择（不影响已提交的行动）"
-          onClick={onCancel}
-        >
-          取消选择
-        </button>
-        <button
-          type="button"
-          data-testid="reset-turn"
-          className="btn-ghost"
-          disabled={!canResetTurn}
-          title={canResetTurn ? '撤销本回合已提交的全部行动,回到回合初' : '本回合还没有可撤回的行动'}
-          onClick={onResetTurn}
-        >
-          重置本回合
-        </button>
-      </div>
-    </section>
-  );
 }

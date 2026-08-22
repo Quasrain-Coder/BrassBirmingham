@@ -1,5 +1,5 @@
 /**
- * Scout 侦察行动：枚举 + 执行（rules-reference §6.7，§9.14）。
+ * Scout 搜寻行动：枚举 + 执行（rules-reference §6.7，§9.14）。
  *
  * - 弃 3 张卡（1 张行动卡 + 额外 2 张手牌），拿 1 Wild Location + 1 Wild Industry。
  * - 手中已有 Wild 卡不可执行；任一 Wild 供应堆为空不可执行。

@@ -289,7 +289,7 @@ describe('<LogPanel>', () => {
     expect(entries[0]).toHaveTextContent('乙');
     expect(entries[0]).toHaveTextContent('建造 伯明翰煤矿');
     expect(entries[1]).toHaveTextContent('贷款');
-    expect(entries[2]).toHaveTextContent('侦察');
+    expect(entries[2]).toHaveTextContent('搜寻');
   });
 
   it('空日志显示占位文本', () => {

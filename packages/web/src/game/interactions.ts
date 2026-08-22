@@ -398,7 +398,7 @@ export function describeAction(action: Action): string {
     case 'loan':
       return '贷款 £30（收入 −3 级）';
     case 'scout':
-      return '侦察：弃 3 张换百搭·城市 + 百搭·产业';
+      return '搜寻：弃 3 张换百搭·城市 + 百搭·产业';
     case 'pass':
       return '过';
   }
@@ -568,7 +568,7 @@ export function beerRemaining(
  */
 export function reconstructEraLog(
   state: FilteredState,
-  eraActions: readonly (readonly { action: Action; moneyDelta: number }[])[],
+  eraActions: readonly (readonly { action: Action; moneyDelta: number; note?: 'round-income' }[])[],
 ): { player: PlayerIndex; action: Action }[] {
   const out: { player: PlayerIndex; action: Action }[] = [];
   const idx = eraActions.map(() => 0);
@@ -577,7 +577,12 @@ export function reconstructEraLog(
     let any = false;
     for (const seat of state.turnOrder) {
       for (let k = 0; k < perRound(round); k += 1) {
-        const e = eraActions[seat]?.[idx[seat]!];
+        // 跳过轮末收入的合成条目(note),它不占行动名额、也不该出现在日志里
+        let e = eraActions[seat]?.[idx[seat]!];
+        while (e !== undefined && e.note === 'round-income') {
+          idx[seat]! += 1;
+          e = eraActions[seat]?.[idx[seat]!];
+        }
         if (e === undefined) break;
         out.push({ player: seat, action: e.action });
         idx[seat]! += 1;
@@ -587,4 +592,24 @@ export function reconstructEraLog(
     if (!any) break;
   }
   return out;
+}
+
+/**
+ * 该板块当前真能卖向的商人位(可达+图标收货+啤酒总量够)——
+ * 卖出高亮(选板块后圈出这些贸易商)与细节行共用同一份判定。
+ */
+export function feasibleSellMerchants(
+  state: FilteredState,
+  seat: PlayerIndex,
+  tile: SlotRef,
+  beerToFlip: number,
+): MerchantId[] {
+  return merchantsForTile(state, tile).filter((id) => {
+    const src = beerSourcesFor(state, seat, id);
+    const total =
+      (src.merchantBarrel ? 1 : 0) +
+      src.own.reduce((s, b) => s + b.barrels, 0) +
+      src.opponent.reduce((s, b) => s + b.barrels, 0);
+    return total >= beerToFlip;
+  });
 }

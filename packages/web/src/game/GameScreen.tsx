@@ -9,16 +9,25 @@
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Action, Card, PlayerIndex } from '@brass/engine';
+import { LOCATIONS } from '@brass/engine';
+import type { IndustryType, LocationId } from '@brass/engine';
 import type { DraftPreview, FilteredState, RoomState } from '@brass/protocol';
-import { BoardSvg } from '../board/BoardSvg';
+import { BoardSvg, BOARD_VIEW } from '../board/BoardSvg';
 import { PLAYER_COLORS } from '../board/BoardSvg';
 import type { ActionSpotlight } from '../board/BoardSvg';
+import { locationAnchor } from '../board/geometry';
 import { ActionBar, useActionDraft } from './ActionBar';
 import { AIIndicator } from './AIIndicator';
-import { DiscardModal } from './DiscardModal';
+import { ActionLogModal } from './DiscardModal';
+import { HintPopup } from './HintPopup';
+import type { AnchorRect } from './HintPopup';
 import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
+import { TopActionBar } from './TopActionBar';
+import { PrefsModal } from './PrefsModal';
+import type { HandRaiseMode, StackViewMode } from './PrefsModal';
+import type { TopActionKind } from './TopActionBar';
 import { describeAction, cardName } from './display';
-import { buildabilityFor, reconstructEraLog } from './interactions';
+import { buildabilityFor, reconstructEraLog, resolveBuildSlot } from './interactions';
 import { ScoreModal, useScoreHistory } from './ScoreTable';
 import { SPOTLIGHT_DURATION_MS, spotlightOf } from './spotlight';
 import type { GameStore, GameStoreState, LogEntry } from './store';
@@ -238,8 +247,124 @@ function GameBoard({
     setLayoutWideState(v);
     storage?.setItem('brass-layout', v ? 'wide' : 'classic');
   };
-  // 打出记录弹层开关
-  const [discardOpen, setDiscardOpen] = useState(false);
+  // 行动日志弹窗开关(合并打出记录)
+  const [actionLogOpen, setActionLogOpen] = useState(false);
+  // "提示卡"悬浮窗(顶部按钮,锚定按钮附近)
+  const [hintAnchor, setHintAnchor] = useState<AnchorRect | null>(null);
+  // 偏好设置弹窗(视图/卡牌悬浮/个人版图风格)
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  // 离开对局防呆确认弹窗
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [handRaise, setHandRaise] = useState<HandRaiseMode>(
+    () => (storage?.getItem('brass-hand-raise') as HandRaiseMode | null) ?? 'single',
+  );
+  const [stackView, setStackView] = useState<StackViewMode>(
+    () => (storage?.getItem('brass-stack-view') === 'list' ? 'list' : 'mat'),
+  );
+  const [logStyle, setLogStyle] = useState<'split' | 'grouped'>(
+    () => (storage?.getItem('brass-log-style') === 'grouped' ? 'grouped' : 'split'),
+  );
+  // 宽屏顶部行动栏当前展开的行动类型(选牌变化时收起)
+  const [topAction, setTopAction] = useState<TopActionKind>(null);
+  useEffect(() => setTopAction(null), [selectedCard]);
+
+  // 拖拽建造/研发(宽屏):从个人版图栈顶拖出板块,落地图城市=建造,落其他区域=研发
+  const [dragTile, setDragTile] = useState<{ ind: IndustryType; x: number; y: number; w: number; h: number } | null>(null);
+  const boardWrapRef = useRef<HTMLDivElement>(null);
+  const selfBoardRef = useRef<HTMLDivElement>(null);
+  const developBinRef = useRef<HTMLDivElement>(null);
+  const handleTileDrop = (ind: IndustryType, x: number, y: number): void => {
+    const wrap = boardWrapRef.current;
+    if (wrap === null) return;
+    // 拖到垃圾桶上松手 = 研发(唯一的研发拖放目标,等价按研发并选中该产业)
+    const bin = developBinRef.current;
+    if (bin !== null) {
+      const r = bin.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        if (draft.developChoices.includes(ind)) {
+          setTopAction('develop');
+          draft.toggleDevelop(ind);
+        }
+        return;
+      }
+    }
+    // 在自己个人版图内松手 = 什么都没发生(token 回归原位,不触发研发)
+    const sb = selfBoardRef.current;
+    if (sb !== null) {
+      const r = sb.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return;
+    }
+    const rect = wrap.getBoundingClientRect();
+    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      // 落点 → viewBox 坐标 → 最近城市锚点,与按钮流一致(预选产业+点规范化槽位)
+      const vx = BOARD_VIEW.x + ((x - rect.left) / rect.width) * BOARD_VIEW.size;
+      const vy = BOARD_VIEW.y + ((y - rect.top) / rect.height) * BOARD_VIEW.size;
+      let best: { loc: LocationId; dist: number } | null = null;
+      for (const loc of Object.keys(LOCATIONS) as LocationId[]) {
+        const a = locationAnchor(loc);
+        const dist = Math.hypot(a.x - vx, a.y - vy);
+        if (best === null || dist < best.dist) best = { loc, dist };
+      }
+      if (best === null || best.dist > 400) return;
+      const loc = best.loc;
+      if (
+        !draft.candidates.some((a) => a.type === 'build' && a.industry === ind && a.location === loc)
+      ) {
+        return;
+      }
+      const def = state.players[seat]?.tiles.find((t) => t.industry === ind);
+      if (def === undefined) return;
+      const target = resolveBuildSlot(state, seat, loc, ind, def.level);
+      if (target === null) return;
+      draft.pickIndustry(ind);
+      draft.clickSlot(loc, target.slotIndex);
+      return;
+    }
+    // 落到地图外且非垃圾桶/非版图:什么都不发生(token 回归原位)
+  };
+  const handleSlotClick = (loc: LocationId, si: number): void => {
+    const t = state.board.slots[loc]?.[si];
+    if (
+      myTurn &&
+      selectedCard !== null &&
+      t !== null &&
+      t !== undefined &&
+      !t.flipped &&
+      t.player === seat &&
+      t.tile.sellable &&
+      draft.candidates.some((a) => a.type === 'sell')
+    ) {
+      setTopAction('sell'); // 视同按下出售,第一组板块即为该建筑(后续点贸易商)
+    }
+    draft.clickSlot(loc, si);
+  };
+
+  const onTileDragStart = (ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>): void => {
+    if (!myTurn || selectedCard === null) return;
+    e.preventDefault();
+    // ghost 就用被拖 token 本体(原尺寸,贴在光标正中心),不再用放大的投影
+    const rect = (e.target as SVGElement).getBoundingClientRect();
+    setDragTile({ ind, x: e.clientX, y: e.clientY, w: rect.width, h: rect.height });
+  };
+  useEffect(() => {
+    if (dragTile === null) return;
+    const onMove = (e: PointerEvent): void => {
+      setDragTile((d) => (d === null ? null : { ...d, x: e.clientX, y: e.clientY }));
+    };
+    const onUp = (e: PointerEvent): void => {
+      const d = dragTile;
+      setDragTile(null);
+      handleTileDrop(d.ind, e.clientX, e.clientY);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragTile !== null]);
+  const dragDef = dragTile !== null ? state.players[seat]?.tiles.find((t) => t.industry === dragTile.ind) : undefined;
 
   // 幽灵落子:本人的暂存优先;非本人回合渲染当前行动方广播来的暂存(如有)
   const ghostBuild =
@@ -257,7 +382,7 @@ function GameBoard({
   const ghostBeerMatches = myTurn ? draft.beerMatches : (remoteDraft?.sell?.matches ?? []);
 
   const boardEl = (
-    <div className="board-wrap">
+    <div className="board-wrap" ref={boardWrapRef}>
       <BoardSvg
         state={state}
         highlights={myTurn ? draft.highlights : undefined}
@@ -267,9 +392,10 @@ function GameBoard({
         buildPreview={ghostBuild}
         beerMatches={ghostBeerMatches.length > 0 ? ghostBeerMatches : undefined}
         linkPreview={ghostLinks}
-        onSlotClick={myTurn ? draft.clickSlot : undefined}
+        onSlotClick={myTurn ? handleSlotClick : undefined}
         onLinkClick={myTurn ? draft.clickLink : undefined}
         onMerchantClick={myTurn ? draft.clickMerchant : undefined}
+        onMerchantBeerClick={myTurn ? draft.clickMerchantBeer : undefined}
       />
       {spotlight !== null ? (
         <div className="action-spotlight-banner" data-testid="action-spotlight">
@@ -285,6 +411,26 @@ function GameBoard({
           {roundBanner}
         </div>
       ) : null}
+      {/* 宽屏:手牌叠在地图下缘,只露牌顶,悬停整张浮出;搜寻模式点手牌=选弃牌 */}
+      {layoutWide ? (
+        <HandBar
+          state={state}
+          seat={seat}
+          overlay
+          selectedCard={selectedCard}
+          onSelect={
+            myTurn
+              ? (id) => store.selectCard(id === selectedCard ? null : id)
+              : undefined
+          }
+          handRaise={handRaise}
+          scoutMode={
+            myTurn && topAction === 'scout'
+              ? { picks: draft.scoutPicks, onToggle: draft.toggleScoutCard }
+              : null
+          }
+        />
+      ) : null}
     </div>
   );
   const handEl = (
@@ -298,22 +444,6 @@ function GameBoard({
           : undefined
       }
     />
-  );
-  // 宽屏手牌标题条:地图下方一行文字标签(可点选),全屏不滚动也能看到手牌构成
-  const handStripEl = (
-    <div className="hand-strip" data-testid="hand-strip">
-      {hand.map((c) => (
-        <button
-          key={c.id}
-          type="button"
-          className={`hand-strip-chip${selectedCard === c.id ? ' selected' : ''}`}
-          data-testid={`hand-strip-${c.id}`}
-          onClick={myTurn ? () => store.selectCard(c.id === selectedCard ? null : c.id) : undefined}
-        >
-          {cardName(c)}
-        </button>
-      ))}
-    </div>
   );
   const actionEl = (
     <ActionBar
@@ -337,14 +467,15 @@ function GameBoard({
 
   return (
     <div className={`game-screen${layoutWide ? ' wide' : ''}`}>
+      {layoutWide ? null : (
       <header className="game-screen-head">
         {room !== null ? (
           <span className="game-room-code" data-testid="game-room-code">
             房间 {room.code}
           </span>
         ) : null}
-        <button type="button" className="btn-ghost" data-testid="toggle-layout" onClick={toggleLayout}>
-          {layoutWide ? '经典布局' : '宽屏布局'}
+        <button type="button" className="btn-ghost" data-testid="open-prefs" onClick={() => setPrefsOpen(true)}>
+          偏好设置
         </button>
         <button
           type="button"
@@ -357,20 +488,42 @@ function GameBoard({
         <button
           type="button"
           className="btn-ghost"
-          data-testid="open-discard-modal"
-          onClick={() => setDiscardOpen(true)}
+          data-testid="open-log-modal"
+          onClick={() => setActionLogOpen(true)}
         >
-          打出记录
+          行动日志
+        </button>
+        <button
+          type="button"
+          className="btn-ghost"
+          data-testid="open-hint"
+          onClick={(e) => setHintAnchor(hintAnchor === null ? e.currentTarget.getBoundingClientRect() : null)}
+        >
+          提示卡
         </button>
         <button
           type="button"
           className="btn-ghost"
           data-testid="leave-game"
-          onClick={() => store.leaveRoom()}
+          onClick={() => setLeaveConfirmOpen(true)}
         >
           离开对局
         </button>
       </header>
+      )}
+      {dragTile !== null && dragDef !== undefined ? (
+        <img
+          className="tile-drag-ghost"
+          src={`/assets/tiles/${dragTile.ind}-${dragDef.level}-${['purple', 'yellow', 'orange', 'teal'][seat] ?? 'purple'}.png`}
+          alt=""
+          style={{
+            left: dragTile.x - dragTile.w / 2,
+            top: dragTile.y - dragTile.h / 2,
+            width: dragTile.w,
+            height: dragTile.h,
+          }}
+        />
+      ) : null}
       {scoreHistory.open ? (
         <ScoreModal
           entries={scoreHistory.entries}
@@ -379,12 +532,69 @@ function GameBoard({
           onClose={() => scoreHistory.setOpen(false)}
         />
       ) : null}
-      {discardOpen ? (
-        <DiscardModal
+      {hintAnchor !== null ? (
+        <HintPopup
+          playerCount={state.playerCount}
+          anchor={hintAnchor}
+          onClose={() => setHintAnchor(null)}
+        />
+      ) : null}
+      {actionLogOpen ? (
+        <ActionLogModal
           state={state}
           playedCards={playedCards}
+          eraActions={eraActions}
           room={room ?? undefined}
-          onClose={() => setDiscardOpen(false)}
+          logStyle={logStyle}
+          seatsOrder={fixedSeats}
+          onClose={() => setActionLogOpen(false)}
+        />
+      ) : null}
+      {leaveConfirmOpen ? (
+        <div className="modal-backdrop" data-testid="leave-confirm" onClick={() => setLeaveConfirmOpen(false)}>
+          <section className="score-modal leave-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <header className="score-modal-head">
+              <h3>离开对局</h3>
+            </header>
+            <p className="leave-confirm-text">确定要离开当前对局吗？</p>
+            <div className="leave-confirm-actions">
+              <button
+                type="button"
+                className="leave-confirm-danger"
+                data-testid="leave-confirm-yes"
+                onClick={() => {
+                  setLeaveConfirmOpen(false);
+                  store.leaveRoom();
+                }}
+              >
+                离开
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                data-testid="leave-confirm-no"
+                onClick={() => setLeaveConfirmOpen(false)}
+              >
+                取消
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {prefsOpen ? (
+        <PrefsModal
+          prefs={{ layoutWide, handRaise, stackView, logStyle }}
+          onChange={(next) => {
+            setLayoutWideState(next.layoutWide);
+            setHandRaise(next.handRaise);
+            setStackView(next.stackView);
+            storage?.setItem('brass-layout', next.layoutWide ? 'wide' : 'classic');
+            storage?.setItem('brass-hand-raise', next.handRaise);
+            storage?.setItem('brass-stack-view', next.stackView);
+            storage?.setItem('brass-log-style', next.logStyle);
+            setLogStyle(next.logStyle);
+          }}
+          onClose={() => setPrefsOpen(false)}
         />
       ) : null}
       {gameOver !== null ? (
@@ -394,29 +604,76 @@ function GameBoard({
         </p>
       ) : null}
       {layoutWide ? (
+        <>
+        <div className="wide-topline">
+          <div className="wide-topline-left">
+            {room !== null ? (
+              <span className="game-room-code" data-testid="game-room-code">房间 {room.code}</span>
+            ) : null}
+            <button type="button" className="btn-ghost" data-testid="leave-game" onClick={() => setLeaveConfirmOpen(true)}>
+              离开对局
+            </button>
+          </div>
+          <TopActionBar
+            myTurn={myTurn}
+            waitingFor={playerName(room ?? undefined, turnHold ?? current)}
+            selectedCard={myTurn ? selectedCard : null}
+            hand={hand}
+            draft={draft}
+            state={state}
+            turnHold={turnHold}
+            seat={seat}
+            canResetTurn={myTurn && state.actionsThisTurn > 0}
+            active={topAction}
+            onActiveChange={setTopAction}
+            onConfirm={() => {
+              if (draft.resolved !== null) store.submitAction(draft.resolved);
+            }}
+            onCancel={draft.reset}
+            onEndTurn={() => store.endTurn()}
+            onResetTurn={() => store.resetTurn()}
+          />
+          <div className="wide-util-row">
+            <button type="button" className="btn-ghost" data-testid="open-prefs" onClick={() => setPrefsOpen(true)}>
+              偏好设置
+            </button>
+            <button type="button" className="btn-ghost" data-testid="open-score-modal" onClick={() => scoreHistory.setOpen(true)}>
+              分数构成
+            </button>
+            <button type="button" className="btn-ghost" data-testid="open-log-modal" onClick={() => setActionLogOpen(true)}>
+              行动日志
+            </button>
+            <button
+            type="button"
+            className="btn-ghost"
+            data-testid="open-hint"
+            onClick={(e) => setHintAnchor(hintAnchor === null ? e.currentTarget.getBoundingClientRect() : null)}
+            >
+            提示卡
+            </button>
+          </div>
+        </div>
         <div className="wide-grid">
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
-              <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} />
+              <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? draft.developPicks : undefined} developBinRef={i === seat ? developBinRef : undefined} />
               </div>
             ))}
           </aside>
           <div className="wide-center">
             <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
             {boardEl}
-            {handStripEl}
-            {handEl}
-            {actionEl}
           </div>
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
-              <div key={i} className="wide-seat">
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} />
+              <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? draft.developPicks : undefined} developBinRef={i === seat ? developBinRef : undefined} />
               </div>
             ))}
           </aside>
         </div>
+        </>
       ) : (
         <>
           <div className="player-boards">
@@ -438,7 +695,7 @@ function GameBoard({
           ) : null}
         </>
       )}
-      <LogPanel log={displayLog} room={room ?? undefined} />
+      {layoutWide ? null : <LogPanel log={displayLog} room={room ?? undefined} />}
     </div>
   );
 }

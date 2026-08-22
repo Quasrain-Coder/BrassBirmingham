@@ -138,7 +138,7 @@ describe('describeAction', () => {
     expect(describeAction(s, 0, loan!)).toContain('£30');
     expect(describeAction(s, 0, loan!)).toContain('贷款');
     const scout = findAction(s, 0, 'scout');
-    if (scout) expect(describeAction(s, 0, scout)).toContain('侦察');
+    if (scout) expect(describeAction(s, 0, scout)).toContain('搜寻');
     const pass = findAction(s, 0, 'pass');
     expect(pass).toBeDefined();
     expect(describeAction(s, 0, pass!)).toContain('跳过');

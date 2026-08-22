@@ -24,18 +24,31 @@ export function PlayerMat({
   tiles,
   playerColor,
   colorKey,
+  onTileDragStart,
+  hiddenTopInd,
+  stagedRemovals,
 }: {
   /** 该玩家面板剩余堆叠(TileDef 按产业分组、等级升序)。 */
   tiles: TileDef[];
   playerColor: string;
   /** 玩家色 key(板块 token 图文件名用)。 */
   colorKey: 'purple' | 'yellow' | 'orange' | 'teal';
+  /** 按下某产业栈顶(最低级)板块开始拖拽(宽屏拖拽建造/研发)。 */
+  onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>) => void) | undefined;
+  /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失,如同已被拿起)。 */
+  hiddenTopInd?: IndustryType | null | undefined;
+  /** 研发暂存中的产业(每个出现一次 = 暂存移除 1 块:计数 -1,归零时该级显示耗尽)。 */
+  stagedRemovals?: IndustryType[] | undefined;
 }): ReactElement {
-  // 每产业每等级剩余数;栈顶 = 剩余数 >0 的最低级
+  // 每产业每等级剩余数(减去研发暂存);栈顶 = 显示剩余 >0 的最低级
   const remaining = new Map<string, number>();
   for (const def of tiles) {
     const key = `${def.industry}-${def.level}`;
     remaining.set(key, (remaining.get(key) ?? 0) + 1);
+  }
+  for (const ind of stagedRemovals ?? []) {
+    const top = [...remaining.keys()].filter((k) => k.startsWith(`${ind}-`) && (remaining.get(k) ?? 0) > 0).sort().shift();
+    if (top !== undefined) remaining.set(top, (remaining.get(top) ?? 1) - 1);
   }
 
   return (
@@ -55,9 +68,10 @@ export function PlayerMat({
           return (
             <g key={`${ind}-${slot.level}`} data-mat-slot={`${ind}-${slot.level}`}>
               {left > 0 ? (
-                // 实物堆叠:每个有剩余的等级框都放玩家色板块 token(逐层偏移)
+                // 实物堆叠:每个有剩余的等级框都放玩家色板块 token(逐层偏移);
+                // 拖拽中的栈顶 token 从版图上即时消失(如同已被拿起)
                 <g className="mat-pile">
-                  {Array.from({ length: left }, (_, i) => (
+                  {Array.from({ length: isTop && hiddenTopInd === ind ? left - 1 : left }, (_, i) => (
                     <image
                       key={i}
                       href={`/assets/tiles/${ind}-${slot.level}-${colorKey}.png`}
@@ -65,6 +79,16 @@ export function PlayerMat({
                       y={slot.y + i * PILE_DY}
                       width={slot.w}
                       height={slot.h}
+                      onPointerDown={
+                        isTop && onTileDragStart !== undefined && i === left - 1
+                          ? (e) => onTileDragStart(ind, e)
+                          : undefined
+                      }
+                      style={
+                        isTop && onTileDragStart !== undefined && i === left - 1
+                          ? { cursor: 'grab' }
+                          : undefined
+                      }
                     />
                   ))}
                 </g>

@@ -81,3 +81,285 @@ export function DiscardModal({
     </div>
   );
 }
+
+/**
+ * 行动日志弹窗(合并原"打出记录"与底部日志):上方为各玩家本时代打出的牌
+ * (同 DiscardModal),下方按玩家分列、按轮分组记录从开局(本时代)到现在的行动
+ * ——每行 = 动作 + 实际盈亏 + 出牌文本(与个人版图历史同款风格)。
+ */
+import type { Action } from '@brass/engine';
+import type { ReactNode } from 'react';
+import { cardFromId, describeAction } from './display';
+
+interface EraActionEntry {
+  action: Action;
+  moneyDelta: number;
+  note?: 'round-income';
+}
+
+function buildRounds(
+  state: FilteredState,
+  actions: EraActionEntry[],
+  newestFirst = true,
+): { round: number; actions: EraActionEntry[] }[] {
+  const apr = (r: number): number => (state.era === 'canal' && r === 1 ? 1 : 2);
+  const rounds: { round: number; actions: EraActionEntry[] }[] = [];
+  // 按原顺序走一遍:真实行动占每轮名额(运河首轮 1、其余 2);
+  // 轮末收入(note)不占名额,时序上在收官行动之后,直接附进当前这轮——
+  // 收入为 0 的轮没有条目,不能过滤后按序索引(稀疏数组会挂错轮)
+  let current: { round: number; actions: EraActionEntry[] } | null = null;
+  let used = 0;
+  for (const a of actions) {
+    if (a.note === 'round-income') {
+      current?.actions.push(a);
+      continue;
+    }
+    if (current === null || used >= apr(current.round)) {
+      current = { round: rounds.length + 1, actions: [] };
+      rounds.push(current);
+      used = 0;
+    }
+    current.actions.push(a);
+    used += 1;
+  }
+  return newestFirst ? rounds.reverse() : rounds;
+}
+
+/** 该轮的轮末收入合计(无则 null)。 */
+export function roundIncome(entries: EraActionEntry[]): number | null {
+  const inc = entries.filter((a) => a.note === 'round-income').reduce((s, a) => s + a.moneyDelta, 0);
+  const has = entries.some((a) => a.note === 'round-income');
+  return has ? inc : null;
+}
+
+/** 轮标签内联收入(着色与行动盈亏一致):"（收入 +£30）/（收入 −£3）/（收入 +£0）"。
+ *  第 1 轮一律不标(首轮收入必为 0,标记只是噪音)。 */
+export function incomeSuffix(round: number, entries: EraActionEntry[]): ReactNode {
+  if (round === 1) return null;
+  const inc = roundIncome(entries);
+  if (inc === null) return null;
+  return (
+    <>
+      （收入{' '}
+      <em className={`compact-round-delta ${inc >= 0 ? 'pos' : 'neg'}`}>
+        {inc >= 0 ? `+£${inc}` : `−£${-inc}`}
+      </em>
+      ）
+    </>
+  );
+}
+
+/** 行动行文案:搜寻简化为"搜寻"(不再写"弃 3 张换 2 张百搭")。 */
+function actionLineText(a: Action): string {
+  return a.type === 'scout' ? '搜寻' : describeAction(a);
+}function actionCardsText(a: Action): string {
+  return a.type === 'scout'
+    ? a.cardIds.map((id) => cardName(cardFromId(id))).join('+')
+    : cardName(cardFromId(a.cardId));
+}
+
+export function ActionLogModal({
+  state,
+  playedCards,
+  eraActions,
+  room,
+  onClose,
+  logStyle = 'split',
+  seatsOrder,
+}: {
+  state: FilteredState;
+  playedCards: Card[][];
+  eraActions: EraActionEntry[][];
+  room?: RoomState | undefined;
+  onClose: () => void;
+  /** 日志风格(偏好设置):split=上卡牌下日志(统一分隔线);grouped=按回合分组。 */
+  logStyle?: 'split' | 'grouped' | undefined;
+  /** 列顺序(初始顺位;缺省按座位号)。 */
+  seatsOrder?: PlayerIndex[] | undefined;
+}): ReactElement {
+  const faceDown = state.era === 'canal' ? 1 : 0;
+  const seats = seatsOrder ?? state.players.map((_, i) => i as PlayerIndex);
+
+  /** 该座位本时代的打出卡面列(共用)。 */
+  const cardsBlock = (i: PlayerIndex, cards: Card[]) => (
+    <div className="discard-cards">
+      {faceDown === 1 ? (
+        <span className="discard-cell">
+          <img className="discard-card discard-card-back" src="/assets/cards/back.png" alt="开局暗置" />
+          <span className="discard-card-name">暗置</span>
+          <span className="card-tip">开局暗置（不公开）</span>
+        </span>
+      ) : null}
+      {cards.map((c) => (
+        <span className="discard-cell" key={c.id}>
+          <img className="discard-card" src={cardImageSrc(c)} alt={cardName(c)} />
+          <span className="discard-card-name">{cardName(c)}</span>
+          <span className="card-tip">{cardName(c)}</span>
+        </span>
+      ))}
+    </div>
+  );
+
+  const historyBlock = (i: PlayerIndex) => {
+    // 上下分隔:从第 1 轮展示到当前轮(正序)
+    const rounds = buildRounds(state, eraActions[i] ?? [], false);
+    if (rounds.length === 0) return <p className="era-actions-empty">本时代尚未行动</p>;
+    return rounds.map((r) => (
+      <div key={r.round} className="compact-history-round">
+        <span className="compact-history-label">
+          第 {r.round} 轮{incomeSuffix(r.round, r.actions)}
+        </span>
+        {r.actions.filter((a) => a.note !== 'round-income').map((a, k) => (
+          <span key={k} className="compact-history-act">
+            {actionLineText(a.action)}
+            {(
+              <em className={`compact-round-delta ${a.moneyDelta >= 0 ? 'pos' : 'neg'}`}>
+                {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '+£0'}
+              </em>
+            )}
+            <em className="compact-history-card">{actionCardsText(a.action)}</em>
+          </span>
+        ))}
+      </div>
+    ));
+  };
+
+  /** 某一轮打出的卡(每个行动 1 张;搜寻弃 3 张,该轮合计可达 4 张)。 */
+  const roundCards = (r: { round: number; actions: EraActionEntry[] }): Card[] =>
+    r.actions
+      .filter((a) => a.note !== 'round-income')
+      .flatMap((a) =>
+        a.action.type === 'scout'
+          ? a.action.cardIds.map((id) => cardFromId(id))
+          : [cardFromId(a.action.cardId)],
+      );
+
+  const colHead = (i: PlayerIndex, count: number) => (
+    <div className="discard-col-head">
+      <span className="color-dot" style={{ background: PLAYER_COLORS[i] }} />
+      {playerName(room, i)}（{count}）
+    </div>
+  );
+
+  return (
+    <div className="modal-backdrop" data-testid="action-log-modal" onClick={onClose}>
+      <section className="score-modal discard-modal action-log-modal" onClick={(e) => e.stopPropagation()}>
+        <header className="score-modal-head">
+          <h3>行动日志</h3>
+          <button type="button" className="modal-close" data-testid="action-log-close" onClick={onClose}>
+            ×
+          </button>
+        </header>
+        {logStyle === 'split' ? (
+          <>
+            {/* 风格 A:上方按回合逐行展示当轮卡牌(每行一回合,搜寻 4 张一行;
+                统一分隔线;下方按轮次正序展示日志) */}
+            <div className="discard-columns action-log-columns">
+              {seats.map((i) => {
+                const rounds = buildRounds(state, eraActions[i] ?? [], false);
+                const total = (eraActions[i] ?? []).reduce(
+                  (s, a) => s + (a.note === 'round-income' ? 0 : a.action.type === 'scout' ? 3 : 1),
+                  0,
+                );
+                return (
+                  <div className="discard-col" key={i}>
+                    {colHead(i, total + faceDown)}
+                    {rounds.length === 0 ? (
+                      <p className="era-actions-empty">本时代尚未行动</p>
+                    ) : (
+                      rounds.map((r) => (
+                        <div key={r.round} className="action-log-group-cards action-log-round-row">
+                          {r.round === 1 && faceDown === 1 ? (
+                            <span className="discard-cell">
+                              <img
+                                className="discard-card discard-card-back"
+                                src="/assets/cards/back.png"
+                                alt="开局暗置"
+                              />
+                              <span className="card-tip">开局暗置（不公开）</span>
+                            </span>
+                          ) : null}
+                          {roundCards(r).map((c) => (
+                            <span className="discard-cell" key={c.id}>
+                              <img className="discard-card" src={cardImageSrc(c)} alt={cardName(c)} />
+                              <span className="discard-card-name">{cardName(c)}</span>
+                              <span className="card-tip">{cardName(c)}</span>
+                            </span>
+                          ))}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <hr className="action-log-divider" />
+            <div className="discard-columns action-log-columns">
+              {seats.map((i) => (
+                <div className="discard-col" key={i}>
+                  {/* 上下分隔模式:整窗统一滚轮,每列不再单独滚动 */}
+                  <div className="action-log-history no-scroll">{historyBlock(i)}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          /* 风格 B:按回合分组——每组一行当轮卡牌 + 一/两行行动,玩家间对齐 */
+          <div className="discard-columns action-log-columns">
+            {seats.map((i) => {
+              const rounds = buildRounds(state, eraActions[i] ?? []);
+              return (
+                <div className="discard-col" key={i}>
+                  {colHead(i, (playedCards[i] ?? []).length + faceDown)}
+                  {rounds.length === 0 ? (
+                    <p className="era-actions-empty">本时代尚未行动</p>
+                  ) : (
+                    rounds.map((r) => {
+                      const cards = roundCards(r);
+                      return (
+                        <div key={r.round} className="action-log-group">
+                          <span className="action-log-group-label">
+                            第 {r.round} 轮{incomeSuffix(r.round, r.actions)}
+                          </span>
+                          <div className="action-log-group-cards">
+                            {r.round === 1 && faceDown === 1 ? (
+                              <span className="discard-cell">
+                                <img
+                                  className="discard-card discard-card-back"
+                                  src="/assets/cards/back.png"
+                                  alt="开局暗置"
+                                />
+                                <span className="card-tip">开局暗置（不公开）</span>
+                              </span>
+                            ) : null}
+                            {cards.map((c) => (
+                              <span className="discard-cell" key={c.id}>
+                                <img className="discard-card" src={cardImageSrc(c)} alt={cardName(c)} />
+                                <span className="discard-card-name">{cardName(c)}</span>
+                                <span className="card-tip">{cardName(c)}</span>
+                              </span>
+                            ))}
+                          </div>
+                          {r.actions.filter((a) => a.note !== 'round-income').map((a, k) => (
+                            <span key={k} className="compact-history-act">
+                              {actionLineText(a.action)}
+                              {(
+                                <em className={`compact-round-delta ${a.moneyDelta >= 0 ? 'pos' : 'neg'}`}>
+                                  {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '+£0'}
+                                </em>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}

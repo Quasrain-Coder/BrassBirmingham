@@ -66,6 +66,8 @@ export interface BoardHighlights {
   locations?: LocationId[];
   /** 啤酒源高亮(match 效果):有余量的自有酒厂地点与有桶商人位。 */
   beerSources?: { locations?: LocationId[]; merchants?: MerchantId[] };
+  /** 可售贸易商高亮(卖出流:选了板块后能收这块货的贸易商,整位圈而非酒桶)。 */
+  sellMerchants?: MerchantId[] | undefined;
 }
 
 /** 行动聚光灯：某玩家刚执行的行动在棋盘上的高亮目标（约 5 秒，GameScreen 驱动）。 */
@@ -91,8 +93,10 @@ export interface BoardSvgProps {
   linkPreview?: { links: number[]; player: PlayerIndex; era: 'canal' | 'rail' } | null | undefined;
   onSlotClick?: ((location: LocationId, slotIndex: number) => void) | undefined;
   onLinkClick?: ((linkIndex: number) => void) | undefined;
-  /** 点贸易商位(卖出流:选贸易商/切商人桶;顺序约束由 ActionDraft 裁决)。 */
+  /** 点贸易商位商品图案(卖出流:选贸易商;顺序约束由 ActionDraft 裁决)。 */
   onMerchantClick?: ((merchant: MerchantId) => void) | undefined;
+  /** 点贸易商上侧酒桶图标(卖出流:选该商人的桶为啤酒来源)。 */
+  onMerchantBeerClick?: ((merchant: MerchantId) => void) | undefined;
 }
 
 function playerColor(player: PlayerIndex): string {
@@ -154,7 +158,7 @@ function StandingBeer({ cx, cy, size }: { cx: number; cy: number; size: number }
 }
 
 /** 版图有效区域（6144 扫描件四边有大片暗边，viewBox 只取版图本体）。 */
-const BOARD_VIEW = { x: 990, y: 990, size: 4200 };
+export const BOARD_VIEW = { x: 990, y: 990, size: 4200 };
 
 function tileImage(industry: IndustryType, level: number, player: PlayerIndex, flipped: boolean): string {
   const color = PLAYER_COLOR_KEYS[player] ?? 'purple';
@@ -249,12 +253,13 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
   );
 }
 
-export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinkingSeats, buildPreview, beerMatches, linkPreview, onSlotClick, onLinkClick, onMerchantClick }: BoardSvgProps): ReactElement {
+export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinkingSeats, buildPreview, beerMatches, linkPreview, onSlotClick, onLinkClick, onMerchantClick, onMerchantBeerClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const highlightedLocations = new Set(highlights?.locations ?? []);
   const beerSourceLocs = new Set(highlights?.beerSources?.locations ?? []);
   const beerSourceMerchants = new Set(highlights?.beerSources?.merchants ?? []);
+  const sellMerchantsSet = new Set(highlights?.sellMerchants ?? []);
   const builtByLink = new Map<number, { player: PlayerIndex; era: 'canal' | 'rail' }>();
   for (const l of state.board.links) builtByLink.set(l.linkIndex, { player: l.player, era: l.era });
 
@@ -432,6 +437,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                         >
                           <image
                             className="board-tile"
+                            style={onSlotClick ? { cursor: 'pointer' } : undefined}
                             href={tileImage(tile.tile.industry, tile.tile.level, tile.player, tile.flipped)}
                             x={r.x}
                             y={r.y}
@@ -470,6 +476,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                     ) : null}
                     <rect
                       className={`board-slot${hl ? ' highlighted' : ''}`}
+                      style={onSlotClick ? { cursor: 'pointer' } : undefined}
                       data-location={id}
                       data-slot-index={si}
                       x={r.x}
@@ -533,13 +540,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
           // 与其余商人位共用 tilesTop-18 会错落到奖励徽下方,故单独上移
           const labelDy = id === 'oxford' || id === 'gloucester' ? -74 : -18;
           return (
-            <g
-              className="board-merchant-group"
-              data-merchant={id}
-              key={id}
-              style={onMerchantClick ? { cursor: 'pointer' } : undefined}
-              onClick={onMerchantClick ? () => onMerchantClick(id) : undefined}
-            >
+            <g className="board-merchant-group" data-merchant={id} key={id}>
               <text
                 x={tilesCx}
                 y={tilesTop + labelDy}
@@ -565,15 +566,30 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                     y={r.y}
                     width={r.w}
                     height={r.h}
+                    style={onMerchantClick ? { cursor: 'pointer' } : undefined}
+                    onClick={onMerchantClick ? () => onMerchantClick(id) : undefined}
                   />
                 );
               })}
               {geom.beer.map((r, bi) => {
-                // 啤酒格:有桶画"立桶"(空的格保持印刷空框);与酒厂商用同尺寸
+                // 啤酒格:有桶画"立桶"(空的格保持印刷空框);与酒厂商用同尺寸。
+                // 选酒只认酒桶图标点击(商品图案=选贸易商,分离)
                 const filled = bi < (m?.beer ?? 0);
-                if (!filled) return null;
                 return (
-                  <StandingBeer key={`${id}-beer-${bi}`} cx={r.x + r.w / 2} cy={r.y + r.h / 2} size={BEER_TOKEN_SIZE} />
+                  <g key={`${id}-beer-${bi}`}>
+                    {filled ? (
+                      <StandingBeer cx={r.x + r.w / 2} cy={r.y + r.h / 2} size={BEER_TOKEN_SIZE} />
+                    ) : null}
+                    <rect
+                      x={r.x}
+                      y={r.y}
+                      width={r.w}
+                      height={r.h}
+                      fill="transparent"
+                      style={onMerchantBeerClick && filled ? { cursor: 'pointer' } : undefined}
+                      onClick={onMerchantBeerClick && filled ? () => onMerchantBeerClick(id) : undefined}
+                    />
+                  </g>
                 );
               })}
             </g>
@@ -673,22 +689,50 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
               );
             });
           })}
+          {(Object.keys(MERCHANT_GEOM) as MerchantId[]).flatMap((id) => {
+            // 酒桶高亮:按当前有桶的桶位框逐格圈(位置直接参考桶框,不再用计数徽标位)
+            if (!beerSourceMerchants.has(id)) return [];
+            const m = state.merchants[id];
+            return MERCHANT_GEOM[id].beer.flatMap((r, bi) => {
+              if (bi >= (m?.beer ?? 0)) return [];
+              return [
+                <rect
+                  key={`beer-src-m-${id}-${bi}`}
+                  className="beer-source-ring"
+                  x={r.x - 10}
+                  y={r.y - 10}
+                  width={r.w + 20}
+                  height={r.h + 20}
+                  rx={14}
+                  fill="none"
+                  stroke="#e8c96a"
+                  strokeWidth={7}
+                />,
+              ];
+            });
+          })}
           {(Object.keys(MERCHANT_GEOM) as MerchantId[]).map((id) => {
-            if (!beerSourceMerchants.has(id)) return null;
-            const last = MERCHANT_GEOM[id].beer[MERCHANT_GEOM[id].beer.length - 1];
-            if (!last) return null;
+            // 可售贸易商整位高亮(圈整个贸易商板块区,不圈酒桶)
+            if (!sellMerchantsSet.has(id)) return null;
+            const rects = MERCHANT_GEOM[id].tiles;
+            if (rects.length === 0) return null;
+            const x0 = Math.min(...rects.map((r) => r.x)) - 16;
+            const y0 = Math.min(...rects.map((r) => r.y)) - 16;
+            const x1 = Math.max(...rects.map((r) => r.x + r.w)) + 16;
+            const y1 = Math.max(...rects.map((r) => r.y + r.h)) + 16;
             return (
               <rect
-                key={`beer-src-m-${id}`}
-                className="beer-source-ring"
-                x={last.x - 10}
-                y={last.y - 10}
-                width={last.w + 20}
-                height={last.h + 20}
-                rx={14}
+                key={`sell-merchant-${id}`}
+                className="sell-merchant-ring"
+                x={x0}
+                y={y0}
+                width={x1 - x0}
+                height={y1 - y0}
+                rx={18}
                 fill="none"
-                stroke="#e8c96a"
-                strokeWidth={7}
+                stroke="#f0c964"
+                strokeWidth={9}
+                opacity={0.9}
               />
             );
           })}

@@ -7,7 +7,7 @@
  * - chosenRank 分布：LLM 所选在 scoreAction 降序中的名次。恒 0 → LLM 无增量，
  *   棋力上限 = 预筛（去调 HEURISTIC_WEIGHTS）；常偏离 0 且输 → 候选内选错
  *   （改 SYSTEM_PROMPT 策略段）。
- * - 行动类型频率：按描述前缀归类（建/铺/卖/研发/贷款/侦察/跳过），对比
+ * - 行动类型频率：按描述前缀归类（建/铺/卖/研发/贷款/搜寻/跳过），对比
  *   LLM 与启发式的行动结构差异（如 LLM 从不贷款、过度研发）。
  * - degraded 率与输局分布：输局中 LLM 的早期（运河前 3 轮）选择抽样。
  */
@@ -46,7 +46,7 @@ function actionKind(desc: string): string {
   if (desc.startsWith('卖出')) return 'sell';
   if (desc.startsWith('研发')) return 'develop';
   if (desc.startsWith('贷款')) return 'loan';
-  if (desc.startsWith('侦察')) return 'scout';
+  if (desc.startsWith('搜寻')) return 'scout';
   if (desc.startsWith('跳过')) return 'pass';
   return 'unknown';
 }

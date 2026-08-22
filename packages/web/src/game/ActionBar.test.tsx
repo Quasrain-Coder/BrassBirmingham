@@ -366,6 +366,7 @@ function draftFixture(overrides: Partial<ActionDraft> = {}): ActionDraft {
     commitSellGroup: () => {},
     removeSellGroup: () => {},
     clickMerchant: () => {},
+    clickMerchantBeer: () => {},
     buildChoices: [],
     buildPreview: null,
     buildIndustry: null,
@@ -404,7 +405,7 @@ describe('<ActionBar>', () => {
     expect(screen.getByTestId('waiting')).toHaveTextContent('等待 乙 行动');
   });
 
-  it('当前玩家未选牌：提示选牌，确认钮禁用', () => {
+  it('当前玩家未选牌：确认钮禁用', () => {
     render(
       <ActionBar
         myTurn
@@ -422,7 +423,6 @@ describe('<ActionBar>', () => {
         onResetTurn={() => {}}
       />,
     );
-    expect(screen.getByTestId('select-card-hint')).toBeInTheDocument();
     expect(screen.getByTestId('confirm-action')).toBeDisabled();
   });
 
