@@ -135,8 +135,11 @@ function settleIncome(state: GameState): GameState {
 /**
  * 当前玩家行动数满则推进：换人；一轮结束则按模块头注释 a–d 结算。
  * 未满原样返回。applyAction 在行动计数 +1 后调用；也可单独调用（测试/调试）。
+ * opts.deferEraEnd：时代结束时不立即 checkEraEnd,返回 eraEndPending=true 的
+ * 待清算态(联机"回合确认"窗口用——held 玩家 end_turn 时才清算,reset_turn 可撤回);
+ * 缺省立即消费(引擎语义不变)。
  */
-export function endTurnIfNeeded(state: GameState): GameState {
+export function endTurnIfNeeded(state: GameState, opts?: { deferEraEnd?: boolean }): GameState {
   // 无牌自动跳过：deck 空且当前玩家手牌打空 → 视为行动完成，直接推进
   const current = state.players[state.turnOrder[state.currentPlayerIdx]!]!;
   const currentCardless = state.deck.length === 0 && current.hand.length === 0;
@@ -169,14 +172,20 @@ export function endTurnIfNeeded(state: GameState): GameState {
   // b. 收入（c 例外：全局最后一轮不发）
   if (!finalRoundOfGame) next = settleIncome(next);
 
-  // d. round++；时代结束置位并立即清算（era.ts checkEraEnd 消费）
+  // d. round++；时代结束置位并立即清算（era.ts checkEraEnd 消费;
+  //    deferEraEnd 时挂起,由调用方择机 checkEraEnd）
   next = {
     ...next,
     currentPlayerIdx: 0,
     round: next.round + 1,
     ...(eraEnd ? { eraEndPending: true } : {}),
   };
-  if (eraEnd) return checkEraEnd(next);
+  if (eraEnd) {
+    // defer:挂起待清算,原样返回(不 skipCardlessPlayers——时代末全员空手,
+    // 在待清算态上跳人会污染 currentPlayerIdx;清算后由 checkEraEnd 重抽 8 张)
+    if (opts?.deferEraEnd === true) return next;
+    return checkEraEnd(next);
+  }
   // 新一轮起始玩家同样可能无牌（deck 空 + scout 错位）
   return skipCardlessPlayers(next);
 }

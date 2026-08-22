@@ -21,6 +21,7 @@ import { randomBytes } from 'node:crypto';
 import {
   IllegalActionError,
   applyAction,
+  checkEraEnd,
   enumerateActions,
   incomeLevelAt,
   newGame,
@@ -221,7 +222,11 @@ export class GameSession {
    * 提交行动：校验 → engine applyAction 推进 → appendAction 落库（seq 递增）→
    * 终局则 finishGame 落 final_state。返回所落行动的 seq。
    */
-  submitAction(seat: PlayerIndex, action: Action): { seq: number } {
+  submitAction(
+    seat: PlayerIndex,
+    action: Action,
+    opts?: { deferEraEnd?: boolean },
+  ): { seq: number; eraEndPending: boolean } {
     if (this.finished) {
       throw new SessionError('game-finished', `对局 ${this.gameId} 已结束，拒绝行动`);
     }
@@ -234,7 +239,7 @@ export class GameSession {
     }
     let next: GameState;
     try {
-      next = applyAction(this.gameState, action);
+      next = applyAction(this.gameState, action, opts);
     } catch (e) {
       if (e instanceof IllegalActionError) {
         throw new SessionError(e.code, e.message);
@@ -285,7 +290,28 @@ export class GameSession {
     if (this.finished) {
       finishGame(this.db, this.gameId, this.gameState);
     }
-    return { seq: applied };
+    return { seq: applied, eraEndPending: this.gameState.eraEndPending };
+  }
+
+  /**
+   * 消费被 defer 的时代清算(WS 层在 held 玩家 end_turn 时调用):checkEraEnd
+   * 推进时代/终局计分,时代切换则清空出牌与行动簿记,终局落库。
+   * 时代清算只有在此刻才广播——此前 held 玩家仍可 resetTurn 撤回整个回合。
+   * 返回是否真的消费了 pending。
+   */
+  consumeEraEnd(): boolean {
+    if (!this.gameState.eraEndPending) return false;
+    const eraBefore = this.gameState.era;
+    this.gameState = checkEraEnd(this.gameState);
+    if (this.gameState.era !== eraBefore) {
+      // 时代切换:弃牌合洗,出牌/行动记录重计
+      this.playedThisEra = this.playedThisEra.map(() => []);
+      this.eraActions = this.eraActions.map(() => []);
+    }
+    if (this.finished) {
+      finishGame(this.db, this.gameId, this.gameState);
+    }
+    return true;
   }
 
   /**

@@ -502,13 +502,17 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     // token → seat 映射：身份由 token 唯一决定，client 无法指定座位代打
     const seat = entry.tokenSeats.get(msg.token);
     if (seat === undefined) throw new WsError('invalid-token', 'token 无效');
-    // SessionError：game-finished / not-your-turn / engine 合法性 code 透传
-    const { seq } = entry.session.submitAction(
+    // SessionError：game-finished / not-your-turn / engine 合法性 code 透传。
+    // deferEraEnd:该行动若终结时代,时代清算挂起(eraEndPending)——扣住回合,
+    // 等玩家显式 end_turn 才清算并广播时代切换/分数构成;reset_turn 可整回合撤回
+    const { seq, eraEndPending } = entry.session.submitAction(
       seat,
       msg.action as Parameters<GameSession['submitAction']>[1],
+      { deferEraEnd: true },
     );
-    // 真人行动后回合推进了 → 扣住,等其显式结束/重置(终局不扣,直接 game_over)
-    if (!entry.session.finished && entry.session.currentSeat !== seat) {
+    // 真人行动后回合推进了 → 扣住,等其显式结束/重置(终局不扣,直接 game_over)。
+    // 时代清算挂起时即使顺位巧合回到本人也必须扣住,否则 pending 无人能消费
+    if (!entry.session.finished && (eraEndPending || entry.session.currentSeat !== seat)) {
       entry.turnHold = seat;
     }
     broadcast(entry.room, {
@@ -538,11 +542,18 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     return { entry, seat };
   }
 
-  /** 结束回合：放行,driveAI 接着推进(广播新快照让各端刷新 legalActions)。 */
+  /** 结束回合：先消费被 defer 的时代清算(时代切换/分数构成此刻才广播),
+   *  再放行,driveAI 接着推进(广播新快照让各端刷新 legalActions)。 */
   function handleEndTurn(msg: { token: string }): void {
     const { entry } = heldEntry(msg);
+    entry.session.consumeEraEnd();
     entry.turnHold = null;
     broadcastSnapshots(entry);
+    if (entry.session.finished) {
+      // 清算进终局(rail 末):此时才广播 game_over
+      broadcastGameOver(entry);
+      return;
+    }
     void driveAI(entry);
   }
 

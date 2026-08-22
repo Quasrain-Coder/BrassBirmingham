@@ -191,7 +191,8 @@ function GameBoard({
     if (prev === null) return;
     if (prev.era !== state.era) {
       pushStage({ kind: 'round', text: '进入铁路时代！' });
-    } else if (state.round > prev.round) {
+    } else if (state.round > prev.round && !state.eraEndPending) {
+      // eraEndPending(时代清算挂起,等 held 玩家确认回合)时的 round++ 不是新一轮,不播
       pushStage({ kind: 'round', text: `第 ${state.round} 轮` });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

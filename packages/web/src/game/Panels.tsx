@@ -369,9 +369,13 @@ export function PlayerBoard({
         </>
       );
     };
-    const acts = (rounds.find((r) => r.round === state.round)?.actions ?? []).filter(
-      (a) => a.note !== 'round-income',
-    );
+    // eraEndPending(时代清算挂起)时 state.round 已 +1 指向"下一轮",而刚结束那轮
+    // 才是要展示的——此时取最新一轮;否则按 state.round 精确匹配
+    const acts = (
+      state.eraEndPending
+        ? (rounds[0]?.actions ?? [])
+        : (rounds.find((r) => r.round === state.round)?.actions ?? [])
+    ).filter((a) => a.note !== 'round-income');
     const actionCardsText = (a: Action): string =>
       a.type === 'scout'
         ? a.cardIds.map((id) => cardName(cardFromId(id))).join('+')
