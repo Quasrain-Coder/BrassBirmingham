@@ -2807,9 +2807,9 @@ body {
 }
 
 .action-log-group-cards img {
-  width: 40px;
+  width: 96px;
   height: auto;
-  border-radius: 4px;
+  border-radius: 7px;
   border: 1px solid #4a3f2c;
   display: block;
 }
@@ -2942,4 +2942,12 @@ body {
 
 .action-log-round-row:last-child {
   border-bottom: none;
+}
+
+/* 行动日志弹窗:列内不再出现竖向小滚轮(统一交给整窗滚轮);
+   仅回合卡行(搜寻 4 张放不下时)保留横向滚动 */
+.action-log-modal .discard-col,
+.action-log-modal .discard-columns,
+.action-log-modal .action-log-round-row {
+  overflow-y: visible;
 }
