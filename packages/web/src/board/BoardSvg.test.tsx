@@ -54,6 +54,13 @@ describe('<BoardSvg>', () => {
     expect(container.querySelectorAll('rect.board-slot')).toHaveLength(totalSlots);
   });
 
+  it('负分玩家(引擎 VP 可为负)不崩——负分固定显示在 0 位', () => {
+    const state = freshState();
+    state.players[0]!.vp = -3;
+    state.players[1]!.vp = 103; // 超环回绕仍安全
+    expect(() => render(<BoardSvg state={state} />)).not.toThrow();
+  });
+
   it('槽位/边回调带上 id 与下标', () => {
     const clicks: [string, number][] = [];
     const linkClicks: number[] = [];

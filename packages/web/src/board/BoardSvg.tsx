@@ -959,7 +959,9 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
       {/* VP / 收入轨玩家标记：VP 用六边形(与收入圆形区分);收入圆形加大,x 与 VP 同列 */}
       <g className="board-tracks" pointerEvents="none">
         {state.players.map((p, i) => {
-          const vp = VP_TRACK[p.vp % 100]!;
+          // 引擎允许负分（负收入不足付时 VP 兜底，可为负）——轨道最低 0，
+          // 负分固定显示在 0 位；0-99 正常落位，>99 按环回绕
+          const vp = VP_TRACK[p.vp >= 0 ? p.vp % 100 : 0]!;
           const inc = INCOME_TRACK[Math.max(0, Math.min(99, p.incomeSpace))]!;
           const dx = (i - 1.5) * 30;
           const r = 36;
