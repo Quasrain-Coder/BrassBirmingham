@@ -10,7 +10,8 @@
     "dev": "vite-node src/main.ts",
     "start": "vite-node src/main.ts",
     "test": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "drive": "vite-node scripts/drive-to-target.ts"
   },
   "dependencies": {
     "@brass/engine": "0.1.0",
