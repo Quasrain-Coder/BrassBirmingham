@@ -24,6 +24,7 @@ import {
   enumerateActions,
   incomeLevelAt,
   newGame,
+  refillHand,
   settleRoundEnd,
 } from '@brass/engine';
 import type { Action, Card, GameState, PlayerIndex } from '@brass/engine';
@@ -94,6 +95,11 @@ export class GameSession {
    * 与 playedThisEra 同生命周期(时代切换清空、resetTurn 回滚、重放重建)。
    */
   private eraActions: { action: Action; moneyDelta: number; note?: 'round-income' }[][];
+  /**
+   * 待补牌座位:deferRoundEnd 跳过补牌后记下,end_turn(settleTurnEnd)时才真正
+   * refillHand——补牌同属回合结算,未确认回合前玩家不应收到新牌;resetTurn 清空。
+   */
+  private pendingRefillSeat: PlayerIndex | null = null;
 
   constructor(
     db: Db,
@@ -263,6 +269,14 @@ export class GameSession {
     const eraBefore = this.gameState.era;
     appendAction(this.db, this.gameId, this.seq, seat, action);
     this.gameState = next;
+    // deferRoundEnd 时补牌被跳过:该行动若恰好结束本玩家的回合(换人/轮末挂起),
+    // 记下待补牌座位,end_turn 的 settleTurnEnd 才真正发牌
+    if (
+      opts?.deferRoundEnd === true &&
+      (this.currentSeat !== actingSeat || this.gameState.roundEndPending)
+    ) {
+      this.pendingRefillSeat = actingSeat;
+    }
     // 轮末拆分:该动作恰为回合最后一动时,收入结算也发生在本笔——把轮末收入
     // 从行动盈亏中拆出,各玩家单独补一条 note 条目(否则贷款会显示 +£27 而非 +£30)。
     // 先记真实行动再补收入条目:时序上收入发生在该行动结算后。
@@ -327,6 +341,18 @@ export class GameSession {
   }
 
   /**
+   * 结束回合统一结算(WS 层在 held 玩家 end_turn 时调用):先补牌(defer 时被跳过的
+   * refillHand,顺序同引擎 refill→settle),再消费轮末结算(若有)。
+   */
+  settleTurnEnd(): void {
+    if (this.pendingRefillSeat !== null) {
+      this.gameState = refillHand(this.gameState, this.pendingRefillSeat);
+      this.pendingRefillSeat = null;
+    }
+    this.consumeRoundEnd();
+  }
+
+  /**
    * 撤销当前回合：恢复到本回合第 1 个行动前的状态,删除已落库的本回合行动行。
    * 仅在"扣住回合"(turnHold)窗口内由 WS 层调用;无备份返回 false。
    */
@@ -338,12 +364,13 @@ export class GameSession {
     this.playedThisEra = this.turnBackup.played;
     this.eraActions = this.turnBackup.actions;
     this.turnBackup = null;
+    this.pendingRefillSeat = null; // 回合回滚,待补牌一并作废
     return true;
   }
 
   /**
-   * 打出记录：行动消耗的牌（scout 为 3 张）按行动方座位入列，Wild 除外
-   * （弃置回供应区而非弃牌堆）。须在 applyAction 之前调用（按应用前手牌查卡面）。
+   * 打出记录：行动消耗的牌（scout 为 3 张）按行动方座位入列（含百搭卡,
+   * 与行动日志一致）。须在 applyAction 之前调用（按应用前手牌查卡面）。
    */
   private recordPlayed(action: Action): void {
     const seat = this.currentSeat;
