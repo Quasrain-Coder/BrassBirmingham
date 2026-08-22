@@ -280,12 +280,15 @@ describe('<GameScreen>', () => {
     }
   });
 
-  it('离开对局：点按钮 → 发 leave 帧并回到大厅态', () => {
+  it('离开对局：点按钮 → 弹防呆确认,再点离开发 leave 帧并回到大厅态', () => {
     const { store, ws } = setup(true);
     render(<GameScreen store={store} />);
     const leave = screen.getByTestId('leave-game');
     expect(leave).toBeInTheDocument();
     fireEvent.click(leave);
+    // 防呆弹窗出现,尚未发 leave 帧
+    expect(screen.getByTestId('leave-confirm')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('leave-confirm-yes'));
     const frame = JSON.parse(ws.sent[ws.sent.length - 1]!) as { type: string; token: string };
     expect(frame.type).toBe('leave');
     expect(frame.token).toBe('tok');
