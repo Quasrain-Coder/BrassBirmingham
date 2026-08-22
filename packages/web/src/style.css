@@ -2919,7 +2919,9 @@ body {
   overflow-y: visible;
 }
 
-/* 回合分组卡组:一行展示(搜寻轮 4 张也不换行) */
+/* 行动日志弹窗卡组:一律一行展示(搜寻轮 4 张也不换行,超出横向滚动) */
+.action-log-modal .discard-cards,
 .action-log-group-cards {
   flex-wrap: nowrap;
+  overflow-x: auto;
 }

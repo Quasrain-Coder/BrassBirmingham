@@ -130,6 +130,7 @@ export function ActionLogModal({
   room,
   onClose,
   logStyle = 'split',
+  seatsOrder,
 }: {
   state: FilteredState;
   playedCards: Card[][];
@@ -138,9 +139,11 @@ export function ActionLogModal({
   onClose: () => void;
   /** 日志风格(偏好设置):split=上卡牌下日志(统一分隔线);grouped=按回合分组。 */
   logStyle?: 'split' | 'grouped' | undefined;
+  /** 列顺序(初始顺位;缺省按座位号)。 */
+  seatsOrder?: PlayerIndex[] | undefined;
 }): ReactElement {
   const faceDown = state.era === 'canal' ? 1 : 0;
-  const seats = state.players.map((_, i) => i as PlayerIndex);
+  const seats = seatsOrder ?? state.players.map((_, i) => i as PlayerIndex);
 
   /** 该座位本时代的打出卡面列(共用)。 */
   const cardsBlock = (i: PlayerIndex, cards: Card[]) => (

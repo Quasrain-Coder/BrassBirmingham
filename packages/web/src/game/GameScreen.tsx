@@ -546,6 +546,7 @@ function GameBoard({
           eraActions={eraActions}
           room={room ?? undefined}
           logStyle={logStyle}
+          seatsOrder={fixedSeats}
           onClose={() => setActionLogOpen(false)}
         />
       ) : null}
