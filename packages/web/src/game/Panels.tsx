@@ -165,6 +165,7 @@ export function HandBar({
   onSelect,
   overlay = false,
   scoutMode,
+  handRaise = 'single',
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -174,17 +175,28 @@ export function HandBar({
   overlay?: boolean | undefined;
   /** 搜寻选牌模式:点手牌 = 选/弃搜寻弃牌(与搜寻行的卡牌按钮绑定)。 */
   scoutMode?: { picks: string[]; onToggle: (cardId: string) => void } | null | undefined;
+  /** 卡牌悬浮效果(偏好设置):single=悬停提起单张;all=悬停整排提起,选中单张固定。 */
+  handRaise?: 'single' | 'all' | undefined;
 }): ReactElement {
   const self = state.players[seat];
   // 已有选定(行动牌或搜寻弃牌)时,其余牌悬停不再提起;被选中的牌保持提起(固定悬浮)
-  const noRaise =
-    overlay === true &&
-    scoutMode !== null &&
-    scoutMode !== undefined
+  const hasSelection =
+    scoutMode !== null && scoutMode !== undefined
       ? scoutMode.picks.length > 0
-      : overlay === true && selectedCard !== null && selectedCard !== undefined;
+      : selectedCard !== null && selectedCard !== undefined;
+  const noRaise = overlay === true && handRaise === 'single' && hasSelection;
+  const modeAll = overlay === true && handRaise === 'all';
+  const classes = [
+    'hand-bar',
+    overlay ? 'overlay' : '',
+    modeAll ? 'mode-all' : '',
+    hasSelection ? 'has-selection' : '',
+    noRaise ? 'no-raise' : '',
+  ]
+    .filter((c) => c !== '')
+    .join(' ');
   return (
-    <section className={`hand-bar${overlay ? ' overlay' : ''}${noRaise ? ' no-raise' : ''}`}>
+    <section className={classes}>
       <div className="own-hand">
         {self?.hand.kind === 'full'
           ? self.hand.cards.map((card) => {
@@ -238,6 +250,7 @@ export function PlayerBoard({
   eraActions,
   onTileDragStart,
   hiddenTopInd,
+  stackView,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -260,6 +273,8 @@ export function PlayerBoard({
   onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<SVGElement>) => void) | undefined;
   /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失)。 */
   hiddenTopInd?: IndustryType | null | undefined;
+  /** 个人版图风格(偏好设置收口):mat=桌游风格;list=列表风格(原"明细")。 */
+  stackView?: 'mat' | 'list' | undefined;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
   // 单人打出记录弹层开关(版图/明细切换旁的"打出"按钮)
@@ -391,13 +406,55 @@ export function PlayerBoard({
           </div>
         ) : null}
         <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
-          <PlayerMat
-            tiles={self.tiles}
-            playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
-            colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
-            onTileDragStart={onTileDragStart}
-            hiddenTopInd={hiddenTopInd}
-          />
+          {(stackView ?? 'mat') === 'mat' ? (
+            <PlayerMat
+              tiles={self.tiles}
+              playerColor={PLAYER_COLORS[seat] ?? '#7f8c8d'}
+              colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
+              onTileDragStart={onTileDragStart}
+              hiddenTopInd={hiddenTopInd}
+            />
+          ) : (
+            INDUSTRY_ORDER.map((ind) => (
+              <div key={ind} className="board-ind">
+                <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
+                  {industryName(ind)}
+                </span>
+                {buildStatus?.[ind] !== undefined ? (
+                  <span
+                    className={`board-ind-status${buildStatus[ind]!.startsWith('✓') ? ' ok' : ''}`}
+                    data-testid={`build-status-${seat}-${ind}`}
+                  >
+                    {buildStatus[ind]}
+                  </span>
+                ) : null}
+                <span className="board-ind-list">
+                  {TILES.filter((t) => t.industry === ind).map((def) => {
+                    const remaining = remainingByTile.get(`${ind}-${def.level}`) ?? 0;
+                    const cost =
+                      `£${def.costMoney}` +
+                      (def.costCoal > 0 ? ` 煤${def.costCoal}` : '') +
+                      (def.costIron > 0 ? ` 铁${def.costIron}` : '');
+                    return (
+                      <span
+                        key={def.level}
+                        className={`stack-tile${remaining === 0 ? ' exhausted' : ''}`}
+                        data-testid={`player-board-stack-${seat}-${ind}-${def.level}`}
+                        title={`${industryName(ind)} Lv${def.level}｜建造成本 ${cost}｜翻面得 ${def.vp} 分、收入 +${def.incomeAdvance} 级`}
+                      >
+                        <img
+                          src={`/assets/tiles/${ind}-${def.level}-${colorKey}.png`}
+                          alt={`${industryName(ind)} Lv${def.level}`}
+                        />
+                        <span className="stack-tile-count">×{remaining}</span>
+                        <span className="stack-tile-sub">Lv{def.level}</span>
+                      </span>
+                    );
+                  })}
+                </span>
+              </div>
+            ))
+          )}
         </div>
         {discardOpen ? (
           <DiscardModal

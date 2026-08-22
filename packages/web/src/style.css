@@ -2563,3 +2563,67 @@ body {
   left: 25%;
   right: 25%;
 }
+
+/* 偏好设置弹窗:滑动开关行 */
+.prefs-modal {
+  min-width: 380px;
+}
+
+.pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.pref-side {
+  min-width: 96px;
+  color: #8a8068;
+  font-size: 0.9rem;
+  transition: color 0.12s ease;
+}
+
+.pref-side:last-child {
+  text-align: left;
+}
+
+.pref-side:first-child {
+  text-align: right;
+}
+
+.pref-side.active {
+  color: #f3ead4;
+  font-weight: 600;
+}
+
+.pref-slide {
+  position: relative;
+  width: 52px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #6b5b3e;
+  border-radius: 999px;
+  background: rgba(23, 26, 31, 0.8);
+  cursor: pointer;
+}
+
+.pref-knob {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #c9a86a;
+  transition: transform 0.15s ease;
+}
+
+.pref-slide.right .pref-knob {
+  transform: translateX(25px);
+}
+
+/* 卡牌悬浮:集体悬浮模式——未选中时悬停整排提起;有选中时仅选中牌固定提起 */
+.hand-bar.overlay.mode-all:not(.has-selection):hover .hand-card {
+  transform: translateY(0);
+}

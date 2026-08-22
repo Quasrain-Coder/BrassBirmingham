@@ -21,6 +21,8 @@ import { AIIndicator } from './AIIndicator';
 import { DiscardModal } from './DiscardModal';
 import { HandBar, LogModal, LogPanel, PlayerBoard, playerName } from './Panels';
 import { TopActionBar } from './TopActionBar';
+import { PrefsModal } from './PrefsModal';
+import type { HandRaiseMode, StackViewMode } from './PrefsModal';
 import type { TopActionKind } from './TopActionBar';
 import { describeAction, cardName } from './display';
 import { buildabilityFor, reconstructEraLog, resolveBuildSlot } from './interactions';
@@ -247,6 +249,14 @@ function GameBoard({
   const [discardOpen, setDiscardOpen] = useState(false);
   // 行动日志弹窗开关(宽屏顶部按钮)
   const [logOpen, setLogOpen] = useState(false);
+  // 偏好设置弹窗(视图/卡牌悬浮/个人版图风格)
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [handRaise, setHandRaise] = useState<HandRaiseMode>(
+    () => (storage?.getItem('brass-hand-raise') as HandRaiseMode | null) ?? 'single',
+  );
+  const [stackView, setStackView] = useState<StackViewMode>(
+    () => (storage?.getItem('brass-stack-view') === 'list' ? 'list' : 'mat'),
+  );
   // 宽屏顶部行动栏当前展开的行动类型(选牌变化时收起)
   const [topAction, setTopAction] = useState<TopActionKind>(null);
   useEffect(() => setTopAction(null), [selectedCard]);
@@ -379,6 +389,7 @@ function GameBoard({
               ? (id) => store.selectCard(id === selectedCard ? null : id)
               : undefined
           }
+          handRaise={handRaise}
           scoutMode={
             myTurn && topAction === 'scout'
               ? { picks: draft.scoutPicks, onToggle: draft.toggleScoutCard }
@@ -429,8 +440,8 @@ function GameBoard({
             房间 {room.code}
           </span>
         ) : null}
-        <button type="button" className="btn-ghost" data-testid="toggle-layout" onClick={toggleLayout}>
-          {layoutWide ? '经典布局' : '宽屏布局'}
+        <button type="button" className="btn-ghost" data-testid="open-prefs" onClick={() => setPrefsOpen(true)}>
+          偏好设置
         </button>
         <button
           type="button"
@@ -490,6 +501,20 @@ function GameBoard({
       {logOpen ? (
         <LogModal log={displayLog} room={room ?? undefined} onClose={() => setLogOpen(false)} />
       ) : null}
+      {prefsOpen ? (
+        <PrefsModal
+          prefs={{ layoutWide, handRaise, stackView }}
+          onChange={(next) => {
+            setLayoutWideState(next.layoutWide);
+            setHandRaise(next.handRaise);
+            setStackView(next.stackView);
+            storage?.setItem('brass-layout', next.layoutWide ? 'wide' : 'classic');
+            storage?.setItem('brass-hand-raise', next.handRaise);
+            storage?.setItem('brass-stack-view', next.stackView);
+          }}
+          onClose={() => setPrefsOpen(false)}
+        />
+      ) : null}
       {gameOver !== null ? (
         <p className="game-over" data-testid="game-over">
           对局结束——胜者：{gameOver.winner.map((w) => playerName(room ?? undefined, w)).join('、')}
@@ -501,7 +526,7 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} />
               </div>
             ))}
           </aside>
@@ -511,8 +536,8 @@ function GameBoard({
                 <span className="game-room-code" data-testid="game-room-code">房间 {room.code}</span>
               ) : null}
               <span className="top-action-spacer" />
-              <button type="button" className="btn-ghost" data-testid="toggle-layout" onClick={toggleLayout}>
-                经典布局
+              <button type="button" className="btn-ghost" data-testid="open-prefs" onClick={() => setPrefsOpen(true)}>
+                偏好设置
               </button>
               <button type="button" className="btn-ghost" data-testid="open-score-modal" onClick={() => scoreHistory.setOpen(true)}>
                 分数构成
@@ -558,7 +583,7 @@ function GameBoard({
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} />
               </div>
             ))}
           </aside>

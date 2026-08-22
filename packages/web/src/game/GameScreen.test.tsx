@@ -138,7 +138,10 @@ describe('<GameScreen>', () => {
     const { store, game, ws } = setup(true);
     const { container } = render(<GameScreen store={store} />);
     expect(container.querySelector('.wide-grid')).toBeNull();
-    fireEvent.click(screen.getByTestId('toggle-layout'));
+    // 偏好设置弹窗里切换视图 → 宽屏
+    fireEvent.click(screen.getByTestId('open-prefs'));
+    fireEvent.click(screen.getByTestId('pref-layout').querySelector('.pref-slide')!);
+    fireEvent.click(screen.getByTestId('prefs-close'));
     const grid = container.querySelector('.wide-grid');
     expect(grid).not.toBeNull();
     // 4p:左列 2 个席位、右列 2 个席位,面板全部铺开(defaultOpen)
@@ -149,8 +152,10 @@ describe('<GameScreen>', () => {
     expect(rank1).toHaveTextContent('#1');
     const round1 = screen.getByTestId(`compact-round-${game.turnOrder[0]!}`);
     expect(round1).toHaveTextContent('本回合未行动');
-    // 再点一次回到经典布局
-    fireEvent.click(screen.getByTestId('toggle-layout'));
+    // 再切回经典布局
+    fireEvent.click(screen.getByTestId('open-prefs'));
+    fireEvent.click(screen.getByTestId('pref-layout').querySelector('.pref-slide')!);
+    fireEvent.click(screen.getByTestId('prefs-close'));
     expect(container.querySelector('.wide-grid')).toBeNull();
     void ws;
   });
