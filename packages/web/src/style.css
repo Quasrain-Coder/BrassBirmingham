@@ -2918,3 +2918,8 @@ body {
   max-height: none;
   overflow-y: visible;
 }
+
+/* 回合分组卡组:一行展示(搜寻轮 4 张也不换行) */
+.action-log-group-cards {
+  flex-wrap: nowrap;
+}

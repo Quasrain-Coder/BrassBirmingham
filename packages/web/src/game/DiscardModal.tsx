@@ -98,6 +98,7 @@ interface EraActionEntry {
 function buildRounds(
   state: FilteredState,
   actions: EraActionEntry[],
+  newestFirst = true,
 ): { round: number; actions: EraActionEntry[] }[] {
   const apr = (r: number): number => (state.era === 'canal' && r === 1 ? 1 : 2);
   const rounds: { round: number; actions: EraActionEntry[] }[] = [];
@@ -108,7 +109,12 @@ function buildRounds(
     rounds.push({ round: r, actions: slice });
     i += apr(r);
   }
-  return rounds.reverse();
+  return newestFirst ? rounds.reverse() : rounds;
+}
+
+/** 行动行文案:搜寻简化为"搜寻"(不再写"弃 3 张换 2 张百搭")。 */
+function actionLineText(a: Action): string {
+  return a.type === 'scout' ? '搜寻' : describeAction(a);
 }
 
 function actionCardsText(a: Action): string {
@@ -157,14 +163,15 @@ export function ActionLogModal({
   );
 
   const historyBlock = (i: PlayerIndex) => {
-    const rounds = buildRounds(state, eraActions[i] ?? []);
+    // 上下分隔:从第 1 轮展示到当前轮(正序)
+    const rounds = buildRounds(state, eraActions[i] ?? [], false);
     if (rounds.length === 0) return <p className="era-actions-empty">本时代尚未行动</p>;
     return rounds.map((r) => (
       <div key={r.round} className="compact-history-round">
         <span className="compact-history-label">第 {r.round} 轮</span>
         {r.actions.map((a, k) => (
           <span key={k} className="compact-history-act">
-            {describeAction(a.action)}
+            {actionLineText(a.action)}
             {(
               <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
                 {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '−£0'}
@@ -261,7 +268,7 @@ export function ActionLogModal({
                           </div>
                           {r.actions.map((a, k) => (
                             <span key={k} className="compact-history-act">
-                              {describeAction(a.action)}
+                              {actionLineText(a.action)}
                               {(
                                 <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
                                   {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '−£0'}
