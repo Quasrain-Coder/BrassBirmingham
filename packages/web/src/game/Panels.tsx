@@ -309,6 +309,13 @@ export function PlayerBoard({
     const key = `${def.industry}-${def.level}`;
     remainingByTile.set(key, (remainingByTile.get(key) ?? 0) + 1);
   }
+  // 研发暂存同步减量(每暂存一次该产业,其最低级剩余 -1;归零显示耗尽)
+  for (const ind of developPicks ?? []) {
+    const top = TILES.filter((t) => t.industry === ind)
+      .map((d) => d.level)
+      .find((lv) => (remainingByTile.get(`${ind}-${lv}`) ?? 0) > 0);
+    if (top !== undefined) remainingByTile.set(`${ind}-${top}`, (remainingByTile.get(`${ind}-${top}`) ?? 1) - 1);
+  }
 
   // 单人打出记录数据(稀疏数组,按座位号入桶)
   const playedCardsAll: Card[][] =
