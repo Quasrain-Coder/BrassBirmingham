@@ -1574,6 +1574,19 @@ body {
   transform: translateY(-4px);
 }
 
+/* 飞牌动画(补牌/搜寻/百搭飞回):固定定位,从牌堆/面板中心飞向目标 */
+.card-flight {
+  position: fixed;
+  z-index: 960;
+  pointer-events: none;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  transition:
+    left 0.75s cubic-bezier(0.25, 0.8, 0.35, 1),
+    top 0.75s cubic-bezier(0.25, 0.8, 0.35, 1),
+    opacity 0.75s ease;
+}
+
 /* 手牌拖拽排序:拖动源半透明;落点侧金色指示条 */
 .hand-card.dragging {
   opacity: 0.4;

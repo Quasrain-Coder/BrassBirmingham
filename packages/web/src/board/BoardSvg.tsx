@@ -22,6 +22,7 @@ import {
   BOARD_SIZE,
   CITY_LABEL,
   COAL_MARKET_CELLS,
+  DECK_RECTS,
   INCOME_TRACK,
   IRON_MARKET_CELLS,
   LINK_MIDPOINTS,
@@ -249,6 +250,39 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
         height={52}
         preserveAspectRatio="xMidYMid meet"
       />
+    </g>
+  );
+}
+
+/** 牌堆：错位堆叠(dx 小步进摊开,依稀可数余量;余量少时逐张可见)。 */
+function DeckStack({
+  rect,
+  count,
+  img,
+  testid,
+}: {
+  rect: { x: number; y: number; w: number; h: number };
+  count: number;
+  img: string;
+  testid: string;
+}): ReactElement {
+  const cardH = rect.h - 30;
+  const cardW = Math.round((cardH * 250) / 351);
+  const maxSpreadX = Math.max(0, rect.w - cardW - 24);
+  const dx = count > 1 ? Math.min(9, maxSpreadX / (count - 1)) : 0;
+  const dy = count > 1 ? Math.min(3, (rect.h - cardH - 20) / (count - 1)) : 0;
+  return (
+    <g className="deck-stack" data-testid={testid}>
+      {Array.from({ length: count }, (_, i) => (
+        <image
+          key={i}
+          href={img}
+          x={Math.round(rect.x + 12 + i * dx)}
+          y={Math.round(rect.y + 15 + i * dy)}
+          width={cardW}
+          height={cardH}
+        />
+      ))}
     </g>
   );
 }
@@ -606,6 +640,14 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
         {IRON_MARKET_CELLS.map((p, i) =>
           i >= ironFilledFrom ? <Cube key={`iron-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#c76b2a" /> : null,
         )}
+      </g>
+
+      {/* 左侧三牌堆:本时代待摸牌堆/万能产业/万能城市——错位堆叠,依稀可数余量;
+          余量直接读 state(deck.count / wildSupply),reset/回放天然一致 */}
+      <g className="board-decks" pointerEvents="none">
+        <DeckStack rect={DECK_RECTS.draw} count={state.deck.count} img="/assets/cards/back.png" testid="deck-stack-draw" />
+        <DeckStack rect={DECK_RECTS.wildIndustry} count={state.wildSupply.industry} img="/assets/cards/wild-industry.png" testid="deck-stack-wild-industry" />
+        <DeckStack rect={DECK_RECTS.wildLocation} count={state.wildSupply.location} img="/assets/cards/wild-location.png" testid="deck-stack-wild-location" />
       </g>
 
       {/* 连线 token 顶层渲染（不被板块图遮挡） */}
