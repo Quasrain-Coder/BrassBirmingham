@@ -18,8 +18,8 @@ import type { ActionSpotlight } from '../board/BoardSvg';
 import { locationAnchor } from '../board/geometry';
 import { ActionBar, useActionDraft } from './ActionBar';
 import { AIIndicator } from './AIIndicator';
-import { DiscardModal } from './DiscardModal';
-import { HandBar, LogModal, LogPanel, PlayerBoard, playerName } from './Panels';
+import { ActionLogModal } from './DiscardModal';
+import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
 import { TopActionBar } from './TopActionBar';
 import { PrefsModal } from './PrefsModal';
 import type { HandRaiseMode, StackViewMode } from './PrefsModal';
@@ -245,10 +245,8 @@ function GameBoard({
     setLayoutWideState(v);
     storage?.setItem('brass-layout', v ? 'wide' : 'classic');
   };
-  // 打出记录弹层开关
-  const [discardOpen, setDiscardOpen] = useState(false);
-  // 行动日志弹窗开关(宽屏顶部按钮)
-  const [logOpen, setLogOpen] = useState(false);
+  // 行动日志弹窗开关(合并打出记录)
+  const [actionLogOpen, setActionLogOpen] = useState(false);
   // 偏好设置弹窗(视图/卡牌悬浮/个人版图风格)
   const [prefsOpen, setPrefsOpen] = useState(false);
   // 离开对局防呆确认弹窗
@@ -456,10 +454,10 @@ function GameBoard({
         <button
           type="button"
           className="btn-ghost"
-          data-testid="open-discard-modal"
-          onClick={() => setDiscardOpen(true)}
+          data-testid="open-log-modal"
+          onClick={() => setActionLogOpen(true)}
         >
-          打出记录
+          行动日志
         </button>
         <button
           type="button"
@@ -492,16 +490,14 @@ function GameBoard({
           onClose={() => scoreHistory.setOpen(false)}
         />
       ) : null}
-      {discardOpen ? (
-        <DiscardModal
+      {actionLogOpen ? (
+        <ActionLogModal
           state={state}
           playedCards={playedCards}
+          eraActions={eraActions}
           room={room ?? undefined}
-          onClose={() => setDiscardOpen(false)}
+          onClose={() => setActionLogOpen(false)}
         />
-      ) : null}
-      {logOpen ? (
-        <LogModal log={displayLog} room={room ?? undefined} onClose={() => setLogOpen(false)} />
       ) : null}
       {leaveConfirmOpen ? (
         <div className="modal-backdrop" data-testid="leave-confirm" onClick={() => setLeaveConfirmOpen(false)}>
@@ -591,10 +587,7 @@ function GameBoard({
             <button type="button" className="btn-ghost" data-testid="open-score-modal" onClick={() => scoreHistory.setOpen(true)}>
               分数构成
             </button>
-            <button type="button" className="btn-ghost" data-testid="open-discard-modal" onClick={() => setDiscardOpen(true)}>
-              打出记录
-            </button>
-            <button type="button" className="btn-ghost" data-testid="open-log-modal" onClick={() => setLogOpen(true)}>
+            <button type="button" className="btn-ghost" data-testid="open-log-modal" onClick={() => setActionLogOpen(true)}>
               行动日志
             </button>
           </div>

@@ -2737,3 +2737,37 @@ body {
 .leave-confirm-danger:hover {
   background: #d24637;
 }
+
+/* 行动日志弹窗:上卡牌、下各玩家行动记录 */
+.action-log-modal {
+  width: min(94vw, 1280px);
+  max-height: 88vh;
+}
+
+.action-log-history {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #3a3226;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.78rem;
+}
+
+/* 左列:房间号绝对左对齐,离开对局居中 */
+.wide-topline-left {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+
+.wide-topline-left .game-room-code {
+  justify-self: start;
+}
+
+.wide-topline-left > button {
+  grid-column: 2;
+  justify-self: center;
+}
