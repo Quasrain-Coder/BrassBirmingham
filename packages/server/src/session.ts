@@ -173,15 +173,13 @@ export class GameSession {
         // 否则行动者自己的收入条目会排到收官行动之前(首轮收入会无处挂靠)
         session.eraActions[player]?.push({ action, moneyDelta });
         if (session.gameState.round > roundBefore || session.gameState.era !== eraBefore) {
+          // 收入为 0 也记条目——前端轮标签要显式展示"（收入 +£0）"
           for (const p of session.seats) {
-            const inc = incomeLevelAt(session.gameState.players[p]!.incomeSpace);
-            if (inc !== 0) {
-              session.eraActions[p]!.push({
-                action: { type: 'pass', cardId: '__round-income__' },
-                moneyDelta: inc,
-                note: 'round-income',
-              });
-            }
+            session.eraActions[p]!.push({
+              action: { type: 'pass', cardId: '__round-income__' },
+              moneyDelta: incomeLevelAt(session.gameState.players[p]!.incomeSpace),
+              note: 'round-income',
+            });
           }
         }
         if (session.gameState.era !== eraBefore) {
@@ -268,15 +266,13 @@ export class GameSession {
     }
     this.eraActions[actingSeat]?.push({ action, moneyDelta });
     if (this.gameState.round > roundBefore || this.gameState.era !== eraBefore) {
+      // 收入为 0 也记条目——前端轮标签要显式展示"（收入 +£0）"
       for (const p of this.seats) {
-        const inc = incomeLevelAt(this.gameState.players[p]!.incomeSpace);
-        if (inc !== 0) {
-          this.eraActions[p]!.push({
-            action: { type: 'pass', cardId: '__round-income__' },
-            moneyDelta: inc,
-            note: 'round-income',
-          });
-        }
+        this.eraActions[p]!.push({
+          action: { type: 'pass', cardId: '__round-income__' },
+          moneyDelta: incomeLevelAt(this.gameState.players[p]!.incomeSpace),
+          note: 'round-income',
+        });
       }
     }
     if (this.gameState.era !== eraBefore) {

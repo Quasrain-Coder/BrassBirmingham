@@ -8,7 +8,7 @@
  * 煤/铁市场与收入轨已搬上官方版图（BoardSvg），不再有独立侧边栏组件。
  */
 import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties, ReactElement } from 'react';
+import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import { INCOME_LEVEL_SPACES, MERCHANTS, TILES, incomeLevelAt } from '@brass/engine';
 import type { Action, Card, IndustryType, MerchantId, PlayerIndex } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
@@ -348,8 +348,8 @@ export function PlayerBoard({
       }
       rounds.reverse();
     }
-    // 轮末收入合计 → 轮标签后缀:"（收入 +£30）/（收入 −£3）"
-    const incomeSuffixOf = (entries: { moneyDelta: number; note?: 'round-income' }[]): string => {
+    // 轮末收入合计 → 轮标签后缀(着色与行动盈亏一致):"（收入 +£30）/（收入 −£3）/（收入 +£0）"
+    const incomeSuffixOf = (entries: { moneyDelta: number; note?: 'round-income' }[]): ReactNode => {
       let sum = 0;
       let has = false;
       for (const e of entries) {
@@ -358,8 +358,16 @@ export function PlayerBoard({
           has = true;
         }
       }
-      if (!has) return '';
-      return `（收入 ${sum > 0 ? `+£${sum}` : `−£${-sum}`}）`;
+      if (!has) return null;
+      return (
+        <>
+          （收入{' '}
+          <em className={`compact-round-delta ${sum >= 0 ? 'pos' : 'neg'}`}>
+            {sum >= 0 ? `+£${sum}` : `−£${-sum}`}
+          </em>
+          ）
+        </>
+      );
     };
     const acts = (rounds.find((r) => r.round === state.round)?.actions ?? []).filter(
       (a) => a.note !== 'round-income',
@@ -402,8 +410,8 @@ export function PlayerBoard({
               acts.map((a, i) => (
                 <span className="compact-round-line" key={i}>
                   {describeAction(a.action)}
-                  <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
-                    {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '−£0'}
+                  <em className={`compact-round-delta ${a.moneyDelta >= 0 ? 'pos' : 'neg'}`}>
+                    {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '+£0'}
                   </em>
                   <em className="compact-history-card">{actionCardsText(a.action)}</em>
                 </span>

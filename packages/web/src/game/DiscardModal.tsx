@@ -88,6 +88,7 @@ export function DiscardModal({
  * ——每行 = 动作 + 实际盈亏 + 出牌文本(与个人版图历史同款风格)。
  */
 import type { Action } from '@brass/engine';
+import type { ReactNode } from 'react';
 import { cardFromId, describeAction } from './display';
 
 interface EraActionEntry {
@@ -131,19 +132,27 @@ export function roundIncome(entries: EraActionEntry[]): number | null {
   return has ? inc : null;
 }
 
-/** 轮标签内联收入文本:"（收入 +£30）/（收入 −£3）"。 */
-export function incomeSuffix(entries: EraActionEntry[]): string {
+/** 轮标签内联收入(着色与行动盈亏一致):"（收入 +£30）/（收入 −£3）/（收入 +£0）"。
+ *  第 1 轮一律不标(首轮收入必为 0,标记只是噪音)。 */
+export function incomeSuffix(round: number, entries: EraActionEntry[]): ReactNode {
+  if (round === 1) return null;
   const inc = roundIncome(entries);
-  if (inc === null) return '';
-  return `（收入 ${inc > 0 ? `+£${inc}` : `−£${-inc}`}）`;
+  if (inc === null) return null;
+  return (
+    <>
+      （收入{' '}
+      <em className={`compact-round-delta ${inc >= 0 ? 'pos' : 'neg'}`}>
+        {inc >= 0 ? `+£${inc}` : `−£${-inc}`}
+      </em>
+      ）
+    </>
+  );
 }
 
 /** 行动行文案:搜寻简化为"搜寻"(不再写"弃 3 张换 2 张百搭")。 */
 function actionLineText(a: Action): string {
   return a.type === 'scout' ? '搜寻' : describeAction(a);
-}
-
-function actionCardsText(a: Action): string {
+}function actionCardsText(a: Action): string {
   return a.type === 'scout'
     ? a.cardIds.map((id) => cardName(cardFromId(id))).join('+')
     : cardName(cardFromId(a.cardId));
@@ -198,14 +207,14 @@ export function ActionLogModal({
     return rounds.map((r) => (
       <div key={r.round} className="compact-history-round">
         <span className="compact-history-label">
-          第 {r.round} 轮{incomeSuffix(r.actions)}
+          第 {r.round} 轮{incomeSuffix(r.round, r.actions)}
         </span>
         {r.actions.filter((a) => a.note !== 'round-income').map((a, k) => (
           <span key={k} className="compact-history-act">
             {actionLineText(a.action)}
             {(
-              <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
-                {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '−£0'}
+              <em className={`compact-round-delta ${a.moneyDelta >= 0 ? 'pos' : 'neg'}`}>
+                {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '+£0'}
               </em>
             )}
             <em className="compact-history-card">{actionCardsText(a.action)}</em>
@@ -310,7 +319,7 @@ export function ActionLogModal({
                       return (
                         <div key={r.round} className="action-log-group">
                           <span className="action-log-group-label">
-                            第 {r.round} 轮{incomeSuffix(r.actions)}
+                            第 {r.round} 轮{incomeSuffix(r.round, r.actions)}
                           </span>
                           <div className="action-log-group-cards">
                             {r.round === 1 && faceDown === 1 ? (
@@ -335,8 +344,8 @@ export function ActionLogModal({
                             <span key={k} className="compact-history-act">
                               {actionLineText(a.action)}
                               {(
-                                <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
-                                  {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '−£0'}
+                                <em className={`compact-round-delta ${a.moneyDelta >= 0 ? 'pos' : 'neg'}`}>
+                                  {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '+£0'}
                                 </em>
                               )}
                             </span>
