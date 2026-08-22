@@ -269,8 +269,8 @@ export function PlayerBoard({
   buildStatus?: Partial<Record<IndustryType, string>> | undefined;
   /** 该座位本时代已打出的牌(右上"打出"按钮的单人记录用)。 */
   playedCards?: Card[] | undefined;
-  /** 本时代全部行动及实际现金变化(服务端结算时记录,面板行动行的盈亏准确值)。 */
-  eraActions?: { action: Action; moneyDelta: number }[] | undefined;
+  /** 本时代全部行动及实际现金变化(服务端结算时记录;note='round-income' 为轮末收入)。 */
+  eraActions?: { action: Action; moneyDelta: number; note?: 'round-income' }[] | undefined;
   /** 按下产业栈顶板块开始拖拽(宽屏拖拽建造/研发,仅紧凑面板用)。 */
   onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>) => void) | undefined;
   /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失)。 */
@@ -326,20 +326,44 @@ export function PlayerBoard({
     const rank = state.turnOrder.indexOf(seat) + 1;
     // 本时代行动按回合分组(最新轮在前);本回合行动取当前轮组——
     // 刷新后 log 只剩残尾,但 eraActions 是服务端全量簿记,记录不丢
-    const rounds: { round: number; actions: { action: Action; moneyDelta: number }[] }[] = [];
+    const rounds: { round: number; actions: { action: Action; moneyDelta: number; note?: 'round-income' }[] }[] = [];
     {
       const ea = eraActions ?? [];
       const apr = (r: number): number => (state.era === 'canal' && r === 1 ? 1 : 2);
-      let i = 0;
-      for (let r = 1; i < ea.length; r += 1) {
-        const slice = ea.slice(i, i + apr(r));
-        if (slice.length === 0) break;
-        rounds.push({ round: r, actions: slice });
-        i += apr(r);
+      // 与 DiscardModal.buildRounds 同一 walk 方案:note 条目附进当前轮,不占名额
+      let current: { round: number; actions: { action: Action; moneyDelta: number; note?: 'round-income' }[] } | null = null;
+      let used = 0;
+      for (const a of ea) {
+        if (a.note === 'round-income') {
+          current?.actions.push(a);
+          continue;
+        }
+        if (current === null || used >= apr(current.round)) {
+          current = { round: rounds.length + 1, actions: [] };
+          rounds.push(current);
+          used = 0;
+        }
+        current.actions.push(a);
+        used += 1;
       }
       rounds.reverse();
     }
-    const acts = rounds.find((r) => r.round === state.round)?.actions ?? [];
+    // 轮末收入合计 → 轮标签后缀:"（收入 +£30）/（收入 −£3）"
+    const incomeSuffixOf = (entries: { moneyDelta: number; note?: 'round-income' }[]): string => {
+      let sum = 0;
+      let has = false;
+      for (const e of entries) {
+        if (e.note === 'round-income') {
+          sum += e.moneyDelta;
+          has = true;
+        }
+      }
+      if (!has) return '';
+      return `（收入 ${sum > 0 ? `+£${sum}` : `−£${-sum}`}）`;
+    };
+    const acts = (rounds.find((r) => r.round === state.round)?.actions ?? []).filter(
+      (a) => a.note !== 'round-income',
+    );
     const actionCardsText = (a: Action): string =>
       a.type === 'scout'
         ? a.cardIds.map((id) => cardName(cardFromId(id))).join('+')
@@ -378,11 +402,9 @@ export function PlayerBoard({
               acts.map((a, i) => (
                 <span className="compact-round-line" key={i}>
                   {describeAction(a.action)}
-                  {(
-                    <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
-                      {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '−£0'}
-                    </em>
-                  )}
+                  <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
+                    {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '−£0'}
+                  </em>
                   <em className="compact-history-card">{actionCardsText(a.action)}</em>
                 </span>
               ))
@@ -406,13 +428,17 @@ export function PlayerBoard({
             ) : (
               rounds.map((r) => (
                 <div key={r.round} className="compact-history-round">
-                  <span className="compact-history-label">第 {r.round} 轮</span>
-                  {r.actions.map((a, i) => (
-                    <span key={i} className="compact-history-act">
-                      {describeAction(a.action)}
-                      <em className="compact-history-card">{actionCardsText(a.action)}</em>
-                    </span>
-                  ))}
+                  <span className="compact-history-label">
+                    第 {r.round} 轮{incomeSuffixOf(r.actions)}
+                  </span>
+                  {r.actions
+                    .filter((a) => a.note !== 'round-income')
+                    .map((a, i) => (
+                      <span key={i} className="compact-history-act">
+                        {describeAction(a.action)}
+                        <em className="compact-history-card">{actionCardsText(a.action)}</em>
+                      </span>
+                    ))}
                 </div>
               ))
             )}

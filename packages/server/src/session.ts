@@ -22,6 +22,7 @@ import {
   IllegalActionError,
   applyAction,
   enumerateActions,
+  incomeLevelAt,
   newGame,
 } from '@brass/engine';
 import type { Action, Card, GameState, PlayerIndex } from '@brass/engine';
@@ -61,7 +62,7 @@ export interface Snapshot {
   /** 各座位本时代的全部行动(按顺序)及该行动的**实际现金变化**(结算时记录,
    *  含市价煤铁/建成卖市场收入——面板行动行的盈亏以此为准确值)。
    *  时代切换清空、resetTurn 回滚、重放重建。 */
-  eraActions: { action: Action; moneyDelta: number }[][];
+  eraActions: { action: Action; moneyDelta: number; note?: 'round-income' }[][];
 }
 
 /** 'g_' + 8 字节 base64url（11 字符），crypto 随机。测试里应显式传 gameId。 */
@@ -79,7 +80,7 @@ export class GameSession {
    * 回合备份：每个回合第 1 个行动前的状态引用(GameState 不可变,引用即快照)与
    * 当时 seq。供 resetTurn 撤销本回合全部行动(server 扣住回合期间可反悔)。
    */
-  private turnBackup: { state: GameState; seq: number; played: Card[][]; actions: { action: Action; moneyDelta: number }[][] } | null = null;
+  private turnBackup: { state: GameState; seq: number; played: Card[][]; actions: { action: Action; moneyDelta: number; note?: 'round-income' }[][] } | null = null;
   /**
    * 各座位本时代已打出的牌（按打出顺序）：实体弃牌堆公开规则的按玩家视图。
    * Wild 卡弃置回供应区不入列；时代切换时（弃牌合洗进新牌堆）清空重计。
@@ -91,7 +92,7 @@ export class GameSession {
    * 以此为准(客户端按当前盘面近似推算会和历史市价脱节,造成显示与实际结算不一致)。
    * 与 playedThisEra 同生命周期(时代切换清空、resetTurn 回滚、重放重建)。
    */
-  private eraActions: { action: Action; moneyDelta: number }[][];
+  private eraActions: { action: Action; moneyDelta: number; note?: 'round-income' }[][];
 
   constructor(
     db: Db,
@@ -161,12 +162,28 @@ export class GameSession {
       for (const { player, action } of listActions(db, gameId)) {
         session.recordPlayed(action);
         const moneyBefore = session.gameState.players[player]!.money;
+        const roundBefore = session.gameState.round;
         const eraBefore = session.gameState.era;
         session.gameState = applyAction(session.gameState, action);
-        session.eraActions[player]?.push({
-          action,
-          moneyDelta: session.gameState.players[player]!.money - moneyBefore,
-        });
+        let moneyDelta = session.gameState.players[player]!.money - moneyBefore;
+        if (session.gameState.round > roundBefore || session.gameState.era !== eraBefore) {
+          moneyDelta -= incomeLevelAt(session.gameState.players[player]!.incomeSpace);
+        }
+        // 先记真实行动:轮末收入时序上发生在该行动结算后,顺序必须如此,
+        // 否则行动者自己的收入条目会排到收官行动之前(首轮收入会无处挂靠)
+        session.eraActions[player]?.push({ action, moneyDelta });
+        if (session.gameState.round > roundBefore || session.gameState.era !== eraBefore) {
+          for (const p of session.seats) {
+            const inc = incomeLevelAt(session.gameState.players[p]!.incomeSpace);
+            if (inc !== 0) {
+              session.eraActions[p]!.push({
+                action: { type: 'pass', cardId: '__round-income__' },
+                moneyDelta: inc,
+                note: 'round-income',
+              });
+            }
+          }
+        }
         if (session.gameState.era !== eraBefore) {
           session.playedThisEra = session.playedThisEra.map(() => []);
           session.eraActions = session.eraActions.map(() => []);
@@ -238,13 +255,30 @@ export class GameSession {
     this.recordPlayed(action);
     const actingSeat = this.currentSeat; // 行动者(应用后 currentSeat 已轮到下家)
     const moneyBefore = this.gameState.players[actingSeat]!.money;
+    const roundBefore = this.gameState.round;
     const eraBefore = this.gameState.era;
     appendAction(this.db, this.gameId, this.seq, seat, action);
     this.gameState = next;
-    this.eraActions[actingSeat]?.push({
-      action,
-      moneyDelta: this.gameState.players[actingSeat]!.money - moneyBefore,
-    });
+    // 轮末拆分:该动作恰为回合最后一动时,收入结算也发生在本笔——把轮末收入
+    // 从行动盈亏中拆出,各玩家单独补一条 note 条目(否则贷款会显示 +£27 而非 +£30)。
+    // 先记真实行动再补收入条目:时序上收入发生在该行动结算后。
+    let moneyDelta = this.gameState.players[actingSeat]!.money - moneyBefore;
+    if (this.gameState.round > roundBefore || this.gameState.era !== eraBefore) {
+      moneyDelta -= incomeLevelAt(this.gameState.players[actingSeat]!.incomeSpace);
+    }
+    this.eraActions[actingSeat]?.push({ action, moneyDelta });
+    if (this.gameState.round > roundBefore || this.gameState.era !== eraBefore) {
+      for (const p of this.seats) {
+        const inc = incomeLevelAt(this.gameState.players[p]!.incomeSpace);
+        if (inc !== 0) {
+          this.eraActions[p]!.push({
+            action: { type: 'pass', cardId: '__round-income__' },
+            moneyDelta: inc,
+            note: 'round-income',
+          });
+        }
+      }
+    }
     if (this.gameState.era !== eraBefore) {
       // 时代切换:弃牌合洗,出牌/行动记录重计
       this.playedThisEra = this.playedThisEra.map(() => []);

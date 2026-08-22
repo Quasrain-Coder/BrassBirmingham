@@ -568,7 +568,7 @@ export function beerRemaining(
  */
 export function reconstructEraLog(
   state: FilteredState,
-  eraActions: readonly (readonly { action: Action; moneyDelta: number }[])[],
+  eraActions: readonly (readonly { action: Action; moneyDelta: number; note?: 'round-income' }[])[],
 ): { player: PlayerIndex; action: Action }[] {
   const out: { player: PlayerIndex; action: Action }[] = [];
   const idx = eraActions.map(() => 0);
@@ -577,7 +577,12 @@ export function reconstructEraLog(
     let any = false;
     for (const seat of state.turnOrder) {
       for (let k = 0; k < perRound(round); k += 1) {
-        const e = eraActions[seat]?.[idx[seat]!];
+        // 跳过轮末收入的合成条目(note),它不占行动名额、也不该出现在日志里
+        let e = eraActions[seat]?.[idx[seat]!];
+        while (e !== undefined && e.note === 'round-income') {
+          idx[seat]! += 1;
+          e = eraActions[seat]?.[idx[seat]!];
+        }
         if (e === undefined) break;
         out.push({ player: seat, action: e.action });
         idx[seat]! += 1;

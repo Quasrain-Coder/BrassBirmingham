@@ -93,6 +93,7 @@ import { cardFromId, describeAction } from './display';
 interface EraActionEntry {
   action: Action;
   moneyDelta: number;
+  note?: 'round-income';
 }
 
 function buildRounds(
@@ -102,14 +103,39 @@ function buildRounds(
 ): { round: number; actions: EraActionEntry[] }[] {
   const apr = (r: number): number => (state.era === 'canal' && r === 1 ? 1 : 2);
   const rounds: { round: number; actions: EraActionEntry[] }[] = [];
-  let i = 0;
-  for (let r = 1; i < actions.length; r += 1) {
-    const slice = actions.slice(i, i + apr(r));
-    if (slice.length === 0) break;
-    rounds.push({ round: r, actions: slice });
-    i += apr(r);
+  // 按原顺序走一遍:真实行动占每轮名额(运河首轮 1、其余 2);
+  // 轮末收入(note)不占名额,时序上在收官行动之后,直接附进当前这轮——
+  // 收入为 0 的轮没有条目,不能过滤后按序索引(稀疏数组会挂错轮)
+  let current: { round: number; actions: EraActionEntry[] } | null = null;
+  let used = 0;
+  for (const a of actions) {
+    if (a.note === 'round-income') {
+      current?.actions.push(a);
+      continue;
+    }
+    if (current === null || used >= apr(current.round)) {
+      current = { round: rounds.length + 1, actions: [] };
+      rounds.push(current);
+      used = 0;
+    }
+    current.actions.push(a);
+    used += 1;
   }
   return newestFirst ? rounds.reverse() : rounds;
+}
+
+/** 该轮的轮末收入合计(无则 null)。 */
+export function roundIncome(entries: EraActionEntry[]): number | null {
+  const inc = entries.filter((a) => a.note === 'round-income').reduce((s, a) => s + a.moneyDelta, 0);
+  const has = entries.some((a) => a.note === 'round-income');
+  return has ? inc : null;
+}
+
+/** 轮标签内联收入文本:"（收入 +£30）/（收入 −£3）"。 */
+export function incomeSuffix(entries: EraActionEntry[]): string {
+  const inc = roundIncome(entries);
+  if (inc === null) return '';
+  return `（收入 ${inc > 0 ? `+£${inc}` : `−£${-inc}`}）`;
 }
 
 /** 行动行文案:搜寻简化为"搜寻"(不再写"弃 3 张换 2 张百搭")。 */
@@ -171,8 +197,10 @@ export function ActionLogModal({
     if (rounds.length === 0) return <p className="era-actions-empty">本时代尚未行动</p>;
     return rounds.map((r) => (
       <div key={r.round} className="compact-history-round">
-        <span className="compact-history-label">第 {r.round} 轮</span>
-        {r.actions.map((a, k) => (
+        <span className="compact-history-label">
+          第 {r.round} 轮{incomeSuffix(r.actions)}
+        </span>
+        {r.actions.filter((a) => a.note !== 'round-income').map((a, k) => (
           <span key={k} className="compact-history-act">
             {actionLineText(a.action)}
             {(
@@ -189,11 +217,13 @@ export function ActionLogModal({
 
   /** 某一轮打出的卡(每个行动 1 张;搜寻弃 3 张,该轮合计可达 4 张)。 */
   const roundCards = (r: { round: number; actions: EraActionEntry[] }): Card[] =>
-    r.actions.flatMap((a) =>
-      a.action.type === 'scout'
-        ? a.action.cardIds.map((id) => cardFromId(id))
-        : [cardFromId(a.action.cardId)],
-    );
+    r.actions
+      .filter((a) => a.note !== 'round-income')
+      .flatMap((a) =>
+        a.action.type === 'scout'
+          ? a.action.cardIds.map((id) => cardFromId(id))
+          : [cardFromId(a.action.cardId)],
+      );
 
   const colHead = (i: PlayerIndex, count: number) => (
     <div className="discard-col-head">
@@ -219,7 +249,7 @@ export function ActionLogModal({
               {seats.map((i) => {
                 const rounds = buildRounds(state, eraActions[i] ?? [], false);
                 const total = (eraActions[i] ?? []).reduce(
-                  (s, a) => s + (a.action.type === 'scout' ? 3 : 1),
+                  (s, a) => s + (a.note === 'round-income' ? 0 : a.action.type === 'scout' ? 3 : 1),
                   0,
                 );
                 return (
@@ -242,7 +272,8 @@ export function ActionLogModal({
                           ) : null}
                           {roundCards(r).map((c) => (
                             <span className="discard-cell" key={c.id}>
-                              <img src={cardImageSrc(c)} alt={cardName(c)} />
+                              <img className="discard-card" src={cardImageSrc(c)} alt={cardName(c)} />
+                              <span className="discard-card-name">{cardName(c)}</span>
                               <span className="card-tip">{cardName(c)}</span>
                             </span>
                           ))}
@@ -278,7 +309,9 @@ export function ActionLogModal({
                       const cards = roundCards(r);
                       return (
                         <div key={r.round} className="action-log-group">
-                          <span className="action-log-group-label">第 {r.round} 轮</span>
+                          <span className="action-log-group-label">
+                            第 {r.round} 轮{incomeSuffix(r.actions)}
+                          </span>
                           <div className="action-log-group-cards">
                             {r.round === 1 && faceDown === 1 ? (
                               <span className="discard-cell">
@@ -292,12 +325,13 @@ export function ActionLogModal({
                             ) : null}
                             {cards.map((c) => (
                               <span className="discard-cell" key={c.id}>
-                                <img src={cardImageSrc(c)} alt={cardName(c)} />
+                                <img className="discard-card" src={cardImageSrc(c)} alt={cardName(c)} />
+                                <span className="discard-card-name">{cardName(c)}</span>
                                 <span className="card-tip">{cardName(c)}</span>
                               </span>
                             ))}
                           </div>
-                          {r.actions.map((a, k) => (
+                          {r.actions.filter((a) => a.note !== 'round-income').map((a, k) => (
                             <span key={k} className="compact-history-act">
                               {actionLineText(a.action)}
                               {(
