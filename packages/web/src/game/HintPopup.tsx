@@ -50,7 +50,8 @@ export function HintPopup({
 }): ReactElement {
   const { locations, industries } = groupDeck(playerCount);
   const width = 300;
-  const left = Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8));
+  // 右缘与按钮右缘对齐(防右侧文字超出屏幕),越界时夹回视口内
+  const left = Math.max(8, Math.min(anchor.right - width, window.innerWidth - width - 8));
   const top = anchor.bottom + 6;
   return (
     <>

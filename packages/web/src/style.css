@@ -2669,12 +2669,11 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
   flex-wrap: unset;
-  align-items: start;
+  align-items: center;
   gap: 12px;
 }
 
 .wide-topline-left {
-  padding-top: 12px;
   white-space: nowrap;
 }
 
@@ -2885,4 +2884,23 @@ body {
   background: rgba(23, 26, 31, 0.7);
   color: #d8cdb4;
   white-space: nowrap;
+}
+
+/* 顶行按钮高度统一(离开对局与偏好设置同高对齐) */
+.wide-util-row .btn-ghost,
+.wide-topline-left .btn-ghost {
+  padding: 5px 14px;
+}
+
+/* 整体上抬:缩小顶行与地图之间的空隙,地图向上挪一点 */
+.game-screen.wide {
+  gap: 8px;
+}
+
+.game-screen.wide .wide-grid {
+  gap: 10px;
+}
+
+.top-action-bar {
+  padding: 6px 14px;
 }
