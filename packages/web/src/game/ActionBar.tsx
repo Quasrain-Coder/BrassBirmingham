@@ -84,8 +84,10 @@ export interface ActionDraft {
   /** 组完整(建筑+贸易商+啤酒够数)时收下本组,开始下一组。 */
   commitSellGroup: () => void;
   removeSellGroup: (i: number) => void;
-  /** 图上点贸易商位:未选建筑无效;未选贸易商=选定;同商人再点=切商人桶;不同=换。 */
+  /** 图上点贸易商位(商品图案):未选建筑无效;未选贸易商=选定;不同=换;不再兼任酒桶选择。 */
   clickMerchant: (id: MerchantId) => void;
+  /** 图上点贸易商酒桶图标:选该商人的桶为啤酒来源(须先选建筑;该商人有桶才有效)。 */
+  clickMerchantBeer: (id: MerchantId) => void;
   /** 槽位歧义（一槽多产业）时的待选 build。 */
   buildChoices: BuildAction[];
   /** 建造预览（非贴合的预览 token 盖在目标槽位，切换城市即跟随）。 */
@@ -316,12 +318,15 @@ export function useActionDraft({
   const clickMerchant = (id: MerchantId): void => {
     if (!candidates.some((a) => a.type === 'sell')) return;
     if (sellTile === null) return; // 顺序约束:先选建筑,否则无效
-    if (sellMerchant === null) {
-      pickSellMerchant(id);
-      return;
-    }
-    if (sellMerchant === id) toggleSellMerchantBarrel();
-    else pickSellMerchant(id);
+    pickSellMerchant(id);
+  };
+
+  const clickMerchantBeer = (id: MerchantId): void => {
+    if (!candidates.some((a) => a.type === 'sell')) return;
+    if (sellTile === null) return; // 顺序约束:先选建筑,否则无效
+    if (state.merchants[id].beer <= 0) return; // 该商人无桶,点了无效
+    if (sellMerchant !== id) pickSellMerchant(id); // 顺带切到该商人
+    toggleSellMerchantBarrel(); // 选/取消该商人的桶(与酒行按钮同状态)
   };
 
   const clickSlot = (location: LocationId, slotIndex: number): void => {
@@ -495,6 +500,7 @@ export function useActionDraft({
     commitSellGroup,
     removeSellGroup,
     clickMerchant,
+    clickMerchantBeer,
     buildChoices,
     buildPreview,
     buildIndustry,

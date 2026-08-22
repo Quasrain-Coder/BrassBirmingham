@@ -322,6 +322,23 @@ function GameBoard({
     }
     // 落到地图外且非垃圾桶/非版图:什么都不发生(token 回归原位)
   };
+  const handleSlotClick = (loc: LocationId, si: number): void => {
+    const t = state.board.slots[loc]?.[si];
+    if (
+      myTurn &&
+      selectedCard !== null &&
+      t !== null &&
+      t !== undefined &&
+      !t.flipped &&
+      t.player === seat &&
+      t.tile.sellable &&
+      draft.candidates.some((a) => a.type === 'sell')
+    ) {
+      setTopAction('sell'); // 视同按下出售,第一组板块即为该建筑(后续点贸易商)
+    }
+    draft.clickSlot(loc, si);
+  };
+
   const onTileDragStart = (ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>): void => {
     if (!myTurn || selectedCard === null) return;
     e.preventDefault();
@@ -375,9 +392,10 @@ function GameBoard({
         buildPreview={ghostBuild}
         beerMatches={ghostBeerMatches.length > 0 ? ghostBeerMatches : undefined}
         linkPreview={ghostLinks}
-        onSlotClick={myTurn ? draft.clickSlot : undefined}
+        onSlotClick={myTurn ? handleSlotClick : undefined}
         onLinkClick={myTurn ? draft.clickLink : undefined}
         onMerchantClick={myTurn ? draft.clickMerchant : undefined}
+        onMerchantBeerClick={myTurn ? draft.clickMerchantBeer : undefined}
       />
       {spotlight !== null ? (
         <div className="action-spotlight-banner" data-testid="action-spotlight">
