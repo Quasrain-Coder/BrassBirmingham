@@ -266,16 +266,17 @@ function DeckStack({
   img: string;
   testid: string;
 }): ReactElement {
-  // 横置显示尺寸:宽贴合凹槽,高按卡面 250:351 比例;余量即错位摊开的空间
-  const dispW = rect.w - 86;
+  // 横置显示尺寸:宽贴合凹槽,高按卡面 250:351 比例;每张向右下错位
+  // (百搭堆仅几张也能逐张分辨,大堆呈厚度)
+  const dispW = rect.w - 130;
   const dispH = Math.round((dispW * 250) / 351);
-  const dx = count > 1 ? Math.min(4, (rect.w - dispW - 20) / (count - 1)) : 0;
-  const dy = count > 1 ? Math.min(3, (rect.h - dispH - 20) / (count - 1)) : 0;
+  const dx = count > 1 ? Math.min(9, (rect.w - dispW - 16) / (count - 1)) : 0;
+  const dy = count > 1 ? Math.min(7, (rect.h - dispH - 16) / (count - 1)) : 0;
   return (
     <g className="deck-stack" data-testid={testid}>
       {Array.from({ length: count }, (_, i) => {
-        const cx = rect.x + 10 + dispW / 2 + i * dx;
-        const cy = rect.y + 10 + dispH / 2 + i * dy;
+        const cx = rect.x + 8 + dispW / 2 + i * dx;
+        const cy = rect.y + 8 + dispH / 2 + i * dy;
         return (
           <g key={i} transform={`rotate(90 ${Math.round(cx)} ${Math.round(cy)})`}>
             <image
