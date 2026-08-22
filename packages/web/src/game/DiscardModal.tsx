@@ -219,7 +219,8 @@ export function ActionLogModal({
             <div className="discard-columns action-log-columns">
               {seats.map((i) => (
                 <div className="discard-col" key={i}>
-                  <div className="action-log-history">{historyBlock(i)}</div>
+                  {/* 上下分隔模式:整窗统一滚轮,每列不再单独滚动 */}
+                  <div className="action-log-history no-scroll">{historyBlock(i)}</div>
                 </div>
               ))}
             </div>

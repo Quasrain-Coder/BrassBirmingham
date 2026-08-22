@@ -2904,3 +2904,17 @@ body {
 .top-action-bar {
   padding: 6px 14px;
 }
+
+/* 偏好设置行首描述列 */
+.pref-desc {
+  min-width: 112px;
+  color: #9aa4b2;
+  font-size: 0.82rem;
+  text-align: right;
+}
+
+/* 行动日志上下分隔模式:整窗统一滚轮,列内不单独滚动 */
+.action-log-history.no-scroll {
+  max-height: none;
+  overflow-y: visible;
+}

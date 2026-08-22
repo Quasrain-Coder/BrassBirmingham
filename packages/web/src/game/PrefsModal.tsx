@@ -19,12 +19,15 @@ export interface Prefs {
 }
 
 function SlideRow({
+  desc,
   left,
   right,
   leftActive,
   onToggle,
   testid,
 }: {
+  /** 行首描述(总体风格/卡牌悬浮效果/个人版图风格/行动日志风格)。 */
+  desc: string;
   left: string;
   right: string;
   leftActive: boolean;
@@ -33,6 +36,7 @@ function SlideRow({
 }): ReactElement {
   return (
     <div className="pref-row" data-testid={testid}>
+      <span className="pref-desc">{desc}</span>
       <span className={`pref-side${leftActive ? ' active' : ''}`}>{left}</span>
       <button
         type="button"
@@ -68,6 +72,7 @@ export function PrefsModal({
         </header>
         <SlideRow
           testid="pref-layout"
+          desc="界面总体风格"
           left="宽屏布局"
           right="经典布局"
           leftActive={prefs.layoutWide}
@@ -75,6 +80,7 @@ export function PrefsModal({
         />
         <SlideRow
           testid="pref-hand-raise"
+          desc="卡牌悬浮效果"
           left="选中集体悬浮"
           right="选中单张悬浮"
           leftActive={prefs.handRaise === 'all'}
@@ -84,6 +90,7 @@ export function PrefsModal({
         />
         <SlideRow
           testid="pref-stack-view"
+          desc="个人版图风格"
           left="桌游风格"
           right="列表风格"
           leftActive={prefs.stackView === 'mat'}
@@ -93,6 +100,7 @@ export function PrefsModal({
         />
         <SlideRow
           testid="pref-log-style"
+          desc="行动日志风格"
           left="上下分隔"
           right="回合分组"
           leftActive={prefs.logStyle === 'split'}
