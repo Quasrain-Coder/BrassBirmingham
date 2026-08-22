@@ -19,6 +19,8 @@ import { locationAnchor } from '../board/geometry';
 import { ActionBar, useActionDraft } from './ActionBar';
 import { AIIndicator } from './AIIndicator';
 import { ActionLogModal } from './DiscardModal';
+import { HintPopup } from './HintPopup';
+import type { AnchorRect } from './HintPopup';
 import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
 import { TopActionBar } from './TopActionBar';
 import { PrefsModal } from './PrefsModal';
@@ -247,6 +249,8 @@ function GameBoard({
   };
   // 行动日志弹窗开关(合并打出记录)
   const [actionLogOpen, setActionLogOpen] = useState(false);
+  // "提示卡"悬浮窗(顶部按钮,锚定按钮附近)
+  const [hintAnchor, setHintAnchor] = useState<AnchorRect | null>(null);
   // 偏好设置弹窗(视图/卡牌悬浮/个人版图风格)
   const [prefsOpen, setPrefsOpen] = useState(false);
   // 离开对局防呆确认弹窗
@@ -474,6 +478,14 @@ function GameBoard({
         <button
           type="button"
           className="btn-ghost"
+          data-testid="open-hint"
+          onClick={(e) => setHintAnchor(hintAnchor === null ? e.currentTarget.getBoundingClientRect() : null)}
+        >
+          提示卡
+        </button>
+        <button
+          type="button"
+          className="btn-ghost"
           data-testid="leave-game"
           onClick={() => setLeaveConfirmOpen(true)}
         >
@@ -500,6 +512,13 @@ function GameBoard({
           state={state}
           room={room}
           onClose={() => scoreHistory.setOpen(false)}
+        />
+      ) : null}
+      {hintAnchor !== null ? (
+        <HintPopup
+          playerCount={state.playerCount}
+          anchor={hintAnchor}
+          onClose={() => setHintAnchor(null)}
         />
       ) : null}
       {actionLogOpen ? (
@@ -604,6 +623,14 @@ function GameBoard({
             </button>
             <button type="button" className="btn-ghost" data-testid="open-log-modal" onClick={() => setActionLogOpen(true)}>
               行动日志
+            </button>
+            <button
+            type="button"
+            className="btn-ghost"
+            data-testid="open-hint"
+            onClick={(e) => setHintAnchor(hintAnchor === null ? e.currentTarget.getBoundingClientRect() : null)}
+            >
+            提示卡
             </button>
           </div>
         </div>

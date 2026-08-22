@@ -4,7 +4,7 @@
  * 悬浮窗锚定在按钮附近(非屏幕居中),点击遮罩任意处关闭。
  */
 import type { ReactElement } from 'react';
-import { buildDeck, WILD_INDUSTRY_COUNT, WILD_LOCATION_COUNT } from '@brass/engine';
+import { buildDeck } from '@brass/engine';
 import type { Card } from '@brass/engine';
 import { cardName } from './display';
 
@@ -85,13 +85,6 @@ export function HintPopup({
                 {g.label} ×{g.count}
               </span>
             ))}
-          </div>
-        </div>
-        <div className="hint-section">
-          <h4>百搭（独立供应）</h4>
-          <div className="hint-grid">
-            <span className="hint-chip">百搭·城市 ×{WILD_LOCATION_COUNT}</span>
-            <span className="hint-chip">百搭·产业 ×{WILD_INDUSTRY_COUNT}</span>
           </div>
         </div>
       </section>
