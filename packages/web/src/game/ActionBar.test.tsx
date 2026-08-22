@@ -366,6 +366,7 @@ function draftFixture(overrides: Partial<ActionDraft> = {}): ActionDraft {
     commitSellGroup: () => {},
     removeSellGroup: () => {},
     clickMerchant: () => {},
+    clickMerchantBeer: () => {},
     buildChoices: [],
     buildPreview: null,
     buildIndustry: null,
