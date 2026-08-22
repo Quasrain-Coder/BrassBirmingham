@@ -528,6 +528,9 @@ function GameBoard({
             {room !== null ? (
               <span className="game-room-code" data-testid="game-room-code">房间 {room.code}</span>
             ) : null}
+            <button type="button" className="btn-ghost" data-testid="leave-game" onClick={() => store.leaveRoom()}>
+              离开对局
+            </button>
           </div>
           <TopActionBar
             myTurn={myTurn}
@@ -560,9 +563,6 @@ function GameBoard({
             </button>
             <button type="button" className="btn-ghost" data-testid="open-log-modal" onClick={() => setLogOpen(true)}>
               行动日志
-            </button>
-            <button type="button" className="btn-ghost" data-testid="leave-game" onClick={() => store.leaveRoom()}>
-              离开对局
             </button>
           </div>
         </div>

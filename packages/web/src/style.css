@@ -2699,3 +2699,11 @@ body {
     display: none;
   }
 }
+
+/* 左列:离开对局居中于左上角版面上方 */
+.wide-topline-left {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
