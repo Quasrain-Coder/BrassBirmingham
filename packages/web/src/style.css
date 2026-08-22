@@ -2627,3 +2627,20 @@ body {
 .hand-bar.overlay.mode-all:not(.has-selection):hover .hand-card {
   transform: translateY(0);
 }
+
+/* 宽屏顶行:行动按钮行全宽居中,偏好设置等工具按钮钉在最右(左右版面统一从顶行下开始) */
+.wide-topline {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.wide-topline > .top-action-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wide-topline > .wide-util-row {
+  flex: none;
+  padding-bottom: 0;
+}

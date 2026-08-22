@@ -32,13 +32,8 @@ export interface TopActionBarProps {
   onCancel: () => void;
   onEndTurn: () => void;
   onResetTurn: () => void;
-  /** 房间号与顶部工具按钮(集中在最右侧,行动按钮居中,节省一整行高度)。 */
+  /** 行动行左侧房间号。 */
   roomCode: string | null;
-  onToggleLayout: () => void;
-  onOpenScore: () => void;
-  onOpenDiscard: () => void;
-  onOpenLog: () => void;
-  onLeave: () => void;
 }
 
 export function TopActionBar({
@@ -58,11 +53,6 @@ export function TopActionBar({
   onEndTurn,
   onResetTurn,
   roomCode,
-  onToggleLayout,
-  onOpenScore,
-  onOpenDiscard,
-  onOpenLog,
-  onLeave,
 }: TopActionBarProps): ReactElement {
   // 现金实时标记:显眼处常驻;暂存行动时预览结算后的现金(取消/重置即恢复)
   const money = state.players[seat]?.money ?? 0;

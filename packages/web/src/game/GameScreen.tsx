@@ -522,6 +522,46 @@ function GameBoard({
         </p>
       ) : null}
       {layoutWide ? (
+        <>
+        <div className="wide-topline">
+          <TopActionBar
+            myTurn={myTurn}
+            waitingFor={playerName(room ?? undefined, turnHold ?? current)}
+            selectedCard={myTurn ? selectedCard : null}
+            hand={hand}
+            draft={draft}
+            state={state}
+            turnHold={turnHold}
+            seat={seat}
+            canResetTurn={myTurn && state.actionsThisTurn > 0}
+            active={topAction}
+            onActiveChange={setTopAction}
+            roomCode={room?.code ?? null}
+            onConfirm={() => {
+              if (draft.resolved !== null) store.submitAction(draft.resolved);
+            }}
+            onCancel={draft.reset}
+            onEndTurn={() => store.endTurn()}
+            onResetTurn={() => store.resetTurn()}
+          />
+          <div className="wide-util-row">
+            <button type="button" className="btn-ghost" data-testid="open-prefs" onClick={() => setPrefsOpen(true)}>
+              偏好设置
+            </button>
+            <button type="button" className="btn-ghost" data-testid="open-score-modal" onClick={() => scoreHistory.setOpen(true)}>
+              分数构成
+            </button>
+            <button type="button" className="btn-ghost" data-testid="open-discard-modal" onClick={() => setDiscardOpen(true)}>
+              打出记录
+            </button>
+            <button type="button" className="btn-ghost" data-testid="open-log-modal" onClick={() => setLogOpen(true)}>
+              行动日志
+            </button>
+            <button type="button" className="btn-ghost" data-testid="leave-game" onClick={() => store.leaveRoom()}>
+              离开对局
+            </button>
+          </div>
+        </div>
         <div className="wide-grid">
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
@@ -531,53 +571,7 @@ function GameBoard({
             ))}
           </aside>
           <div className="wide-center">
-            <div className="wide-util-row">
-              {room !== null ? (
-                <span className="game-room-code" data-testid="game-room-code">房间 {room.code}</span>
-              ) : null}
-              <span className="top-action-spacer" />
-              <button type="button" className="btn-ghost" data-testid="open-prefs" onClick={() => setPrefsOpen(true)}>
-                偏好设置
-              </button>
-              <button type="button" className="btn-ghost" data-testid="open-score-modal" onClick={() => scoreHistory.setOpen(true)}>
-                分数构成
-              </button>
-              <button type="button" className="btn-ghost" data-testid="open-discard-modal" onClick={() => setDiscardOpen(true)}>
-                打出记录
-              </button>
-              <button type="button" className="btn-ghost" data-testid="open-log-modal" onClick={() => setLogOpen(true)}>
-                行动日志
-              </button>
-              <button type="button" className="btn-ghost" data-testid="leave-game" onClick={() => store.leaveRoom()}>
-                离开对局
-              </button>
-            </div>
             <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
-            <TopActionBar
-              myTurn={myTurn}
-              waitingFor={playerName(room ?? undefined, turnHold ?? current)}
-              selectedCard={myTurn ? selectedCard : null}
-              hand={hand}
-              draft={draft}
-              state={state}
-              turnHold={turnHold}
-              seat={seat}
-              canResetTurn={myTurn && state.actionsThisTurn > 0}
-              active={topAction}
-              onActiveChange={setTopAction}
-              roomCode={room?.code ?? null}
-              onToggleLayout={toggleLayout}
-              onOpenScore={() => scoreHistory.setOpen(true)}
-              onOpenDiscard={() => setDiscardOpen(true)}
-              onOpenLog={() => setLogOpen(true)}
-              onLeave={() => store.leaveRoom()}
-              onConfirm={() => {
-                if (draft.resolved !== null) store.submitAction(draft.resolved);
-              }}
-              onCancel={draft.reset}
-              onEndTurn={() => store.endTurn()}
-              onResetTurn={() => store.resetTurn()}
-            />
             {boardEl}
           </div>
           <aside className="wide-col wide-col-right">
@@ -588,6 +582,7 @@ function GameBoard({
             ))}
           </aside>
         </div>
+        </>
       ) : (
         <>
           <div className="player-boards">
