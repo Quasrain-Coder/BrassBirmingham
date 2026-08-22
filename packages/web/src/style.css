@@ -2531,7 +2531,8 @@ body {
 
 .hand-bar.overlay .hand-card {
   pointer-events: auto;
-  transform: translateY(62%);
+  /* 默认露出长度:约 1/4 牌顶(原 38% 的 3/4) */
+  transform: translateY(72%);
   transition: transform 0.15s ease;
 }
 
