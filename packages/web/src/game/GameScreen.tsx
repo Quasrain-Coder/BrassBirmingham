@@ -306,7 +306,7 @@ function GameBoard({
       draft.toggleDevelop(ind);
     }
   };
-  const onTileDragStart = (ind: IndustryType, e: React.PointerEvent<SVGElement>): void => {
+  const onTileDragStart = (ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>): void => {
     if (!myTurn || selectedCard === null) return;
     e.preventDefault();
     // ghost 就用被拖 token 本体(原尺寸,贴在光标正中心),不再用放大的投影

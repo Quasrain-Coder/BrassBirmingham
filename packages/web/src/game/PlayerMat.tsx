@@ -33,7 +33,7 @@ export function PlayerMat({
   /** 玩家色 key(板块 token 图文件名用)。 */
   colorKey: 'purple' | 'yellow' | 'orange' | 'teal';
   /** 按下某产业栈顶(最低级)板块开始拖拽(宽屏拖拽建造/研发)。 */
-  onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<SVGElement>) => void) | undefined;
+  onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>) => void) | undefined;
   /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失,如同已被拿起)。 */
   hiddenTopInd?: IndustryType | null | undefined;
 }): ReactElement {

@@ -270,7 +270,7 @@ export function PlayerBoard({
   /** 本时代全部行动及实际现金变化(服务端结算时记录,面板行动行的盈亏准确值)。 */
   eraActions?: { action: Action; moneyDelta: number }[] | undefined;
   /** 按下产业栈顶板块开始拖拽(宽屏拖拽建造/研发,仅紧凑面板用)。 */
-  onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<SVGElement>) => void) | undefined;
+  onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>) => void) | undefined;
   /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失)。 */
   hiddenTopInd?: IndustryType | null | undefined;
   /** 个人版图风格(偏好设置收口):mat=桌游风格;list=列表风格(原"明细")。 */
@@ -415,7 +415,12 @@ export function PlayerBoard({
               hiddenTopInd={hiddenTopInd}
             />
           ) : (
-            INDUSTRY_ORDER.map((ind) => (
+            INDUSTRY_ORDER.map((ind) => {
+              // 栈顶(有剩余的最低级)可拖拽:拖到地图城市=建造,拖出地图/版图=研发
+              const topLevel = TILES.filter((t) => t.industry === ind)
+                .map((d) => d.level)
+                .find((lv) => (remainingByTile.get(`${ind}-${lv}`) ?? 0) > 0);
+              return (
               <div key={ind} className="board-ind">
                 <span className="board-ind-name" style={{ color: INDUSTRY_STYLE[ind].fill }}>
                   {industryName(ind)}
@@ -435,12 +440,23 @@ export function PlayerBoard({
                       `£${def.costMoney}` +
                       (def.costCoal > 0 ? ` 煤${def.costCoal}` : '') +
                       (def.costIron > 0 ? ` 铁${def.costIron}` : '');
+                    const isTop = def.level === topLevel;
+                    const dragging = isTop && hiddenTopInd === ind;
                     return (
                       <span
                         key={def.level}
                         className={`stack-tile${remaining === 0 ? ' exhausted' : ''}`}
                         data-testid={`player-board-stack-${seat}-${ind}-${def.level}`}
                         title={`${industryName(ind)} Lv${def.level}｜建造成本 ${cost}｜翻面得 ${def.vp} 分、收入 +${def.incomeAdvance} 级`}
+                        style={{
+                          ...(isTop && onTileDragStart !== undefined && remaining > 0 ? { cursor: 'grab' } : {}),
+                          ...(dragging ? { opacity: 0.25 } : {}),
+                        }}
+                        onPointerDown={
+                          isTop && onTileDragStart !== undefined && remaining > 0
+                            ? (e) => onTileDragStart(ind, e)
+                            : undefined
+                        }
                       >
                         <img
                           src={`/assets/tiles/${ind}-${def.level}-${colorKey}.png`}
@@ -453,7 +469,8 @@ export function PlayerBoard({
                   })}
                 </span>
               </div>
-            ))
+              );
+            })
           )}
         </div>
         {discardOpen ? (
