@@ -54,8 +54,8 @@ interface GameBoardProps {
   resetNotice: { seat: PlayerIndex; n: number } | null;
   /** 各座位本时代已打出的牌(打出记录弹层用)。 */
   playedCards: Card[][];
-  /** 各座位本时代的全部行动及实际现金变化(面板/日志用)。 */
-  eraActions: { action: Action; moneyDelta: number }[][];
+  /** 各座位本时代的全部行动及实际现金变化(面板/日志用;note='round-income' 为轮末收入合成条目)。 */
+  eraActions: { action: Action; moneyDelta: number; note?: 'round-income' }[][];
 }
 
 /** 非本人回合的固定空数组：避免每渲染新引用触发 useActionDraft 的重置 effect 死循环。 */
@@ -102,6 +102,20 @@ function GameBoard({
     () => (myTurn ? buildabilityFor(state, seat, legalActions) : undefined),
     [myTurn, state, seat, legalActions],
   );
+  // 时代内当前轮号:引擎 state.round 跨时代不重置(rail 时代为 9~16),而个人版图
+  // "本回合"按时代内轮次分组——用全座位真实行动数 ÷ 每轮行动数推算
+  // (运河首轮 1 动/人,其余每轮 2 动/人;轮末收入合成条目不计)。
+  const roundNow = useMemo(() => {
+    const pc = state.playerCount;
+    const real = eraActions.reduce(
+      (n, list) => n + list.filter((a) => a.note !== 'round-income').length,
+      0,
+    );
+    if (state.era === 'canal') {
+      return real <= pc ? 1 : 2 + Math.floor((real - pc) / (2 * pc));
+    }
+    return Math.floor(real / (2 * pc)) + 1;
+  }, [eraActions, state.era, state.playerCount]);
   // 分数构成:时代切换时自动弹出(手动关闭),头部按钮随时查阅
   const scoreHistory = useScoreHistory(state);
 
@@ -657,7 +671,7 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? draft.developPicks : undefined} developBinRef={i === seat ? developBinRef : undefined} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} roundNow={roundNow} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? draft.developPicks : undefined} developBinRef={i === seat ? developBinRef : undefined} />
               </div>
             ))}
           </aside>
@@ -668,7 +682,7 @@ function GameBoard({
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? draft.developPicks : undefined} developBinRef={i === seat ? developBinRef : undefined} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} roundNow={roundNow} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? draft.developPicks : undefined} developBinRef={i === seat ? developBinRef : undefined} />
               </div>
             ))}
           </aside>

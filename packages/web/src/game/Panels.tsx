@@ -248,6 +248,7 @@ export function PlayerBoard({
   buildStatus,
   playedCards,
   eraActions,
+  roundNow,
   onTileDragStart,
   hiddenTopInd,
   stackView,
@@ -271,6 +272,9 @@ export function PlayerBoard({
   playedCards?: Card[] | undefined;
   /** 本时代全部行动及实际现金变化(服务端结算时记录;note='round-income' 为轮末收入)。 */
   eraActions?: { action: Action; moneyDelta: number; note?: 'round-income' }[] | undefined;
+  /** 时代内当前轮号(由全座位 eraActions 推算;引擎 state.round 跨时代不重置,
+   *  不能直接拿来匹配时代内分组的轮次)。缺省回退 state.round。 */
+  roundNow?: number | undefined;
   /** 按下产业栈顶板块开始拖拽(宽屏拖拽建造/研发,仅紧凑面板用)。 */
   onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>) => void) | undefined;
   /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失)。 */
@@ -369,7 +373,9 @@ export function PlayerBoard({
         </>
       );
     };
-    const acts = (rounds.find((r) => r.round === state.round)?.actions ?? []).filter(
+    // 按时代内当前轮号 roundNow 匹配(引擎 state.round 跨时代不重置,rail 时代
+    // 是 9~16,直接匹配会永远落空;缺省回退 state.round)
+    const acts = (rounds.find((r) => r.round === (roundNow ?? state.round))?.actions ?? []).filter(
       (a) => a.note !== 'round-income',
     );
     const actionCardsText = (a: Action): string =>
