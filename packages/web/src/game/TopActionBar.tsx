@@ -32,8 +32,6 @@ export interface TopActionBarProps {
   onCancel: () => void;
   onEndTurn: () => void;
   onResetTurn: () => void;
-  /** 行动行左侧房间号。 */
-  roomCode: string | null;
 }
 
 export function TopActionBar({
@@ -52,7 +50,6 @@ export function TopActionBar({
   onCancel,
   onEndTurn,
   onResetTurn,
-  roomCode,
 }: TopActionBarProps): ReactElement {
   // 现金实时标记:显眼处常驻;暂存行动时预览结算后的现金(取消/重置即恢复)
   const money = state.players[seat]?.money ?? 0;
@@ -74,9 +71,6 @@ export function TopActionBar({
     return (
       <section className="action-bar top-action-bar turn-hold" data-testid="action-bar">
         <div className="top-action-row">
-          {roomCode !== null ? (
-            <span className="game-room-code" data-testid="game-room-code">房间 {roomCode}</span>
-          ) : null}
           <span className="top-action-hint" data-testid="turn-hold-hint">
             本回合行动已完成,确认后进入下一位玩家;也可以重置本回合重新行动。
           </span>
@@ -95,9 +89,6 @@ export function TopActionBar({
     return (
       <section className="action-bar top-action-bar" data-testid="action-bar">
         <div className="top-action-row">
-          {roomCode !== null ? (
-            <span className="game-room-code" data-testid="game-room-code">房间 {roomCode}</span>
-          ) : null}
           <span className="top-action-hint" data-testid="waiting">
             {turnHold !== null ? `等待 ${waitingFor} 确认回合…` : `等待 ${waitingFor} 行动…`}
           </span>
@@ -135,10 +126,6 @@ export function TopActionBar({
   return (
     <section className="action-bar top-action-bar" data-testid="action-bar">
       <div className="top-action-row">
-        {roomCode !== null ? (
-          <span className="game-room-code" data-testid="game-room-code">房间 {roomCode}</span>
-        ) : null}
-        <span className="top-action-spacer" />
         <button
           type="button"
           data-testid="top-act-build"
@@ -176,16 +163,15 @@ export function TopActionBar({
         >
           搜寻
         </button>
-        {loan !== undefined ? (
-          <button
-            type="button"
-            data-testid="quick-loan"
-            className={draft.resolved?.type === 'loan' ? 'selected' : undefined}
-            onClick={() => draft.choose(loan)}
-          >
-            贷款
-          </button>
-        ) : null}
+        <button
+          type="button"
+          data-testid="quick-loan"
+          className={draft.resolved?.type === 'loan' ? 'selected' : undefined}
+          disabled={loan === undefined}
+          onClick={loan !== undefined ? () => draft.choose(loan) : undefined}
+        >
+          贷款
+        </button>
         {onlyPass && pass !== undefined ? (
           <button type="button" data-testid="quick-pass" onClick={() => draft.choose(pass)}>
             过

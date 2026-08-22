@@ -524,6 +524,11 @@ function GameBoard({
       {layoutWide ? (
         <>
         <div className="wide-topline">
+          <div className="wide-topline-left">
+            {room !== null ? (
+              <span className="game-room-code" data-testid="game-room-code">房间 {room.code}</span>
+            ) : null}
+          </div>
           <TopActionBar
             myTurn={myTurn}
             waitingFor={playerName(room ?? undefined, turnHold ?? current)}
@@ -536,7 +541,6 @@ function GameBoard({
             canResetTurn={myTurn && state.actionsThisTurn > 0}
             active={topAction}
             onActiveChange={setTopAction}
-            roomCode={room?.code ?? null}
             onConfirm={() => {
               if (draft.resolved !== null) store.submitAction(draft.resolved);
             }}

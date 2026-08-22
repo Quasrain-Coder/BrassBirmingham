@@ -2662,3 +2662,40 @@ body {
     width: 100%;
   }
 }
+
+/* 顶行三列与内容网格同构:房间号左列、行动行居中列(从地图左缘起排)、工具按钮右列右对齐 */
+.wide-topline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  flex-wrap: unset;
+  align-items: start;
+  gap: 12px;
+}
+
+.wide-topline-left {
+  padding-top: 12px;
+  white-space: nowrap;
+}
+
+.wide-topline > .wide-util-row {
+  justify-content: flex-end;
+  margin-left: 0;
+}
+
+/* 行动行按钮无论是否已选牌:位置与风格保持一致(置灰不淡化) */
+.top-action-row > button:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+/* 窄屏仍拆两行:工具按钮在上,行动行在下 */
+@media (max-width: 1560px) {
+  .wide-topline {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .wide-topline-left {
+    display: none;
+  }
+}
