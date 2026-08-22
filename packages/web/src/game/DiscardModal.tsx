@@ -123,14 +123,75 @@ export function ActionLogModal({
   eraActions,
   room,
   onClose,
+  logStyle = 'split',
 }: {
   state: FilteredState;
   playedCards: Card[][];
   eraActions: EraActionEntry[][];
   room?: RoomState | undefined;
   onClose: () => void;
+  /** 日志风格(偏好设置):split=上卡牌下日志(统一分隔线);grouped=按回合分组。 */
+  logStyle?: 'split' | 'grouped' | undefined;
 }): ReactElement {
   const faceDown = state.era === 'canal' ? 1 : 0;
+  const seats = state.players.map((_, i) => i as PlayerIndex);
+
+  /** 该座位本时代的打出卡面列(共用)。 */
+  const cardsBlock = (i: PlayerIndex, cards: Card[]) => (
+    <div className="discard-cards">
+      {faceDown === 1 ? (
+        <span className="discard-cell">
+          <img className="discard-card discard-card-back" src="/assets/cards/back.png" alt="开局暗置" />
+          <span className="discard-card-name">暗置</span>
+          <span className="card-tip">开局暗置（不公开）</span>
+        </span>
+      ) : null}
+      {cards.map((c) => (
+        <span className="discard-cell" key={c.id}>
+          <img className="discard-card" src={cardImageSrc(c)} alt={cardName(c)} />
+          <span className="discard-card-name">{cardName(c)}</span>
+          <span className="card-tip">{cardName(c)}</span>
+        </span>
+      ))}
+    </div>
+  );
+
+  const historyBlock = (i: PlayerIndex) => {
+    const rounds = buildRounds(state, eraActions[i] ?? []);
+    if (rounds.length === 0) return <p className="era-actions-empty">本时代尚未行动</p>;
+    return rounds.map((r) => (
+      <div key={r.round} className="compact-history-round">
+        <span className="compact-history-label">第 {r.round} 轮</span>
+        {r.actions.map((a, k) => (
+          <span key={k} className="compact-history-act">
+            {describeAction(a.action)}
+            {a.moneyDelta !== 0 ? (
+              <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
+                {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : `−£${-a.moneyDelta}`}
+              </em>
+            ) : null}
+            <em className="compact-history-card">{actionCardsText(a.action)}</em>
+          </span>
+        ))}
+      </div>
+    ));
+  };
+
+  /** 某一轮打出的卡(每个行动 1 张;搜寻弃 3 张,该轮合计可达 4 张)。 */
+  const roundCards = (r: { round: number; actions: EraActionEntry[] }): Card[] =>
+    r.actions.flatMap((a) =>
+      a.action.type === 'scout'
+        ? a.action.cardIds.map((id) => cardFromId(id))
+        : [cardFromId(a.action.cardId)],
+    );
+
+  const colHead = (i: PlayerIndex, count: number) => (
+    <div className="discard-col-head">
+      <span className="color-dot" style={{ background: PLAYER_COLORS[i] }} />
+      {playerName(room, i)}（{count}）
+    </div>
+  );
+
   return (
     <div className="modal-backdrop" data-testid="action-log-modal" onClick={onClose}>
       <section className="score-modal discard-modal action-log-modal" onClick={(e) => e.stopPropagation()}>
@@ -140,58 +201,82 @@ export function ActionLogModal({
             ×
           </button>
         </header>
-        <div className="discard-columns action-log-columns">
-          {state.players.map((_, i) => {
-            const cards = playedCards[i] ?? [];
-            const rounds = buildRounds(state, eraActions[i] ?? []);
-            return (
-              <div className="discard-col" key={i} data-testid={`action-log-col-${i}`}>
-                <div className="discard-col-head">
-                  <span className="color-dot" style={{ background: PLAYER_COLORS[i as PlayerIndex] }} />
-                  {playerName(room, i as PlayerIndex)}（{cards.length + faceDown}）
+        {logStyle === 'split' ? (
+          <>
+            {/* 风格 A:上方全是卡牌,统一分隔线,下方全是日志 */}
+            <div className="discard-columns action-log-columns">
+              {seats.map((i) => {
+                const cards = playedCards[i] ?? [];
+                return (
+                  <div className="discard-col" key={i}>
+                    {colHead(i, cards.length + faceDown)}
+                    {cardsBlock(i, cards)}
+                  </div>
+                );
+              })}
+            </div>
+            <hr className="action-log-divider" />
+            <div className="discard-columns action-log-columns">
+              {seats.map((i) => (
+                <div className="discard-col" key={i}>
+                  <div className="action-log-history">{historyBlock(i)}</div>
                 </div>
-                <div className="discard-cards">
-                  {faceDown === 1 ? (
-                    <span className="discard-cell">
-                      <img className="discard-card discard-card-back" src="/assets/cards/back.png" alt="开局暗置" />
-                      <span className="discard-card-name">暗置</span>
-                      <span className="card-tip">开局暗置（不公开）</span>
-                    </span>
-                  ) : null}
-                  {cards.map((c) => (
-                    <span className="discard-cell" key={c.id}>
-                      <img className="discard-card" src={cardImageSrc(c)} alt={cardName(c)} />
-                      <span className="discard-card-name">{cardName(c)}</span>
-                      <span className="card-tip">{cardName(c)}</span>
-                    </span>
-                  ))}
-                </div>
-                <div className="action-log-history">
+              ))}
+            </div>
+          </>
+        ) : (
+          /* 风格 B:按回合分组——每组一行当轮卡牌 + 一/两行行动,玩家间对齐 */
+          <div className="discard-columns action-log-columns">
+            {seats.map((i) => {
+              const rounds = buildRounds(state, eraActions[i] ?? []);
+              return (
+                <div className="discard-col" key={i}>
+                  {colHead(i, (playedCards[i] ?? []).length + faceDown)}
                   {rounds.length === 0 ? (
                     <p className="era-actions-empty">本时代尚未行动</p>
                   ) : (
-                    rounds.map((r) => (
-                      <div key={r.round} className="compact-history-round">
-                        <span className="compact-history-label">第 {r.round} 轮</span>
-                        {r.actions.map((a, k) => (
-                          <span key={k} className="compact-history-act">
-                            {describeAction(a.action)}
-                            {a.moneyDelta !== 0 ? (
-                              <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
-                                {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : `−£${-a.moneyDelta}`}
-                              </em>
+                    rounds.map((r) => {
+                      const cards = roundCards(r);
+                      return (
+                        <div key={r.round} className="action-log-group">
+                          <span className="action-log-group-label">第 {r.round} 轮</span>
+                          <div className="action-log-group-cards">
+                            {r.round === 1 && faceDown === 1 ? (
+                              <span className="discard-cell">
+                                <img
+                                  className="discard-card discard-card-back"
+                                  src="/assets/cards/back.png"
+                                  alt="开局暗置"
+                                />
+                                <span className="card-tip">开局暗置（不公开）</span>
+                              </span>
                             ) : null}
-                            <em className="compact-history-card">{actionCardsText(a.action)}</em>
-                          </span>
-                        ))}
-                      </div>
-                    ))
+                            {cards.map((c) => (
+                              <span className="discard-cell" key={c.id}>
+                                <img src={cardImageSrc(c)} alt={cardName(c)} />
+                                <span className="card-tip">{cardName(c)}</span>
+                              </span>
+                            ))}
+                          </div>
+                          {r.actions.map((a, k) => (
+                            <span key={k} className="compact-history-act">
+                              {describeAction(a.action)}
+                              {a.moneyDelta !== 0 ? (
+                                <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
+                                  {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : `−£${-a.moneyDelta}`}
+                                </em>
+                              ) : null}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </section>
     </div>
   );

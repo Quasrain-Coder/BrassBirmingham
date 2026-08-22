@@ -2771,3 +2771,45 @@ body {
   grid-column: 2;
   justify-self: center;
 }
+
+/* 金钱标记钉在行动行最右:等待/自己行动/确认回合各状态位置一致 */
+.top-action-row .top-action-money {
+  margin-left: auto;
+}
+
+/* 行动日志弹窗:风格 A 的上下统一分隔线 */
+.action-log-divider {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid #6b5b3e;
+}
+
+/* 行动日志弹窗:风格 B(回合分组) */
+.action-log-group {
+  border: 1px solid #3a3226;
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.action-log-group-label {
+  color: #b3a888;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.action-log-group-cards {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.action-log-group-cards img {
+  width: 40px;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid #4a3f2c;
+  display: block;
+}

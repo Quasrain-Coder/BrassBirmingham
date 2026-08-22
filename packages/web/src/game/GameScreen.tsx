@@ -257,6 +257,9 @@ function GameBoard({
   const [stackView, setStackView] = useState<StackViewMode>(
     () => (storage?.getItem('brass-stack-view') === 'list' ? 'list' : 'mat'),
   );
+  const [logStyle, setLogStyle] = useState<'split' | 'grouped'>(
+    () => (storage?.getItem('brass-log-style') === 'grouped' ? 'grouped' : 'split'),
+  );
   // 宽屏顶部行动栏当前展开的行动类型(选牌变化时收起)
   const [topAction, setTopAction] = useState<TopActionKind>(null);
   useEffect(() => setTopAction(null), [selectedCard]);
@@ -496,6 +499,7 @@ function GameBoard({
           playedCards={playedCards}
           eraActions={eraActions}
           room={room ?? undefined}
+          logStyle={logStyle}
           onClose={() => setActionLogOpen(false)}
         />
       ) : null}
@@ -532,7 +536,7 @@ function GameBoard({
       ) : null}
       {prefsOpen ? (
         <PrefsModal
-          prefs={{ layoutWide, handRaise, stackView }}
+          prefs={{ layoutWide, handRaise, stackView, logStyle }}
           onChange={(next) => {
             setLayoutWideState(next.layoutWide);
             setHandRaise(next.handRaise);
@@ -540,6 +544,8 @@ function GameBoard({
             storage?.setItem('brass-layout', next.layoutWide ? 'wide' : 'classic');
             storage?.setItem('brass-hand-raise', next.handRaise);
             storage?.setItem('brass-stack-view', next.stackView);
+            storage?.setItem('brass-log-style', next.logStyle);
+            setLogStyle(next.logStyle);
           }}
           onClose={() => setPrefsOpen(false)}
         />

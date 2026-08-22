@@ -9,11 +9,13 @@ import type { ReactElement } from 'react';
 
 export type HandRaiseMode = 'single' | 'all';
 export type StackViewMode = 'mat' | 'list';
+export type LogStyleMode = 'split' | 'grouped';
 
 export interface Prefs {
   layoutWide: boolean;
   handRaise: HandRaiseMode;
   stackView: StackViewMode;
+  logStyle: LogStyleMode;
 }
 
 function SlideRow({
@@ -87,6 +89,15 @@ export function PrefsModal({
           leftActive={prefs.stackView === 'mat'}
           onToggle={() =>
             onChange({ ...prefs, stackView: prefs.stackView === 'mat' ? 'list' : 'mat' })
+          }
+        />
+        <SlideRow
+          testid="pref-log-style"
+          left="上下分隔"
+          right="回合分组"
+          leftActive={prefs.logStyle === 'split'}
+          onToggle={() =>
+            onChange({ ...prefs, logStyle: prefs.logStyle === 'split' ? 'grouped' : 'split' })
           }
         />
       </section>
