@@ -378,11 +378,11 @@ export function PlayerBoard({
               acts.map((a, i) => (
                 <span className="compact-round-line" key={i}>
                   {describeAction(a.action)}
-                  {a.moneyDelta !== 0 ? (
+                  {(
                     <em className={`compact-round-delta ${a.moneyDelta > 0 ? 'pos' : 'neg'}`}>
-                      {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : `−£${-a.moneyDelta}`}
+                      {a.moneyDelta > 0 ? `+£${a.moneyDelta}` : a.moneyDelta < 0 ? `−£${-a.moneyDelta}` : '−£0'}
                     </em>
-                  ) : null}
+                  )}
                   <em className="compact-history-card">{actionCardsText(a.action)}</em>
                 </span>
               ))
