@@ -16,6 +16,7 @@ import { INDUSTRY_STYLE, PLAYER_COLORS, PLAYER_COLOR_KEYS } from '../board/Board
 import { cardFaceKey, cardFromId, cardName, describeAction, industryName, locationName, merchantName } from './display';
 import { INDUSTRY_ORDER } from './interactions';
 import { DiscardModal } from './DiscardModal';
+import { HintPopup } from './HintPopup';
 import { PlayerMat } from './PlayerMat';
 import type { LogEntry } from './store';
 
@@ -285,6 +286,9 @@ export function PlayerBoard({
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
   // 单人打出记录弹层开关(版图/明细切换旁的"打出"按钮)
   const [discardOpen, setDiscardOpen] = useState(false);
+  // "提示卡"悬浮窗(牌堆构成速查,锚定按钮附近)
+  const [hintOpen, setHintOpen] = useState(false);
+  const hintBtnRef = useRef<HTMLButtonElement>(null);
   // 前几回合动作下拉(第二行末尾箭头)
   const [historyOpen, setHistoryOpen] = useState(false);
   // 堆叠视图:版图(官方玩家面板美术)/明细(#19 列表)——记住玩家选择
@@ -358,6 +362,16 @@ export function PlayerBoard({
           <span className="player-name">{playerName(room, seat)}</span>
           <AIBadge room={room} seat={seat} />
           <span className="head-money money-oval">£{self.money}</span>
+          <button
+            type="button"
+            className="discard-open-btn"
+            data-testid={`hint-open-${seat}`}
+            title="查看本局牌堆构成(各城市/产业牌数)"
+            ref={hintBtnRef}
+            onClick={() => setHintOpen((v) => !v)}
+          >
+            提示卡
+          </button>
           {playedCards !== undefined ? (
             <button
               type="button"
@@ -504,6 +518,13 @@ export function PlayerBoard({
             })
           )}
         </div>
+        {hintOpen && hintBtnRef.current !== null ? (
+          <HintPopup
+            playerCount={state.playerCount}
+            anchor={hintBtnRef.current.getBoundingClientRect()}
+            onClose={() => setHintOpen(false)}
+          />
+        ) : null}
         {discardOpen ? (
           <DiscardModal
             state={state}
