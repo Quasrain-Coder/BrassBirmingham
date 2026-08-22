@@ -7,9 +7,10 @@
  *
  * 用法（在 packages/server 下）：
  *   npx vite-node scripts/drive-to-target.ts [--room 9VYD99 | --game g_xxx]
- *       [--to last-canal-round | canal:N | rail:N | +N] [--db ./brass.db] [--no-ai]
+ *       [--to last-canal-round | last-rail-round | canal:N | rail:N | +N] [--db ./brass.db] [--no-ai]
  *
  *   --to last-canal-round  运河时代最后一轮开局（默认）
+ *   --to last-rail-round   铁路时代最后一轮开局（全局最后一轮）
  *   --to canal:N / rail:N  指定时代第 N 轮开局（时代内轮号,引擎 round 跨时代不重置）
  *   --to +N                从当前进度再往前走 N 个行动
  *   --no-ai                把 seats.is_ai 清零。默认保留——resume 时 driveAI 会
@@ -115,18 +116,21 @@ function main(): void {
 
   // 4) 计算截断点
   let cutIdx: number;
-  if (args.to === 'last-canal-round') {
-    const canalRecs = recs.filter((r) => r.era === 'canal');
-    if (canalRecs.length === 0) throw new Error('模拟中没有运河时代行动?');
-    const lastRound = canalRecs[canalRecs.length - 1]!.round;
-    cutIdx = recs.findIndex((r) => r.era === 'canal' && r.round === lastRound);
+  const lastRoundOf = (era: string): number => {
+    const eraRecs = recs.filter((r) => r.era === era);
+    if (eraRecs.length === 0) throw new Error(`模拟中没有 ${era} 时代行动?`);
+    const lastRound = eraRecs[eraRecs.length - 1]!.round;
+    return recs.findIndex((r) => r.era === era && r.round === lastRound);
+  };
+  if (args.to === 'last-canal-round' || args.to === 'last-rail-round') {
+    cutIdx = lastRoundOf(args.to === 'last-canal-round' ? 'canal' : 'rail');
   } else if (args.to.startsWith('+')) {
     const n = Number.parseInt(args.to.slice(1), 10);
     if (!Number.isInteger(n) || n < 1) throw new Error(`--to ${args.to}: N 须为正整数`);
     cutIdx = Math.min(existing.length + n, recs.length);
   } else {
     const m = /^(canal|rail):(\d+)$/.exec(args.to);
-    if (m === null) throw new Error(`--to ${args.to}: 支持 last-canal-round | canal:N | rail:N | +N`);
+    if (m === null) throw new Error(`--to ${args.to}: 支持 last-canal-round | last-rail-round | canal:N | rail:N | +N`);
     // 引擎 round 跨时代不重置(canal 末轮=8,rail 首轮=9)——N 按时代内轮号映射
     const eraRounds = [...new Set(recs.filter((r) => r.era === m[1]).map((r) => r.round))];
     const targetRound = eraRounds[Number(m[2]) - 1];
