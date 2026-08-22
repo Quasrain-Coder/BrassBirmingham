@@ -121,7 +121,10 @@ describe('session restore（服务器重启后按库重放恢复）', () => {
     await a.send({ type: 'start_game', protocolVersion: PV, token: credA.token });
     const mySeat = credA.seat as number;
 
-    /** 轮到就动、被扣住就放行,直到看到一条 AI 的 action_applied。 */
+    /** 轮到就动、被扣住就放行,直到看到一条 AI 的 action_applied。
+     *  注意:end_turn 后若顺位重排仍是自己先动,服务端不会产生任何 action_applied,
+     *  盲目等待会死锁——end_turn 后先读下一个快照再分流:自己回合继续动,
+     *  AI 回合(legal=0 且无扣留)才等待其行动。 */
     async function playUntilAIActs(client: TestClient, token: string, maxRounds: number): Promise<boolean> {
       for (let i = 0; i < maxRounds; i += 1) {
         const snap = await client.nextMessage('snapshot');
@@ -132,10 +135,15 @@ describe('session restore（服务器重启后按库重放恢复）', () => {
             token,
             action: snap.legalActions[0],
           });
+          const applied = await client.nextMessage('action_applied', undefined, 10_000);
+          if ((applied.player as number) !== mySeat) return true;
+          continue;
         }
         if (snap.turnHold === mySeat) {
           client.send({ type: 'end_turn', protocolVersion: PV, token });
+          continue;
         }
+        // AI 回合:等待其行动
         const applied = await client.nextMessage('action_applied', undefined, 10_000);
         if ((applied.player as number) !== mySeat) return true;
       }
@@ -153,7 +161,7 @@ describe('session restore（服务器重启后按库重放恢复）', () => {
     expect(await playUntilAIActs(a2, credA.token as string, 16)).toBe(true);
   }, 30_000);
 
-  it('已终局对局不可恢复:resume 回 session-lost', async () => {
+  it('已终局对局可恢复:resume 重放重建为只读对局(查看终局盘面/记录)', async () => {
     dir = await mkdtemp(join(tmpdir(), 'brass-restore-'));
     const s1 = await boot();
     const a = await connect(s1.port);
@@ -167,7 +175,7 @@ describe('session restore（服务器重启后按库重放恢复）', () => {
     await a.send({ type: 'start_game', protocolVersion: PV, token: credA.token });
     await a.nextMessage('snapshot');
 
-    // 把对局直接标成 finished(模拟已终局);restore 判定 status!=='playing' → 不可恢复
+    // 把对局直接标成 finished(模拟已终局);restore 放行 finished → 按 actions 重放重建
     const db = openDb(join(dir, 'play.db'));
     const persisted = findSeatByToken(db, credA.token as string);
     expect(persisted).not.toBeNull();
@@ -176,8 +184,8 @@ describe('session restore（服务器重启后按库重放恢复）', () => {
     await shutdown(s1);
     const s2 = await boot();
     const a2 = await connect(s2.port);
-    a2.send({ type: 'resume', protocolVersion: PV, token: credA.token });
-    const err = await a2.nextMessage('error');
-    expect(err.code).toBe('session-lost');
+    await a2.send({ type: 'resume', protocolVersion: PV, token: credA.token }, 'credentials');
+    const snap = await a2.nextMessage('snapshot');
+    expect(snap.state).toBeDefined();
   });
 });

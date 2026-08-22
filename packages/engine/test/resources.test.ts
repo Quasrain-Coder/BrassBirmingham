@@ -30,7 +30,16 @@ function build(s: GameState, linkIndex: number, player: PlayerIndex): void {
 
 /** 直接覆写某商人位的板块与啤酒（初始设置洗混不确定，测试显式给定）。 */
 function setMerchant(s: GameState, id: MerchantId, tiles: MerchantTile[], beer: number): void {
-  s.merchants[id] = { tiles, beer };
+  // 桶按板块格绑定:前 beer 个非 blank 格有桶(与 UI 从左填充一致)
+  let left = beer;
+  s.merchants[id] = {
+    tiles,
+    barrels: tiles.map((t) => {
+      if (t === 'blank' || left <= 0) return false;
+      left -= 1;
+      return true;
+    }),
+  };
 }
 
 // 板块数值锚点（data/tiles.ts）：coal L1 incomeAdvance 4、iron L1 incomeAdvance 3、
@@ -228,9 +237,9 @@ describe('consumeBeer', () => {
   it('merchant beer triggers merchant bonus (oxford income +2)', () => {
     const s = newGame(4, 1);
     setMerchant(s, 'oxford', ['any', 'cotton'], 2);
-    const r = consumeBeer(s, 0, 1, { at: 'oxford', useMerchantBeer: true });
+    const r = consumeBeer(s, 0, 1, { at: 'oxford', useMerchantBeer: true, industry: 'cotton' });
     expect(r.merchantBonus).toEqual({ kind: 'merchant-bonus', player: 0, merchant: 'oxford' });
-    expect(r.state.merchants.oxford.beer).toBe(1);
+    expect(r.state.merchants.oxford.barrels.filter(Boolean).length).toBe(1);
     expect(r.state.players[0]!.incomeSpace).toBe(12); // 10 + 2
     expect(r.flipped).toEqual([]);
   });
@@ -239,8 +248,8 @@ describe('consumeBeer', () => {
     const s = newGame(4, 1);
     setMerchant(s, 'oxford', ['any'], 1);
     place(s, 'derby', 0, 'brewery', 0, 1);
-    const r = consumeBeer(s, 0, 1, { at: 'oxford', useMerchantBeer: true });
-    expect(r.state.merchants.oxford.beer).toBe(0); // 商人桶被用
+    const r = consumeBeer(s, 0, 1, { at: 'oxford', useMerchantBeer: true, industry: 'cotton' });
+    expect(r.state.merchants.oxford.barrels.filter(Boolean).length).toBe(0); // 商人桶被用
     expect(r.state.board.slots['derby']![0]!.resources).toBe(1); // 自己酒厂未动
     expect(r.merchantBonus?.merchant).toBe('oxford');
   });
@@ -251,14 +260,14 @@ describe('consumeBeer', () => {
     expect(() => consumeBeer(s, 0, 1, { at: 'oxford', useMerchantBeer: false })).toThrowError(
       /insufficient-beer/,
     );
-    expect(s.merchants.oxford.beer).toBe(1);
+    expect(s.merchants.oxford.barrels.filter(Boolean).length).toBe(1);
   });
 
   it('merchant beer only from the merchant named by at', () => {
     const s = newGame(4, 1);
     setMerchant(s, 'oxford', ['any'], 0);
     setMerchant(s, 'warrington', ['any'], 1);
-    expect(() => consumeBeer(s, 0, 1, { at: 'oxford', useMerchantBeer: true })).toThrowError(
+    expect(() => consumeBeer(s, 0, 1, { at: 'oxford', useMerchantBeer: true, industry: 'cotton' })).toThrowError(
       /insufficient-beer/,
     );
   });
@@ -266,9 +275,9 @@ describe('consumeBeer', () => {
   it('gloucester develop bonus is emitted but not settled here', () => {
     const s = newGame(4, 1);
     setMerchant(s, 'gloucester', ['any', 'pottery'], 1);
-    const r = consumeBeer(s, 0, 1, { at: 'gloucester', useMerchantBeer: true });
+    const r = consumeBeer(s, 0, 1, { at: 'gloucester', useMerchantBeer: true, industry: 'cotton' });
     expect(r.merchantBonus).toEqual({ kind: 'merchant-bonus', player: 0, merchant: 'gloucester' });
-    expect(r.state.merchants.gloucester.beer).toBe(0);
+    expect(r.state.merchants.gloucester.barrels.filter(Boolean).length).toBe(0);
     // develop 奖励不在此结算：钱/VP/收入轨均不变
     expect(r.state.players[0]!.money).toBe(17);
     expect(r.state.players[0]!.vp).toBe(0);
@@ -278,12 +287,12 @@ describe('consumeBeer', () => {
   it('money and vp merchant bonuses are settled here (warrington +£5, shrewsbury +4 VP)', () => {
     const s = newGame(4, 1);
     setMerchant(s, 'warrington', ['any'], 1);
-    const r1 = consumeBeer(s, 0, 1, { at: 'warrington', useMerchantBeer: true });
+    const r1 = consumeBeer(s, 0, 1, { at: 'warrington', useMerchantBeer: true, industry: 'cotton' });
     expect(r1.state.players[0]!.money).toBe(22);
 
     const s2 = newGame(4, 1);
     setMerchant(s2, 'shrewsbury', ['any'], 1);
-    const r2 = consumeBeer(s2, 0, 1, { at: 'shrewsbury', useMerchantBeer: true });
+    const r2 = consumeBeer(s2, 0, 1, { at: 'shrewsbury', useMerchantBeer: true, industry: 'cotton' });
     expect(r2.state.players[0]!.vp).toBe(4);
   });
 
@@ -324,7 +333,7 @@ describe('purity', () => {
     const snapshot = JSON.stringify(s);
     consumeCoal(s, 0, 'stoke-on-trent', 2); // 翻面 + 市场买
     consumeIron(s, 0, 1); // 翻面
-    consumeBeer(s, 0, 1, { at: 'oxford', useMerchantBeer: true }); // 商人桶 + 奖励
+    consumeBeer(s, 0, 1, { at: 'oxford', useMerchantBeer: true, industry: 'cotton' }); // 商人桶 + 奖励
     expect(JSON.stringify(s)).toBe(snapshot);
   });
 });

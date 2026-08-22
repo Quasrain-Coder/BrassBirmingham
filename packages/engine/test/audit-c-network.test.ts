@@ -233,14 +233,14 @@ describe('④ 铁路时代：只能铁路 Link；1 条 £5 / 2 条 £15+1 啤酒
     oneCard(s, 0);
     const dbl = findDouble(s, 0, 2, 22); // birmingham-coventry → coventry-nuneaton
     expect(dbl).toBeDefined();
-    const merchantBeerBefore = Object.values(s.merchants).map((m) => m.beer);
+    const merchantBeerBefore = Object.values(s.merchants).map((m) => m.barrels.filter(Boolean).length);
     const after = applyNetwork(s, 0, dbl!);
     expect(after.players[0]!.money).toBe(30 - 15); // 两块免费煤，无市场花费
     const brewery = after.board.slots['uttoxeter']!.find((t) => t !== null)!;
     expect(brewery.resources).toBe(1); // 喝 1 桶
     expect(brewery.flipped).toBe(false);
     // 商人啤酒原封不动（双轨不可用商人啤酒）
-    expect(Object.values(after.merchants).map((m) => m.beer)).toEqual(merchantBeerBefore);
+    expect(Object.values(after.merchants).map((m) => m.barrels.filter(Boolean).length)).toEqual(merchantBeerBefore);
   });
 });
 

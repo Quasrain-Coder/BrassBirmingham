@@ -43,7 +43,7 @@ describe('newGame', () => {
     expect(total).toBe(9);
     for (const [id, m] of Object.entries(s.merchants)) {
       expect(m.tiles.length).toBe(MERCHANTS[id as MerchantId].slots);
-      expect(m.beer).toBe(m.tiles.filter((t) => t !== 'blank').length);
+      expect(m.barrels.filter(Boolean).length).toBe(m.tiles.filter((t) => t !== 'blank').length);
     }
   });
 

@@ -143,7 +143,7 @@ describe('GameSession', () => {
 
     for (let expected = 0; expected < 3; expected++) {
       const a = sess.snapshotFor(sess.currentSeat).legalActions[0]!;
-      expect(sess.submitAction(sess.currentSeat, a)).toEqual({ seq: expected, eraEndPending: false });
+      expect(sess.submitAction(sess.currentSeat, a)).toEqual({ seq: expected, roundEndPending: false });
       expect(sess.snapshotFor(sess.currentSeat).seq).toBe(expected + 1);
     }
     expect(listActions(db, 'g6').map((r) => r.seq)).toEqual([0, 1, 2]);

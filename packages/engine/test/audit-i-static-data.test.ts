@@ -235,7 +235,7 @@ describe('audit-I §1.4/§8 商人板块构成与可用人数（经 newGame 实�
     for (const pc of [2, 3, 4] as const) {
       const s = newGame(pc, 12345);
       for (const m of Object.values(s.merchants)) {
-        expect(m.beer).toBe(m.tiles.filter((t) => t !== 'blank').length);
+        expect(m.barrels.filter(Boolean).length).toBe(m.tiles.filter((t) => t !== 'blank').length);
       }
     }
   });

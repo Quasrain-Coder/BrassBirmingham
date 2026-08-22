@@ -41,7 +41,16 @@ function setMerchant(
   tiles: ('any' | 'cotton' | 'manufacturer' | 'pottery' | 'blank')[],
   beer: number,
 ): void {
-  state.merchants[id] = { tiles, beer };
+  // 桶按板块格绑定:前 beer 个非 blank 格有桶(与 UI 从左填充一致)
+  let left = beer;
+  state.merchants[id] = {
+    tiles,
+    barrels: tiles.map((t) => {
+      if (t === 'blank' || left <= 0) return false;
+      left -= 1;
+      return true;
+    }),
+  };
 }
 
 function withLink(state: GameState, linkIndex: number, player: PlayerIndex = 0): void {
@@ -71,7 +80,7 @@ describe('sell 显式啤酒源(beerSources)', () => {
         beerSources: [{ kind: 'merchant' }],
       },
     ]));
-    expect(r.state.merchants.oxford.beer).toBe(0);
+    expect(r.state.merchants.oxford.barrels.filter(Boolean).length).toBe(0);
     expect(r.state.board.slots['birmingham']![0]!.flipped).toBe(true);
     expect(r.events.some((e) => e.kind === 'merchant-bonus')).toBe(true);
   });
@@ -93,7 +102,7 @@ describe('sell 显式啤酒源(beerSources)', () => {
         beerSources: [{ kind: 'merchant' }, { kind: 'brewery', location: 'derby', slotIndex: 0 }],
       },
     ]));
-    expect(r.state.merchants.oxford.beer).toBe(0);
+    expect(r.state.merchants.oxford.barrels.filter(Boolean).length).toBe(0);
     expect(r.state.board.slots['derby']![0]!.resources).toBe(1);
     expect(r.state.board.slots['birmingham']![1]!.flipped).toBe(true);
   });

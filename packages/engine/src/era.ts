@@ -83,7 +83,7 @@ function refillMerchantBeer(state: GameState): GameState {
   const merchants = { ...state.merchants };
   for (const id of Object.keys(merchants) as MerchantId[]) {
     const m = merchants[id];
-    merchants[id] = { ...m, beer: m.tiles.filter((t) => t !== 'blank').length };
+    merchants[id] = { ...m, barrels: m.tiles.map((t) => t !== 'blank') };
   }
   return { ...state, merchants };
 }

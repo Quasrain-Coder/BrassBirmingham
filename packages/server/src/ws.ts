@@ -57,6 +57,12 @@ export interface GameServerOptions {
    * （启发式瞬算时 AI 连动会在一帧内打完）。缺省 0（测试不减速）;生产 main.ts 注入。
    */
   aiPaceMs?: number;
+  /**
+   * 轮末停顿（ms）：收官玩家 end_turn 后、下一轮开始前的等待时长——期间全场
+   * 播"第 x 轮结束",末位玩家版图仍展示其本轮行动。缺省 0(测试不停顿);
+   * 生产 main.ts 注入。
+   */
+  roundBreakMs?: number;
 }
 
 export interface GameServer {
@@ -98,6 +104,10 @@ interface SessionEntry {
    * reset_turn 撤销重来);期间 driveAI 不推进、一切 submit 被拒。
    */
   turnHold: PlayerIndex | null;
+  /** 被扣住的回合是否同时结束了一轮(收官回合):end_turn 时进入轮末停顿。 */
+  holdEndedRound: boolean;
+  /** 轮末停顿计时器(收官 end_turn 后播"第 x 轮结束"再放行);reset/放行时清除。 */
+  roundBreakTimer: NodeJS.Timeout | null;
   /** AI 决策 token 用量（M4 用；本任务记内存 + 终局日志行）。 */
   usage: { decisions: number; input: number; output: number };
 }
@@ -130,6 +140,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30_000;
   /** AI 行动节奏:与客户端聚光灯时长对齐,每步 AI 行动播足 5 秒(生产注入,测试为 0)。 */
   const aiPaceMs = options.aiPaceMs ?? 0;
+  /** 轮末停顿:收官玩家 end_turn 后播"第 x 轮结束"的时长(生产注入 5s,测试为 0)。 */
+  const roundBreakMs = options.roundBreakMs ?? 0;
   const heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 60_000;
   const staticRoot = options.staticDir !== undefined ? resolve(options.staticDir) : null;
   /** driveAI 末级兜底用的共享 HeuristicAgent（无状态，可复用）。 */
@@ -207,6 +219,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         state: snap.state,
         legalActions: snap.legalActions,
         turnHold: entry.turnHold,
+        roundBreak: entry.roundBreakTimer !== null,
         playedCards: snap.playedCards,
         eraActions: snap.eraActions,
       });
@@ -297,6 +310,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
       agents,
       driving: false,
       turnHold: null,
+      holdEndedRound: false,
+      roundBreakTimer: null,
       usage: { decisions: 0, input: 0, output: 0 },
     };
     sessionsByGameId.set(session.gameId, entry);
@@ -355,6 +370,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
       agents,
       driving: false,
       turnHold: null,
+      holdEndedRound: false,
+      roundBreakTimer: null,
       usage: { decisions: 0, input: 0, output: 0 },
     };
     sessionsByGameId.set(gameId, entry);
@@ -503,17 +520,19 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     const seat = entry.tokenSeats.get(msg.token);
     if (seat === undefined) throw new WsError('invalid-token', 'token 无效');
     // SessionError：game-finished / not-your-turn / engine 合法性 code 透传。
-    // deferEraEnd:该行动若终结时代,时代清算挂起(eraEndPending)——扣住回合,
-    // 等玩家显式 end_turn 才清算并广播时代切换/分数构成;reset_turn 可整回合撤回
-    const { seq, eraEndPending } = entry.session.submitAction(
+    // deferRoundEnd:该行动若结束本轮,轮末结算(顺位/收入/时代清算)全部挂起——
+    // 扣住回合,等玩家显式 end_turn 才结算并广播;reset_turn 可整回合撤回
+    const { seq, roundEndPending } = entry.session.submitAction(
       seat,
       msg.action as Parameters<GameSession['submitAction']>[1],
-      { deferEraEnd: true },
+      { deferRoundEnd: true },
     );
     // 真人行动后回合推进了 → 扣住,等其显式结束/重置(终局不扣,直接 game_over)。
-    // 时代清算挂起时即使顺位巧合回到本人也必须扣住,否则 pending 无人能消费
-    if (!entry.session.finished && (eraEndPending || entry.session.currentSeat !== seat)) {
+    // 轮末结算挂起时必须扣住,否则 pending 无人能消费
+    if (!entry.session.finished && (roundEndPending || entry.session.currentSeat !== seat)) {
       entry.turnHold = seat;
+      // 收官回合(轮末结算挂起)标记:end_turn 结算后进入轮末停顿,播"第 x 轮结束"
+      entry.holdEndedRound = roundEndPending;
     }
     broadcast(entry.room, {
       type: 'action_applied',
@@ -542,18 +561,37 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     return { entry, seat };
   }
 
-  /** 结束回合：先消费被 defer 的时代清算(时代切换/分数构成此刻才广播),
-   *  再放行,driveAI 接着推进(广播新快照让各端刷新 legalActions)。 */
+  /** 结束回合：先消费被 defer 的轮末结算(顺位/收入/时代清算此刻才广播)。
+   *  收官回合(非时代切换)且配置了轮末停顿:结算后保持扣住 roundBreakMs,全场播
+   *  "第 x 轮结束"(此间末位玩家版图仍显示其本轮行动),到点才放行。 */
   function handleEndTurn(msg: { token: string }): void {
     const { entry } = heldEntry(msg);
-    entry.session.consumeEraEnd();
-    entry.turnHold = null;
-    broadcastSnapshots(entry);
+    const eraBefore = entry.session.state.era;
+    entry.session.consumeRoundEnd();
+    const eraChanged = entry.session.state.era !== eraBefore;
     if (entry.session.finished) {
       // 清算进终局(rail 末):此时才广播 game_over
+      entry.turnHold = null;
+      entry.holdEndedRound = false;
+      broadcastSnapshots(entry);
       broadcastGameOver(entry);
       return;
     }
+    if (entry.holdEndedRound && !eraChanged && roundBreakMs > 0) {
+      entry.holdEndedRound = false;
+      entry.roundBreakTimer = setTimeout(() => {
+        entry.roundBreakTimer = null;
+        entry.turnHold = null;
+        broadcastSnapshots(entry);
+        void driveAI(entry);
+      }, roundBreakMs);
+      // 停顿期间快照照旧广播(turnHold 保持,各端播轮末横幅、版图停在刚结束轮)
+      broadcastSnapshots(entry);
+      return;
+    }
+    entry.holdEndedRound = false;
+    entry.turnHold = null;
+    broadcastSnapshots(entry);
     void driveAI(entry);
   }
 
@@ -578,6 +616,12 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     if (!entry.session.resetTurn()) {
       throw new WsError('no-turn-backup', '回合备份不存在,无法重置');
     }
+    // 轮末停顿中重置:取消停顿计时,回合回滚后按正常流程走
+    if (entry.roundBreakTimer !== null) {
+      clearTimeout(entry.roundBreakTimer);
+      entry.roundBreakTimer = null;
+    }
+    entry.holdEndedRound = false;
     entry.turnHold = null;
     broadcastSnapshots(entry);
     // 全场播报"X 已重置本回合"（他人的暂存预览/播报由 client 据此清除）
@@ -672,6 +716,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         state: snap.state,
         legalActions: snap.legalActions,
         turnHold: entry.turnHold,
+        roundBreak: entry.roundBreakTimer !== null,
         playedCards: snap.playedCards,
         eraActions: snap.eraActions,
       });

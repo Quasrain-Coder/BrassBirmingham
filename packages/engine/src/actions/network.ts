@@ -50,7 +50,7 @@ function isMerchantNode(x: string): boolean {
 }
 
 /** 边的任一 named location 端点（资源连通锚点；两端点经该边互达，取哪个等价）。 */
-function firstLocationEndpoint(linkIndex: number): LocationId {
+export function firstLocationEndpoint(linkIndex: number): LocationId {
   const l = LINKS[linkIndex]!;
   return (isMerchantNode(l.a) ? l.b : l.a) as LocationId;
 }
@@ -215,6 +215,49 @@ function drinkPinnedOpponentBrewery(
 }
 
 /**
+ * 显式指定双轨啤酒来源(beerSource)时的校验与消耗：
+ * 该槽须为未翻面、有桶的酒厂——自己的任意可用(无需连通),对手的须连通第二条铁路
+ * 放置后的位置;耗尽立即翻面(applyFlip,owner 进收入)。
+ */
+function drinkExplicitBrewery(
+  state: GameState,
+  player: PlayerIndex,
+  source: { location: LocationId; slotIndex: number },
+  at: LocationId,
+  events: GameEvent[],
+): GameState {
+  const placed = state.board.slots[source.location]?.[source.slotIndex];
+  if (
+    placed === null ||
+    placed === undefined ||
+    placed.flipped ||
+    placed.tile.industry !== 'brewery' ||
+    placed.resources <= 0
+  ) {
+    throw new IllegalActionError(
+      'illegal-beer-source',
+      `illegal-beer-source: no unflipped brewery with beer at ${source.location} slot ${source.slotIndex}`,
+    );
+  }
+  if (placed.player !== player && !reachableFrom(state, [at]).has(source.location)) {
+    throw new IllegalActionError(
+      'illegal-beer-source',
+      `illegal-beer-source: opponent brewery at ${source.location} not connected to ${at}`,
+    );
+  }
+  let next = withSlotTile(state, source.location, source.slotIndex, {
+    ...placed,
+    resources: placed.resources - 1,
+  });
+  if (placed.resources - 1 === 0) {
+    const f = applyFlip(next, source.location, source.slotIndex);
+    next = f.state;
+    events.push(f.event);
+  }
+  return next;
+}
+
+/**
  * 执行 Network。先以 enumerateNetwork 校验合法性（不在枚举集内抛 'illegal-network'），
  * 再按"付 Link 费 → 逐条放置并逐条耗煤 → 双条耗 1 酒厂啤酒"结算。
  * 返回新 state；本行动产生的翻面事件写入 lastEvents。
@@ -273,7 +316,10 @@ export function applyNetwork(
 
   // 3. 双条：1 桶酒厂啤酒（不可用商人啤酒，§9.4）；锚点 = 第二条铁路放置后的位置
   if (action.links.length === 2) {
-    if (action.beerFromOpponentBrewery !== undefined) {
+    if (action.beerSource !== undefined) {
+      // 显式酒源(自己任意酒厂 / 连通第二条的对手酒厂,优先级高于旧 opponent 字段)
+      next = drinkExplicitBrewery(next, player, action.beerSource, atLast!, events);
+    } else if (action.beerFromOpponentBrewery !== undefined) {
       next = drinkPinnedOpponentBrewery(
         next,
         player,

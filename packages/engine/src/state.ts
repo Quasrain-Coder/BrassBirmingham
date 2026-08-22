@@ -67,7 +67,7 @@ export interface GameState {
     slots: Record<LocationId, (PlacedTile | null)[]>;
     links: BuiltLink[];
   };
-  merchants: Record<MerchantId, { tiles: MerchantTile[]; beer: number }>;
+  merchants: Record<MerchantId, { tiles: MerchantTile[]; barrels: boolean[] }>;
   /** Wild 卡供应堆余量（§6.7 Scout 获取、Wild 弃置归还；§9.14）。 */
   wildSupply: { location: number; industry: number };
   /** 已填充方块数（索引语义见 market.ts helper）。 */
@@ -88,6 +88,8 @@ export interface GameState {
   lastEvents: GameEvent[];
   /** 时代结束待清算（牌堆空且全部手牌空的轮末由 turn.ts 置位；Task 12 消费做时代切换/终局）。 */
   eraEndPending: boolean;
+  /** 轮末结算待消费(联机回合确认窗口:顺位/收入/时代清算等 held 玩家确认后才落)。 */
+  roundEndPending: boolean;
   phase: 'action' | 'game-over';
   winner: PlayerIndex[] | null;
 }
@@ -137,21 +139,21 @@ export function newGame(playerCount: 2 | 3 | 4, seed: number): GameState {
   cursor += playerCount;
   const deck = shuffled.slice(cursor);
 
-  // 2. 商人板块：洗混后按 MERCHANTS 键序铺位；每非 blank 板块 beer=1
+  // 2. 商人板块：洗混后按 MERCHANTS 键序铺位；啤酒桶按板块格绑定（每非 blank 格 1 桶）
   const tiles = rng.shuffle(merchantTilePool(playerCount));
   const available = new Set(availableMerchants(playerCount));
-  const merchants = {} as Record<MerchantId, { tiles: MerchantTile[]; beer: number }>;
+  const merchants = {} as Record<MerchantId, { tiles: MerchantTile[]; barrels: boolean[] }>;
   let t = 0;
   for (const id of Object.keys(MERCHANTS) as MerchantId[]) {
     if (!available.has(id)) {
-      merchants[id] = { tiles: [], beer: 0 };
+      merchants[id] = { tiles: [], barrels: [] };
       continue;
     }
     const placed = tiles.slice(t, t + MERCHANTS[id].slots);
     t += MERCHANTS[id].slots;
     merchants[id] = {
       tiles: placed,
-      beer: placed.filter((x) => x !== 'blank').length,
+      barrels: placed.map((x) => x !== 'blank'),
     };
   }
 
@@ -192,6 +194,7 @@ export function newGame(playerCount: 2 | 3 | 4, seed: number): GameState {
     rngState: rng.getState(),
     lastEvents: [],
     eraEndPending: false,
+    roundEndPending: false,
     phase: 'action',
     winner: null,
   };
