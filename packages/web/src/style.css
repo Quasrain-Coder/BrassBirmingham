@@ -2631,6 +2631,7 @@ body {
 /* 宽屏顶行:行动按钮行全宽居中,偏好设置等工具按钮钉在最右(左右版面统一从顶行下开始) */
 .wide-topline {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 12px;
 }
@@ -2642,5 +2643,22 @@ body {
 
 .wide-topline > .wide-util-row {
   flex: none;
+  margin-left: auto;
   padding-bottom: 0;
+}
+
+/* 窄屏兼容:一行放不下时拆两行——偏好设置等在上(右对齐),行动按钮行在下 */
+@media (max-width: 1560px) {
+  .wide-topline {
+    flex-direction: column;
+  }
+
+  .wide-topline > .wide-util-row {
+    order: -1;
+    align-self: flex-end;
+  }
+
+  .wide-topline > .top-action-bar {
+    width: 100%;
+  }
 }
