@@ -251,6 +251,8 @@ function GameBoard({
   const [logOpen, setLogOpen] = useState(false);
   // 偏好设置弹窗(视图/卡牌悬浮/个人版图风格)
   const [prefsOpen, setPrefsOpen] = useState(false);
+  // 离开对局防呆确认弹窗
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [handRaise, setHandRaise] = useState<HandRaiseMode>(
     () => (storage?.getItem('brass-hand-raise') as HandRaiseMode | null) ?? 'single',
   );
@@ -463,7 +465,7 @@ function GameBoard({
           type="button"
           className="btn-ghost"
           data-testid="leave-game"
-          onClick={() => store.leaveRoom()}
+          onClick={() => setLeaveConfirmOpen(true)}
         >
           离开对局
         </button>
@@ -501,6 +503,37 @@ function GameBoard({
       {logOpen ? (
         <LogModal log={displayLog} room={room ?? undefined} onClose={() => setLogOpen(false)} />
       ) : null}
+      {leaveConfirmOpen ? (
+        <div className="modal-backdrop" data-testid="leave-confirm" onClick={() => setLeaveConfirmOpen(false)}>
+          <section className="score-modal leave-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <header className="score-modal-head">
+              <h3>离开对局</h3>
+            </header>
+            <p className="leave-confirm-text">确定要离开当前对局吗？</p>
+            <div className="leave-confirm-actions">
+              <button
+                type="button"
+                className="leave-confirm-danger"
+                data-testid="leave-confirm-yes"
+                onClick={() => {
+                  setLeaveConfirmOpen(false);
+                  store.leaveRoom();
+                }}
+              >
+                离开
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                data-testid="leave-confirm-no"
+                onClick={() => setLeaveConfirmOpen(false)}
+              >
+                取消
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {prefsOpen ? (
         <PrefsModal
           prefs={{ layoutWide, handRaise, stackView }}
@@ -528,7 +561,7 @@ function GameBoard({
             {room !== null ? (
               <span className="game-room-code" data-testid="game-room-code">房间 {room.code}</span>
             ) : null}
-            <button type="button" className="btn-ghost" data-testid="leave-game" onClick={() => store.leaveRoom()}>
+            <button type="button" className="btn-ghost" data-testid="leave-game" onClick={() => setLeaveConfirmOpen(true)}>
               离开对局
             </button>
           </div>

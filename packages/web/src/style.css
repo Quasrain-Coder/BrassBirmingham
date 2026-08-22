@@ -2707,3 +2707,33 @@ body {
   justify-content: center;
   gap: 10px;
 }
+
+/* 离开对局防呆确认弹窗 */
+.leave-confirm-modal {
+  min-width: 320px;
+}
+
+.leave-confirm-text {
+  margin: 4px 0 14px;
+  color: #d8cdb4;
+}
+
+.leave-confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.leave-confirm-danger {
+  padding: 6px 18px;
+  border: none;
+  border-radius: 6px;
+  background: #c0392b;
+  color: #fdf0ec;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.leave-confirm-danger:hover {
+  background: #d24637;
+}
