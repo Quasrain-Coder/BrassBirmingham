@@ -213,14 +213,42 @@ export function ActionLogModal({
         </header>
         {logStyle === 'split' ? (
           <>
-            {/* 风格 A:上方全是卡牌,统一分隔线,下方全是日志 */}
+            {/* 风格 A:上方按回合逐行展示当轮卡牌(每行一回合,搜寻 4 张一行;
+                统一分隔线;下方按轮次正序展示日志) */}
             <div className="discard-columns action-log-columns">
               {seats.map((i) => {
-                const cards = playedCards[i] ?? [];
+                const rounds = buildRounds(state, eraActions[i] ?? [], false);
+                const total = (eraActions[i] ?? []).reduce(
+                  (s, a) => s + (a.action.type === 'scout' ? 3 : 1),
+                  0,
+                );
                 return (
                   <div className="discard-col" key={i}>
-                    {colHead(i, cards.length + faceDown)}
-                    {cardsBlock(i, cards)}
+                    {colHead(i, total + faceDown)}
+                    {rounds.length === 0 ? (
+                      <p className="era-actions-empty">本时代尚未行动</p>
+                    ) : (
+                      rounds.map((r) => (
+                        <div key={r.round} className="action-log-group-cards action-log-round-row">
+                          {r.round === 1 && faceDown === 1 ? (
+                            <span className="discard-cell">
+                              <img
+                                className="discard-card discard-card-back"
+                                src="/assets/cards/back.png"
+                                alt="开局暗置"
+                              />
+                              <span className="card-tip">开局暗置（不公开）</span>
+                            </span>
+                          ) : null}
+                          {roundCards(r).map((c) => (
+                            <span className="discard-cell" key={c.id}>
+                              <img src={cardImageSrc(c)} alt={cardName(c)} />
+                              <span className="card-tip">{cardName(c)}</span>
+                            </span>
+                          ))}
+                        </div>
+                      ))
+                    )}
                   </div>
                 );
               })}

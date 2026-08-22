@@ -2919,9 +2919,27 @@ body {
   overflow-y: visible;
 }
 
-/* 行动日志弹窗卡组:一律一行展示(搜寻轮 4 张也不换行,超出横向滚动) */
-.action-log-modal .discard-cards,
+/* 行动日志卡组:按回合逐行,每行不换行(搜寻 4 张一行,超出横向滚动) */
 .action-log-group-cards {
   flex-wrap: nowrap;
   overflow-x: auto;
+}
+
+/* 行动日志:行动行一律单行不换行;列宽加大保证四列行动对齐 */
+.action-log-modal .compact-history-act {
+  white-space: nowrap;
+}
+
+.action-log-modal .discard-columns {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.action-log-round-row {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed #3a3226;
+}
+
+.action-log-round-row:last-child {
+  border-bottom: none;
 }
