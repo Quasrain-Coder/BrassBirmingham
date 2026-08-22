@@ -64,26 +64,6 @@ export function TopActionBar({
   onOpenLog,
   onLeave,
 }: TopActionBarProps): ReactElement {
-  // 顶部工具按钮组(集中最右)
-  const utilButtons = (
-    <span className="top-util-group">
-      <button type="button" className="btn-ghost" data-testid="toggle-layout" onClick={onToggleLayout}>
-        经典布局
-      </button>
-      <button type="button" className="btn-ghost" data-testid="open-score-modal" onClick={onOpenScore}>
-        分数构成
-      </button>
-      <button type="button" className="btn-ghost" data-testid="open-discard-modal" onClick={onOpenDiscard}>
-        打出记录
-      </button>
-      <button type="button" className="btn-ghost" data-testid="open-log-modal" onClick={onOpenLog}>
-        行动日志
-      </button>
-      <button type="button" className="btn-ghost" data-testid="leave-game" onClick={onLeave}>
-        离开对局
-      </button>
-    </span>
-  );
   // 现金实时标记:显眼处常驻;暂存行动时预览结算后的现金(取消/重置即恢复)
   const money = state.players[seat]?.money ?? 0;
   const projected =
@@ -117,7 +97,6 @@ export function TopActionBar({
             重置本回合
           </button>
           <span className="top-action-money">{moneyChip}</span>
-          {utilButtons}
         </div>
       </section>
     );
@@ -133,7 +112,6 @@ export function TopActionBar({
             {turnHold !== null ? `等待 ${waitingFor} 确认回合…` : `等待 ${waitingFor} 行动…`}
           </span>
           <span className="top-action-money">{moneyChip}</span>
-          {utilButtons}
         </div>
       </section>
     );
@@ -246,7 +224,6 @@ export function TopActionBar({
           重置
         </button>
         <span className="top-action-money">{moneyChip}</span>
-        {utilButtons}
       </div>
 
       {active === 'build' ? (

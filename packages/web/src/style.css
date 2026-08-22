@@ -2548,3 +2548,18 @@ body {
   opacity: 0.92;
   pointer-events: none;
 }
+
+/* 宽屏工具按钮行:右对齐,位于右侧版面上方 */
+.wide-util-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  white-space: nowrap;
+}
+
+/* 手牌行宽度对齐地图(宽屏中列约 50% 视口宽):几张牌合计与地图同宽 */
+.hand-bar.overlay {
+  left: 25%;
+  right: 25%;
+}

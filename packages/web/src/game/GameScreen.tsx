@@ -499,6 +499,27 @@ function GameBoard({
             ))}
           </aside>
           <div className="wide-center">
+            <div className="wide-util-row">
+              {room !== null ? (
+                <span className="game-room-code" data-testid="game-room-code">房间 {room.code}</span>
+              ) : null}
+              <span className="top-action-spacer" />
+              <button type="button" className="btn-ghost" data-testid="toggle-layout" onClick={toggleLayout}>
+                经典布局
+              </button>
+              <button type="button" className="btn-ghost" data-testid="open-score-modal" onClick={() => scoreHistory.setOpen(true)}>
+                分数构成
+              </button>
+              <button type="button" className="btn-ghost" data-testid="open-discard-modal" onClick={() => setDiscardOpen(true)}>
+                打出记录
+              </button>
+              <button type="button" className="btn-ghost" data-testid="open-log-modal" onClick={() => setLogOpen(true)}>
+                行动日志
+              </button>
+              <button type="button" className="btn-ghost" data-testid="leave-game" onClick={() => store.leaveRoom()}>
+                离开对局
+              </button>
+            </div>
             <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
             <TopActionBar
               myTurn={myTurn}
