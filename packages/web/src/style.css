@@ -2944,10 +2944,11 @@ body {
   border-bottom: none;
 }
 
-/* 行动日志弹窗:列内不再出现竖向小滚轮(统一交给整窗滚轮);
-   仅回合卡行(搜寻 4 张放不下时)保留横向滚动 */
+/* 行动日志弹窗:列内不出现竖向小滚轮——CSS 规则 overflow-x:auto 时
+   overflow-y:visible 会按规范计算成 auto,必须显式 hidden 才能消除竖条 */
 .action-log-modal .discard-col,
 .action-log-modal .discard-columns,
-.action-log-modal .action-log-round-row {
-  overflow-y: visible;
+.action-log-modal .action-log-round-row,
+.action-log-modal .action-log-group-cards {
+  overflow-y: hidden;
 }
