@@ -16,6 +16,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
+import { reachableFrom } from '@brass/engine';
 import type { Action, BeerSourceRef, Card, IndustryType, LocationId, MerchantId, PlayerIndex } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { BoardHighlights, SlotRef } from '../board/BoardSvg';
@@ -29,6 +30,7 @@ import {
   developOptions,
   explicitBuildSlot,
   extendableLinks,
+  feasibleSellMerchants,
   matchDevelop,
   matchNetwork,
   matchScout,
@@ -160,34 +162,66 @@ export function useActionDraft({
     // 已暂存一步(选好建造/卖出组/点完边):清掉其他行动的高亮——
     // 放入路后不再显示城市/建造高亮;拖入建筑后不再显示路边高亮
     const emptyBeer: NonNullable<BoardHighlights['beerSources']> = { locations: [], merchants: [] };
-    // 啤酒源高亮(match 效果):卖货/铁路双轨候选存在时,自己酒厂(无需连通)与有桶商人位
+    // 啤酒源高亮(match 效果):
+    // - 选了板块未选贸易商:圈出**真能收这块货**的贸易商(sellMerchants,整位圈);
+    // - 选了贸易商:圈该商人的酒桶(各桶位) + 可用酒厂(自家全图 + 连通该商人的对手酒厂);
+    // - 非卖出流(如铁路双轨):自有酒厂 + 全部有桶商人位(原行为)。
     const computeBeerSources = (): NonNullable<BoardHighlights['beerSources']> => {
       const out: NonNullable<BoardHighlights['beerSources']> = { locations: [], merchants: [] };
       const needsBeer = candidates.some(
         (a) => a.type === 'sell' || (a.type === 'network' && a.links.length === 2),
       );
-      if (needsBeer) {
+      if (!needsBeer) return out;
+      if (sellMerchant !== null) {
+        // 已选贸易商:桶位 = 该商人;酒厂 = 自家(无需连通) + 连通该商人的对手酒厂
+        out.merchants!.push(sellMerchant);
+        const reach = reachableFrom(state as unknown as import('@brass/engine').GameState, [sellMerchant]);
         for (const [loc, slotsOfLoc] of Object.entries(state.board.slots)) {
-          if (
-            slotsOfLoc.some(
-              (t) => t && t.player === seat && !t.flipped && t.tile.industry === 'brewery' && t.resources > 0,
-            )
-          ) {
-            out.locations!.push(loc as LocationId);
-          }
+          const hasUsable = slotsOfLoc.some(
+            (t) =>
+              t &&
+              !t.flipped &&
+              t.tile.industry === 'brewery' &&
+              t.resources > 0 &&
+              (t.player === seat || (t.player !== seat && reach.has(loc as LocationId))),
+          );
+          if (hasUsable) out.locations!.push(loc as LocationId);
         }
-        for (const [mid, m] of Object.entries(state.merchants)) {
-          if (m.beer > 0) out.merchants!.push(mid as keyof typeof state.merchants);
+        return out;
+      }
+      // 未选贸易商(或铁路双轨):自家酒厂 + 全部有桶商人位
+      for (const [loc, slotsOfLoc] of Object.entries(state.board.slots)) {
+        if (
+          slotsOfLoc.some(
+            (t) => t && t.player === seat && !t.flipped && t.tile.industry === 'brewery' && t.resources > 0,
+          )
+        ) {
+          out.locations!.push(loc as LocationId);
         }
+      }
+      for (const [mid, m] of Object.entries(state.merchants)) {
+        if (m.beer > 0) out.merchants!.push(mid as keyof typeof state.merchants);
       }
       return out;
     };
+    // 可售贸易商高亮(整位圈,非酒桶):选板块后能收这块货的贸易商
+    const sellMerchants =
+      sellMerchant !== null
+        ? [sellMerchant]
+        : sellTile !== null
+          ? (() => {
+              const placed = state.board.slots[sellTile.location]?.[sellTile.slotIndex];
+              if (placed == null) return [];
+              return feasibleSellMerchants(state, seat, sellTile, placed.tile.beerToFlip);
+            })()
+          : [];
     if (chosen !== null) {
       return {
         slots: [],
         links: [],
         locations: [],
         beerSources: chosen.type === 'sell' ? computeBeerSources() : emptyBeer,
+        sellMerchants,
       };
     }
     if (sellTile !== null || sellGroups.length > 0) {
@@ -197,6 +231,7 @@ export function useActionDraft({
         links: [],
         locations: [],
         beerSources: computeBeerSources(),
+        sellMerchants,
       };
     }
     const targets = targetsFor(selectedCard, legalActions);
@@ -217,8 +252,8 @@ export function useActionDraft({
       pickedLinks.length > 0 ? [] : [...buildSlots, ...sellSlotTargets(candidates)];
     // 可建城市级高亮:所有可放置地点(与槽位高亮互补,找城更快)
     const locations = pickedLinks.length > 0 ? [] : [...new Set(buildSlots.map((s) => s.location))];
-    return { slots, links, locations, beerSources: computeBeerSources() };
-  }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks, buildIndustry, chosen, sellTile, sellGroups]);
+    return { slots, links, locations, beerSources: computeBeerSources(), sellMerchants };
+  }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks, buildIndustry, chosen, sellTile, sellGroups, sellMerchant]);
 
   const networkMatch = matchNetwork(candidates, pickedLinks);
   const sell = sellOptions(candidates);
@@ -830,16 +865,9 @@ export function SellDetails({
   seat: PlayerIndex;
 }): ReactElement {
           const sellRowDisabled = draft.sellSingles.length === 0 && draft.sellFullSet === null && draft.sellGroups.length === 0;
-          // 该板块当前真能卖向的商人(可达+收货+啤酒总量够),建筑行只列非空的
+          // 该板块当前真能卖向的商人(与地图高亮同一份判定),建筑行只列非空的
           const feasibleMerchants = (t: SlotRef, beerToFlip: number): MerchantId[] =>
-            merchantsForTile(state, t).filter((id) => {
-              const src = beerSourcesFor(state, seat, id);
-              const total =
-                (src.merchantBarrel ? 1 : 0) +
-                src.own.reduce((s, b) => s + b.barrels, 0) +
-                src.opponent.reduce((s, b) => s + b.barrels, 0);
-              return total >= beerToFlip;
-            });
+            feasibleSellMerchants(state, seat, t, beerToFlip);
           const sellableNow = sellableTilesFor(state, seat).filter(
             (t) =>
               !draft.sellGroups.some((g) => g.tile.location === t.location && g.tile.slotIndex === t.slotIndex) &&

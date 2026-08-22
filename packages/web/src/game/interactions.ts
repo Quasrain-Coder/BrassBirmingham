@@ -588,3 +588,23 @@ export function reconstructEraLog(
   }
   return out;
 }
+
+/**
+ * 该板块当前真能卖向的商人位(可达+图标收货+啤酒总量够)——
+ * 卖出高亮(选板块后圈出这些贸易商)与细节行共用同一份判定。
+ */
+export function feasibleSellMerchants(
+  state: FilteredState,
+  seat: PlayerIndex,
+  tile: SlotRef,
+  beerToFlip: number,
+): MerchantId[] {
+  return merchantsForTile(state, tile).filter((id) => {
+    const src = beerSourcesFor(state, seat, id);
+    const total =
+      (src.merchantBarrel ? 1 : 0) +
+      src.own.reduce((s, b) => s + b.barrels, 0) +
+      src.opponent.reduce((s, b) => s + b.barrels, 0);
+    return total >= beerToFlip;
+  });
+}

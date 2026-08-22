@@ -66,6 +66,8 @@ export interface BoardHighlights {
   locations?: LocationId[];
   /** 啤酒源高亮(match 效果):有余量的自有酒厂地点与有桶商人位。 */
   beerSources?: { locations?: LocationId[]; merchants?: MerchantId[] };
+  /** 可售贸易商高亮(卖出流:选了板块后能收这块货的贸易商,整位圈而非酒桶)。 */
+  sellMerchants?: MerchantId[] | undefined;
 }
 
 /** 行动聚光灯：某玩家刚执行的行动在棋盘上的高亮目标（约 5 秒，GameScreen 驱动）。 */
@@ -257,6 +259,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
   const highlightedLocations = new Set(highlights?.locations ?? []);
   const beerSourceLocs = new Set(highlights?.beerSources?.locations ?? []);
   const beerSourceMerchants = new Set(highlights?.beerSources?.merchants ?? []);
+  const sellMerchantsSet = new Set(highlights?.sellMerchants ?? []);
   const builtByLink = new Map<number, { player: PlayerIndex; era: 'canal' | 'rail' }>();
   for (const l of state.board.links) builtByLink.set(l.linkIndex, { player: l.player, era: l.era });
 
@@ -684,22 +687,50 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
               );
             });
           })}
+          {(Object.keys(MERCHANT_GEOM) as MerchantId[]).flatMap((id) => {
+            // 酒桶高亮:按当前有桶的桶位框逐格圈(位置直接参考桶框,不再用计数徽标位)
+            if (!beerSourceMerchants.has(id)) return [];
+            const m = state.merchants[id];
+            return MERCHANT_GEOM[id].beer.flatMap((r, bi) => {
+              if (bi >= (m?.beer ?? 0)) return [];
+              return [
+                <rect
+                  key={`beer-src-m-${id}-${bi}`}
+                  className="beer-source-ring"
+                  x={r.x - 10}
+                  y={r.y - 10}
+                  width={r.w + 20}
+                  height={r.h + 20}
+                  rx={14}
+                  fill="none"
+                  stroke="#e8c96a"
+                  strokeWidth={7}
+                />,
+              ];
+            });
+          })}
           {(Object.keys(MERCHANT_GEOM) as MerchantId[]).map((id) => {
-            if (!beerSourceMerchants.has(id)) return null;
-            const last = MERCHANT_GEOM[id].beer[MERCHANT_GEOM[id].beer.length - 1];
-            if (!last) return null;
+            // 可售贸易商整位高亮(圈整个贸易商板块区,不圈酒桶)
+            if (!sellMerchantsSet.has(id)) return null;
+            const rects = MERCHANT_GEOM[id].tiles;
+            if (rects.length === 0) return null;
+            const x0 = Math.min(...rects.map((r) => r.x)) - 16;
+            const y0 = Math.min(...rects.map((r) => r.y)) - 16;
+            const x1 = Math.max(...rects.map((r) => r.x + r.w)) + 16;
+            const y1 = Math.max(...rects.map((r) => r.y + r.h)) + 16;
             return (
               <rect
-                key={`beer-src-m-${id}`}
-                className="beer-source-ring"
-                x={last.x - 10}
-                y={last.y - 10}
-                width={last.w + 20}
-                height={last.h + 20}
-                rx={14}
+                key={`sell-merchant-${id}`}
+                className="sell-merchant-ring"
+                x={x0}
+                y={y0}
+                width={x1 - x0}
+                height={y1 - y0}
+                rx={18}
                 fill="none"
-                stroke="#e8c96a"
-                strokeWidth={7}
+                stroke="#f0c964"
+                strokeWidth={9}
+                opacity={0.9}
               />
             );
           })}
