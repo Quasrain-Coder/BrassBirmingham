@@ -128,7 +128,7 @@ export function describeAction(action: Action): string {
     case 'loan':
       return '贷款 £30';
     case 'scout':
-      return '侦察：弃 3 张换 2 张百搭';
+      return '搜寻：弃 3 张换 2 张百搭';
     case 'pass':
       return '跳过';
   }

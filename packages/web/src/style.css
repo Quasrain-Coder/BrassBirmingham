@@ -1690,7 +1690,7 @@ body {
   margin: 8px 0;
 }
 
-/* 行首标签(研发:/侦察:/出售:…):弱化色,与按钮同字号 */
+/* 行首标签(研发:/搜寻:/出售:…):弱化色,与按钮同字号 */
 .action-choices > span:first-child {
   color: #b3a888;
 }

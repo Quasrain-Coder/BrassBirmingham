@@ -728,7 +728,7 @@ export function ActionBar({
         <SellDetails draft={draft} state={state} seat={seat} />
 
         <div className={`action-choices${draft.scoutAvailable ? '' : ' row-disabled'}`} data-testid="scout-options">
-          <span>侦察{draft.scoutAvailable ? `：选 3 张弃牌（已选 ${draft.scoutPicks.length}/3）` : '：'}</span>
+          <span>搜寻{draft.scoutAvailable ? `：选 3 张弃牌（已选 ${draft.scoutPicks.length}/3）` : '：'}</span>
           {!draft.scoutAvailable ? (
             <span className="action-row-none">—</span>
           ) : (

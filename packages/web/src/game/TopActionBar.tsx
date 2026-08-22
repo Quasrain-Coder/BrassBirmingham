@@ -268,7 +268,6 @@ export function TopActionBar({
 
       {active === 'scout' ? (
         <div className="action-choices top-detail-row" data-testid="scout-options">
-          <span>搜寻：选 3 张弃牌（已选 {draft.scoutPicks.length}/3,也可直接点下方手牌）</span>
           {hand.map((c) => (
             <button
               key={c.id}

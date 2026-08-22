@@ -398,7 +398,7 @@ export function describeAction(action: Action): string {
     case 'loan':
       return '贷款 £30（收入 −3 级）';
     case 'scout':
-      return '侦察：弃 3 张换百搭·城市 + 百搭·产业';
+      return '搜寻：弃 3 张换百搭·城市 + 百搭·产业';
     case 'pass':
       return '过';
   }
