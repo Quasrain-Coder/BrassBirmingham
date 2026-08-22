@@ -2813,3 +2813,23 @@ body {
   border: 1px solid #4a3f2c;
   display: block;
 }
+
+/* 研发垃圾桶:版图右下角的研发拖放目标 */
+.board-stack {
+  position: relative;
+}
+
+.develop-bin {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1.5px dashed #8a6d3b;
+  border-radius: 10px;
+  background: rgba(20, 16, 10, 0.75);
+  color: #c9a86a;
+}

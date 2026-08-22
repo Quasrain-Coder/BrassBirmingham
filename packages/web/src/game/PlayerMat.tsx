@@ -26,6 +26,7 @@ export function PlayerMat({
   colorKey,
   onTileDragStart,
   hiddenTopInd,
+  stagedRemovals,
 }: {
   /** 该玩家面板剩余堆叠(TileDef 按产业分组、等级升序)。 */
   tiles: TileDef[];
@@ -36,12 +37,18 @@ export function PlayerMat({
   onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>) => void) | undefined;
   /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失,如同已被拿起)。 */
   hiddenTopInd?: IndustryType | null | undefined;
+  /** 研发暂存中的产业(每个出现一次 = 暂存移除 1 块:计数 -1,归零时该级显示耗尽)。 */
+  stagedRemovals?: IndustryType[] | undefined;
 }): ReactElement {
-  // 每产业每等级剩余数;栈顶 = 剩余数 >0 的最低级
+  // 每产业每等级剩余数(减去研发暂存);栈顶 = 显示剩余 >0 的最低级
   const remaining = new Map<string, number>();
   for (const def of tiles) {
     const key = `${def.industry}-${def.level}`;
     remaining.set(key, (remaining.get(key) ?? 0) + 1);
+  }
+  for (const ind of stagedRemovals ?? []) {
+    const top = [...remaining.keys()].filter((k) => k.startsWith(`${ind}-`) && (remaining.get(k) ?? 0) > 0).sort().shift();
+    if (top !== undefined) remaining.set(top, (remaining.get(top) ?? 1) - 1);
   }
 
   return (

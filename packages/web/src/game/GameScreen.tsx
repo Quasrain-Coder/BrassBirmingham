@@ -268,9 +268,22 @@ function GameBoard({
   const [dragTile, setDragTile] = useState<{ ind: IndustryType; x: number; y: number; w: number; h: number } | null>(null);
   const boardWrapRef = useRef<HTMLDivElement>(null);
   const selfBoardRef = useRef<HTMLDivElement>(null);
+  const developBinRef = useRef<HTMLDivElement>(null);
   const handleTileDrop = (ind: IndustryType, x: number, y: number): void => {
     const wrap = boardWrapRef.current;
     if (wrap === null) return;
+    // 拖到垃圾桶上松手 = 研发(唯一的研发拖放目标,等价按研发并选中该产业)
+    const bin = developBinRef.current;
+    if (bin !== null) {
+      const r = bin.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        if (draft.developChoices.includes(ind)) {
+          setTopAction('develop');
+          draft.toggleDevelop(ind);
+        }
+        return;
+      }
+    }
     // 在自己个人版图内松手 = 什么都没发生(token 回归原位,不触发研发)
     const sb = selfBoardRef.current;
     if (sb !== null) {
@@ -303,11 +316,7 @@ function GameBoard({
       draft.clickSlot(loc, target.slotIndex);
       return;
     }
-    // 落到地图外 → 研发(同步选中研发按钮与对应产业)
-    if (draft.developChoices.includes(ind)) {
-      setTopAction('develop');
-      draft.toggleDevelop(ind);
-    }
+    // 落到地图外且非垃圾桶/非版图:什么都不发生(token 回归原位)
   };
   const onTileDragStart = (ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>): void => {
     if (!myTurn || selectedCard === null) return;
@@ -602,7 +611,7 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? draft.developPicks : undefined} developBinRef={i === seat ? developBinRef : undefined} />
               </div>
             ))}
           </aside>
@@ -613,7 +622,7 @@ function GameBoard({
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? draft.developPicks : undefined} developBinRef={i === seat ? developBinRef : undefined} />
               </div>
             ))}
           </aside>

@@ -251,6 +251,8 @@ export function PlayerBoard({
   onTileDragStart,
   hiddenTopInd,
   stackView,
+  developPicks,
+  developBinRef,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -275,6 +277,10 @@ export function PlayerBoard({
   hiddenTopInd?: IndustryType | null | undefined;
   /** 个人版图风格(偏好设置收口):mat=桌游风格;list=列表风格(原"明细")。 */
   stackView?: 'mat' | 'list' | undefined;
+  /** 研发暂存中的产业(每个出现一次 = 暂存移除 1 块;版面计数同步 -1,归零置灰)。 */
+  developPicks?: IndustryType[] | undefined;
+  /** 垃圾桶(研发拖放目标)的容器 ref——只有拖到垃圾桶上松手才算研发。 */
+  developBinRef?: React.LegacyRef<HTMLDivElement> | undefined;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
   // 单人打出记录弹层开关(版图/明细切换旁的"打出"按钮)
@@ -406,6 +412,23 @@ export function PlayerBoard({
           </div>
         ) : null}
         <div className="board-stack" data-testid={`player-board-stack-${seat}`}>
+          <div
+            className="develop-bin"
+            data-testid={`develop-bin-${seat}`}
+            ref={developBinRef}
+            title="拖到此处研发(移除该产业最低级板块)"
+          >
+            <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+              <path
+                d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
           {(stackView ?? 'mat') === 'mat' ? (
             <PlayerMat
               tiles={self.tiles}
@@ -413,6 +436,7 @@ export function PlayerBoard({
               colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
               onTileDragStart={onTileDragStart}
               hiddenTopInd={hiddenTopInd}
+              stagedRemovals={developPicks}
             />
           ) : (
             INDUSTRY_ORDER.map((ind) => {
