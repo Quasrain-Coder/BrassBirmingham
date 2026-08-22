@@ -254,7 +254,7 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
   );
 }
 
-/** 牌堆：错位堆叠(dx 小步进摊开,依稀可数余量;余量少时逐张可见)。 */
+/** 牌堆：卡面横置(与版图凹槽同向,旋转 90°)错位堆叠,依稀可数余量。 */
 function DeckStack({
   rect,
   count,
@@ -266,23 +266,28 @@ function DeckStack({
   img: string;
   testid: string;
 }): ReactElement {
-  const cardH = rect.h - 30;
-  const cardW = Math.round((cardH * 250) / 351);
-  const maxSpreadX = Math.max(0, rect.w - cardW - 24);
-  const dx = count > 1 ? Math.min(9, maxSpreadX / (count - 1)) : 0;
-  const dy = count > 1 ? Math.min(3, (rect.h - cardH - 20) / (count - 1)) : 0;
+  // 横置显示尺寸:宽贴合凹槽,高按卡面 250:351 比例;余量即错位摊开的空间
+  const dispW = rect.w - 86;
+  const dispH = Math.round((dispW * 250) / 351);
+  const dx = count > 1 ? Math.min(4, (rect.w - dispW - 20) / (count - 1)) : 0;
+  const dy = count > 1 ? Math.min(3, (rect.h - dispH - 20) / (count - 1)) : 0;
   return (
     <g className="deck-stack" data-testid={testid}>
-      {Array.from({ length: count }, (_, i) => (
-        <image
-          key={i}
-          href={img}
-          x={Math.round(rect.x + 12 + i * dx)}
-          y={Math.round(rect.y + 15 + i * dy)}
-          width={cardW}
-          height={cardH}
-        />
-      ))}
+      {Array.from({ length: count }, (_, i) => {
+        const cx = rect.x + 10 + dispW / 2 + i * dx;
+        const cy = rect.y + 10 + dispH / 2 + i * dy;
+        return (
+          <g key={i} transform={`rotate(90 ${Math.round(cx)} ${Math.round(cy)})`}>
+            <image
+              href={img}
+              x={Math.round(cx - dispH / 2)}
+              y={Math.round(cy - dispW / 2)}
+              width={dispH}
+              height={dispW}
+            />
+          </g>
+        );
+      })}
     </g>
   );
 }
