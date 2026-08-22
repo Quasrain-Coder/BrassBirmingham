@@ -229,7 +229,7 @@ export function HandBar({
     .filter((c) => c !== '')
     .join(' ');
   return (
-    <section className={classes}>
+    <section className={classes} data-testid="hand-bar">
       <div className="own-hand">
         {displayCards.map((card) => {
           const isWild = card.kind === 'wild-location' || card.kind === 'wild-industry';

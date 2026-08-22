@@ -138,7 +138,7 @@ function discardActionCard(state: GameState, player: PlayerIndex, cardId: string
 }
 
 /** 手牌从 deck 顶补回 8 张；deck 空则不补。 */
-function refillHand(state: GameState, player: PlayerIndex): GameState {
+export function refillHand(state: GameState, player: PlayerIndex): GameState {
   const ps = state.players[player]!;
   const draw = Math.min(HAND_SIZE - ps.hand.length, state.deck.length);
   if (draw <= 0) return state;
@@ -152,7 +152,8 @@ function refillHand(state: GameState, player: PlayerIndex): GameState {
  * （本轮最后一次行动时）补牌 → 回合推进。
  * 不在枚举集内抛 IllegalActionError('illegal-action')。
  * opts.deferRoundEnd：见 endTurnIfNeeded——一轮结束不立即结算,
- * 返回 roundEndPending=true 的待结算态(联机回合确认窗口用)。
+ * 返回 roundEndPending=true 的待结算态(联机回合确认窗口用);该选项同时
+ * 跳过补牌(补牌同属回合结算,联机 held 玩家 end_turn 时由调用方 refillHand)。
  */
 export function applyAction(
   state: GameState,
@@ -200,7 +201,8 @@ export function applyAction(
 
   // 补牌时机（规则书 p.6 "After all of your actions have been completed"）：
   // 仅本轮最后一次行动后补回 8 张；2 行动回合的第 1 个行动后手牌保持 7 张。
-  if (next.actionsThisTurn + 1 >= actionsPerRound(next)) {
+  // deferRoundEnd(联机回合确认)时跳过——补牌也是回合结算,等 end_turn 由调用方补
+  if (opts?.deferRoundEnd !== true && next.actionsThisTurn + 1 >= actionsPerRound(next)) {
     next = refillHand(next, player);
   }
   next = { ...next, actionsThisTurn: next.actionsThisTurn + 1 };

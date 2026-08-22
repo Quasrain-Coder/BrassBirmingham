@@ -22,6 +22,7 @@ import {
   BOARD_SIZE,
   CITY_LABEL,
   COAL_MARKET_CELLS,
+  DECK_RECTS,
   INCOME_TRACK,
   IRON_MARKET_CELLS,
   LINK_MIDPOINTS,
@@ -249,6 +250,62 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
         height={52}
         preserveAspectRatio="xMidYMid meet"
       />
+    </g>
+  );
+}
+
+/** 牌堆：卡面横置(与版图凹槽同向,旋转 90°)。mode 'stagger' = 右下大步进错位
+ * (百搭堆,逐张可辨);mode 'count' = 整齐一摞 + 堆顶大号余量数字(主牌堆)。 */
+function DeckStack({
+  rect,
+  count,
+  img,
+  testid,
+  mode,
+}: {
+  rect: { x: number; y: number; w: number; h: number };
+  count: number;
+  img: string;
+  testid: string;
+  mode: 'stagger' | 'count';
+}): ReactElement {
+  const dispW = rect.w - 130;
+  const dispH = Math.round((dispW * 250) / 351);
+  const cards = Array.from({ length: count }, (_, i) => {
+    const dx = mode === 'stagger' ? i * 18 : 0;
+    const dy = mode === 'stagger' ? i * 13 : 0;
+    const cx = rect.x + 8 + dispW / 2 + dx;
+    const cy = rect.y + 8 + dispH / 2 + dy;
+    return (
+      <g key={i} transform={`rotate(90 ${Math.round(cx)} ${Math.round(cy)})`}>
+        <image
+          href={img}
+          x={Math.round(cx - dispH / 2)}
+          y={Math.round(cy - dispW / 2)}
+          width={dispH}
+          height={dispW}
+        />
+      </g>
+    );
+  });
+  return (
+    <g className="deck-stack" data-testid={testid}>
+      {cards}
+      {mode === 'count' && count > 0 ? (
+        <text
+          x={Math.round(rect.x + rect.w / 2)}
+          y={Math.round(rect.y + rect.h / 2 + 70)}
+          textAnchor="middle"
+          fontSize={190}
+          fontWeight={700}
+          fill="#f0c964"
+          stroke="#14100a"
+          strokeWidth={14}
+          paintOrder="stroke"
+        >
+          {count}
+        </text>
+      ) : null}
     </g>
   );
 }
@@ -606,6 +663,14 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
         {IRON_MARKET_CELLS.map((p, i) =>
           i >= ironFilledFrom ? <Cube key={`iron-${i}`} x={p.x} y={p.y} size={MARKET_CELL_SIZE * 0.8} fill="#c76b2a" /> : null,
         )}
+      </g>
+
+      {/* 左侧三牌堆:本时代待摸牌堆/万能产业/万能城市——错位堆叠,依稀可数余量;
+          余量直接读 state(deck.count / wildSupply),reset/回放天然一致 */}
+      <g className="board-decks" pointerEvents="none">
+        <DeckStack rect={DECK_RECTS.draw} count={state.deck.count} img="/assets/cards/back.png" testid="deck-stack-draw" mode="count" />
+        <DeckStack rect={DECK_RECTS.wildIndustry} count={state.wildSupply.industry} img="/assets/cards/wild-industry.png" testid="deck-stack-wild-industry" mode="stagger" />
+        <DeckStack rect={DECK_RECTS.wildLocation} count={state.wildSupply.location} img="/assets/cards/wild-location.png" testid="deck-stack-wild-location" mode="stagger" />
       </g>
 
       {/* 连线 token 顶层渲染（不被板块图遮挡） */}

@@ -567,7 +567,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
   function handleEndTurn(msg: { token: string }): void {
     const { entry } = heldEntry(msg);
     const eraBefore = entry.session.state.era;
-    entry.session.consumeRoundEnd();
+    entry.session.settleTurnEnd();
     const eraChanged = entry.session.state.era !== eraBefore;
     if (entry.session.finished) {
       // 清算进终局(rail 末):此时才广播 game_over

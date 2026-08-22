@@ -21,12 +21,12 @@ import { AIIndicator } from './AIIndicator';
 import { ActionLogModal } from './DiscardModal';
 import { HintPopup } from './HintPopup';
 import type { AnchorRect } from './HintPopup';
-import { HandBar, LogPanel, PlayerBoard, playerName } from './Panels';
+import { HandBar, LogPanel, PlayerBoard, cardImageSrc, playerName } from './Panels';
 import { TopActionBar } from './TopActionBar';
 import { PrefsModal } from './PrefsModal';
 import type { HandRaiseMode, StackViewMode } from './PrefsModal';
 import type { TopActionKind } from './TopActionBar';
-import { describeAction, cardName } from './display';
+import { cardFromId, describeAction, cardName } from './display';
 import { buildabilityFor, reconstructEraLog, resolveBuildSlot } from './interactions';
 import { ScoreModal, useScoreHistory } from './ScoreTable';
 import { SPOTLIGHT_DURATION_MS, spotlightOf } from './spotlight';
@@ -62,6 +62,43 @@ interface GameBoardProps {
 
 /** 非本人回合的固定空数组：避免每渲染新引用触发 useActionDraft 的重置 effect 死循环。 */
 const NO_ACTIONS: Action[] = [];
+
+/** 飞牌动画：一张卡从 from 矩形中心飞到 to 矩形中心(750ms),结束自毁。 */
+function CardFlight({
+  img,
+  from,
+  to,
+  onDone,
+}: {
+  img: string;
+  from: DOMRect;
+  to: DOMRect;
+  onDone: () => void;
+}): ReactElement {
+  const [go, setGo] = useState(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setGo(true));
+    const timer = setTimeout(onDone, 820);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const W = 88;
+  const fx = from.left + from.width / 2 - W / 2;
+  const fy = from.top + from.height / 2 - (W * 351) / 250 / 2;
+  const tx = to.left + to.width / 2 - W / 2;
+  const ty = to.top + to.height / 2 - (W * 351) / 250 / 2;
+  return (
+    <img
+      className="card-flight"
+      src={img}
+      alt=""
+      style={{ left: go ? tx : fx, top: go ? ty : fy, width: W, opacity: go ? 0.35 : 1 }}
+    />
+  );
+}
 
 function GameBoard({
   store,
@@ -192,6 +229,8 @@ function GameBoard({
   // 行动聚光灯：逐条消费日志流(不以"最后一条"为触发键——AI 行动一帧内连发时,
   // React 合并渲染会让中间行动丢播报;每条行动都入队,各播 5 秒)。
   // resetTurn 后序号回退(seq 变小):重置消费水位;store 已剔除被撤销的日志条目。
+  // 同一消费循环顺带触发飞牌:搜寻 = 两个百搭牌堆各飞 1 张给行动者;
+  // 打出百搭 = 该牌从行动者区域飞回对应百搭牌堆。
   const consumedSeqRef = useRef(-1);
   useEffect(() => {
     if (seq < consumedSeqRef.current) consumedSeqRef.current = seq - 1;
@@ -203,6 +242,15 @@ function GameBoard({
         ...spotlightOf(e.player, e.action),
         text: describeAction(e.action),
       });
+      if (e.action.type === 'scout') {
+        const to = playerAreaRect(e.player);
+        spawnFlight('/assets/cards/wild-industry.png', stackRect('wild-industry'), to);
+        spawnFlight('/assets/cards/wild-location.png', stackRect('wild-location'), to);
+      } else if (e.action.cardId.startsWith('wild-')) {
+        const card = cardFromId(e.action.cardId);
+        const kind = card.kind === 'wild-industry' ? 'wild-industry' : 'wild-location';
+        spawnFlight(cardImageSrc(card), playerAreaRect(e.player), stackRect(kind));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [log, seq]);
@@ -267,8 +315,61 @@ function GameBoard({
       kind: 'round',
       text: `${playerName(room ?? undefined, resetNotice.seat)} 已重置本回合`,
     });
+    // 重置回合:撤销一切飞行中特效(无动画直接消失);牌堆余量由 state 驱动自动还原
+    setFlights([]);
+    lastDeckRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetNotice?.n]);
+
+  /** 飞牌特效:补牌(结束回合后)/搜寻/百搭飞回。 */
+  const [flights, setFlights] = useState<{ id: number; img: string; from: DOMRect; to: DOMRect }[]>([]);
+  const flightIdRef = useRef(0);
+  const rectOf = (sel: string): DOMRect | null =>
+    document.querySelector(sel)?.getBoundingClientRect() ?? null;
+  const stackRect = (kind: string): DOMRect | null => rectOf(`[data-testid="deck-stack-${kind}"]`);
+  const playerAreaRect = (player: PlayerIndex): DOMRect | null =>
+    player === seat ? (rectOf('[data-testid="hand-bar"]') ?? rectOf(`[data-testid="player-board-${seat}"]`)) : rectOf(`[data-testid="player-board-${player}"]`);
+  const spawnFlight = (img: string, from: DOMRect | null, to: DOMRect | null): void => {
+    if (from === null || to === null) return;
+    flightIdRef.current += 1;
+    const id = flightIdRef.current;
+    setFlights((fs) => [...fs, { id, img, from, to }]);
+  };
+
+  // 补牌飞行动效:牌堆余量下降发生在回合最后一动的补牌(refillHand)——真人须等
+  // end_turn 才播(结束回合/轮末停顿开始时);AI 即时。lastDeckRef 在扣回合期间
+  // 不更新,把补牌差额攒到放行时结算;reset 时置 null 重新校准。
+  const lastDeckRef = useRef<number | null>(null);
+  const prevTurnRef = useRef<{ hold: PlayerIndex | null; brk: boolean; current: PlayerIndex } | null>(null);
+  useEffect(() => {
+    const deckNow = state.deck.count;
+    const prev = prevTurnRef.current;
+    prevTurnRef.current = { hold: turnHold, brk: roundBreak, current };
+    if (lastDeckRef.current === null) {
+      lastDeckRef.current = deckNow;
+      return;
+    }
+    const drop = lastDeckRef.current - deckNow;
+    const released = prev !== null && prev.hold !== null && turnHold === null;
+    const breakStarted = prev !== null && !prev.brk && roundBreak;
+    if (released || breakStarted) {
+      // 真人 end_turn:受益者是被扣住的玩家;差额可跨多快照累计(扣回合期间攒的)
+      const beneficiary = (prev!.hold ?? current) as PlayerIndex;
+      if (drop > 0) {
+        const to = playerAreaRect(beneficiary);
+        for (let i = 0; i < Math.min(drop, 2); i += 1) spawnFlight('/assets/cards/back.png', stackRect('draw'), to);
+      }
+      lastDeckRef.current = deckNow;
+    } else if (turnHold === null && !roundBreak && (prev === null || prev.hold === null)) {
+      // AI 行动线:补牌即播,受益者是上一步的当前玩家
+      if (drop > 0 && prev !== null) {
+        const to = playerAreaRect(prev.current);
+        for (let i = 0; i < Math.min(drop, 2); i += 1) spawnFlight('/assets/cards/back.png', stackRect('draw'), to);
+      }
+      lastDeckRef.current = deckNow;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.deck.count, turnHold, roundBreak]);
 
   const spotlight: (ActionSpotlight & { text: string }) | null =
     stage?.kind === 'action' ? stage : null;
@@ -568,6 +669,16 @@ function GameBoard({
           }}
         />
       ) : null}
+      {/* 飞牌特效层:补牌/搜寻/百搭飞回,reset 时整层清空 */}
+      {flights.map((f) => (
+        <CardFlight
+          key={f.id}
+          img={f.img}
+          from={f.from}
+          to={f.to}
+          onDone={() => setFlights((fs) => fs.filter((x) => x.id !== f.id))}
+        />
+      ))}
       {scoreHistory.open ? (
         <ScoreModal
           entries={scoreHistory.entries}

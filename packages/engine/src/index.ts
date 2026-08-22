@@ -52,7 +52,7 @@ export { applyLoan, enumerateLoan } from './actions/loan.js';
 export { applyScout, enumerateScout } from './actions/scout.js';
 export { applyPass } from './actions/pass.js';
 export { applySell, enumerateSells } from './actions/sell.js';
-export { applyAction, enumerateActions } from './apply.js';
+export { applyAction, enumerateActions, refillHand } from './apply.js';
 export { RandomAgent, playGame } from './agents/random.js';
 export type { PlayerAgent } from './agents/random.js';
 export { actionsPerRound, eraEndCondition, endTurnIfNeeded, settleRoundEnd } from './turn.js';

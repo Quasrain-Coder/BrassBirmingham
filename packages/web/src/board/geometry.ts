@@ -12,6 +12,16 @@ import type { LocationId, MerchantId } from '@brass/engine';
 export const BOARD_SIZE = 6144;
 /** 产业槽位（印刷白框）边长。 */
 export const SLOT_SIZE = 205;
+
+/**
+ * 版图左侧三个牌堆格（6144 坐标系,依官方扫描件框线测量）：
+ * draw = 本时代待摸牌堆;wildIndustry = 万能产业;wildLocation = 万能城市。
+ */
+export const DECK_RECTS = {
+  draw: { x: 1300, y: 1434, w: 646, h: 491 },
+  wildIndustry: { x: 1300, y: 1987, w: 646, h: 491 },
+  wildLocation: { x: 1300, y: 2529, w: 646, h: 491 },
+} as const;
 /** 商人板块格宽/高。 */
 export const MERCHANT_TILE_W = 200;
 export const MERCHANT_TILE_H = 260;
