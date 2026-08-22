@@ -151,8 +151,14 @@ function refillHand(state: GameState, player: PlayerIndex): GameState {
  * 统一行动入口：校验 → 分派 → 弃牌（按行动类型分派）→ 行动计数 →
  * （本轮最后一次行动时）补牌 → 回合推进。
  * 不在枚举集内抛 IllegalActionError('illegal-action')。
+ * opts.deferRoundEnd：见 endTurnIfNeeded——一轮结束不立即结算,
+ * 返回 roundEndPending=true 的待结算态(联机回合确认窗口用)。
  */
-export function applyAction(state: GameState, action: Action): GameState {
+export function applyAction(
+  state: GameState,
+  action: Action,
+  opts?: { deferRoundEnd?: boolean },
+): GameState {
   const player = state.turnOrder[state.currentPlayerIdx]!;
   if (!isLegalAction(state, player, action)) {
     throw new IllegalActionError(
@@ -198,5 +204,5 @@ export function applyAction(state: GameState, action: Action): GameState {
     next = refillHand(next, player);
   }
   next = { ...next, actionsThisTurn: next.actionsThisTurn + 1 };
-  return endTurnIfNeeded(next);
+  return endTurnIfNeeded(next, opts);
 }

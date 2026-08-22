@@ -39,14 +39,14 @@ export {
   reachableFrom,
 } from './network.js';
 export type { NetworkNode } from './network.js';
-export { applyFlip, consumeBeer, consumeCoal, consumeIron } from './resources.js';
+export { applyFlip, consumeBeer, consumeCoal, consumeIron, merchantHasUsableBarrel } from './resources.js';
 export type {
   ConsumeBeerOpts,
   ConsumeBeerResult,
   ConsumeResult,
 } from './resources.js';
 export { applyBuild, enumerateBuilds } from './actions/build.js';
-export { applyNetwork, enumerateNetwork } from './actions/network.js';
+export { applyNetwork, enumerateNetwork, firstLocationEndpoint } from './actions/network.js';
 export { applyDevelop, enumerateDevelop } from './actions/develop.js';
 export { applyLoan, enumerateLoan } from './actions/loan.js';
 export { applyScout, enumerateScout } from './actions/scout.js';
@@ -55,7 +55,7 @@ export { applySell, enumerateSells } from './actions/sell.js';
 export { applyAction, enumerateActions } from './apply.js';
 export { RandomAgent, playGame } from './agents/random.js';
 export type { PlayerAgent } from './agents/random.js';
-export { actionsPerRound, eraEndCondition, endTurnIfNeeded } from './turn.js';
+export { actionsPerRound, eraEndCondition, endTurnIfNeeded, settleRoundEnd } from './turn.js';
 export { checkEraEnd, finalScore, scoreEraLinks, scoreFlippedIndustries } from './era.js';
 export {
   buyCoalCost,

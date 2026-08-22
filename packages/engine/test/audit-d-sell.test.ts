@@ -46,7 +46,16 @@ function setMerchant(
   tiles: ('any' | 'cotton' | 'manufacturer' | 'pottery' | 'blank')[],
   beer: number,
 ): void {
-  state.merchants[id] = { tiles, beer };
+  // 桶按板块格绑定:前 beer 个非 blank 格有桶(与 UI 从左填充一致)
+  let left = beer;
+  state.merchants[id] = {
+    tiles,
+    barrels: tiles.map((t) => {
+      if (t === 'blank' || left <= 0) return false;
+      left -= 1;
+      return true;
+    }),
+  };
 }
 
 function withLink(state: GameState, linkIndex: number, player: PlayerIndex = 0): void {
@@ -151,7 +160,7 @@ describe('audit D: sell', () => {
     expect(sells[0]!.sales[0]!.useMerchantBeer).toBe(true);
     const { state: after, events } = applySell(s, 0, sells[0]!);
     expect(after.players[0]!.money).toBe(17 + 5);
-    expect(after.merchants.warrington.beer).toBe(0);
+    expect(after.merchants.warrington.barrels.filter(Boolean).length).toBe(0);
     expect(after.players[0]!.incomeSpace).toBe(15); // 仅翻面 +5
     expect(events).toContainEqual({ kind: 'merchant-bonus', player: 0, merchant: 'warrington' });
   });
@@ -168,7 +177,7 @@ describe('audit D: sell', () => {
     expect(sells).toHaveLength(1);
     const { state: after, events } = applySell(s, 0, sells[0]!);
     expect(after.players[0]!.vp).toBe(4);
-    expect(after.merchants.shrewsbury.beer).toBe(0);
+    expect(after.merchants.shrewsbury.barrels.filter(Boolean).length).toBe(0);
     expect(events).toContainEqual({ kind: 'merchant-bonus', player: 0, merchant: 'shrewsbury' });
   });
 
@@ -183,7 +192,7 @@ describe('audit D: sell', () => {
     expect(sells).toHaveLength(1);
     const { state: after, events } = applySell(s, 0, sells[0]!);
     expect(after.players[0]!.vp).toBe(3);
-    expect(after.merchants.nottingham.beer).toBe(0);
+    expect(after.merchants.nottingham.barrels.filter(Boolean).length).toBe(0);
     expect(events).toContainEqual({ kind: 'merchant-bonus', player: 0, merchant: 'nottingham' });
   });
 
@@ -219,7 +228,7 @@ describe('audit D: sell', () => {
     // 以 LocationId 为用酒处、useMerchantBeer:false（network.ts 双轨的调用方式）：
     // 即使商人位有桶也绝不动它、不发商人奖励。
     const r = consumeBeer(s, 0, 1, { at: 'derby', useMerchantBeer: false });
-    expect(r.state.merchants.oxford.beer).toBe(1);
+    expect(r.state.merchants.oxford.barrels.filter(Boolean).length).toBe(1);
     expect(r.merchantBonus).toBeUndefined();
     expect(r.state.board.slots['derby']![0]!.flipped).toBe(true); // 自己酒厂被喝空连锁翻面
   });
@@ -237,7 +246,7 @@ describe('audit D: sell', () => {
     expect(sells[0]!.sales[0]!.useMerchantBeer).toBe(true);
     const { state: after } = applySell(s, 0, sells[0]!);
     expect(after.board.slots['birmingham']![0]!.flipped).toBe(true);
-    expect(after.merchants.oxford.beer).toBe(0);
+    expect(after.merchants.oxford.barrels.filter(Boolean).length).toBe(0);
     expect(after.board.slots['derby']![0]!.flipped).toBe(true);
   });
 

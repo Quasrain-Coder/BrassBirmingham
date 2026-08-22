@@ -179,6 +179,39 @@ export function HandBar({
   handRaise?: 'single' | 'all' | undefined;
 }): ReactElement {
   const self = state.players[seat];
+  // 手牌自定义排序(纯前端,服务端不关心手牌顺序):dragOrder 保存拖拽后的卡牌 id 序列;
+  // 每次渲染与快照手牌对账——仍在手牌的按自定义序,新摸的牌追加在尾
+  const [dragOrder, setDragOrder] = useState<string[]>([]);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropMark, setDropMark] = useState<{ id: string; after: boolean } | null>(null);
+  const handCards = self?.hand.kind === 'full' ? self.hand.cards : [];
+  const displayCards = (() => {
+    if (dragOrder.length === 0) return handCards;
+    const byId = new Map(handCards.map((c) => [c.id, c]));
+    const known = dragOrder.filter((id) => byId.has(id)).map((id) => byId.get(id)!);
+    const knownSet = new Set(known.map((c) => c.id));
+    return [...known, ...handCards.filter((c) => !knownSet.has(c.id))];
+  })();
+  const clearDrag = (): void => {
+    setDragId(null);
+    setDropMark(null);
+  };
+  const handleDrop = (targetId: string, after: boolean): void => {
+    if (dragId === null || dragId === targetId) {
+      clearDrag();
+      return;
+    }
+    const ids = displayCards.map((c) => c.id).filter((id) => id !== dragId);
+    let idx = ids.indexOf(targetId);
+    if (idx === -1) {
+      clearDrag();
+      return;
+    }
+    if (after) idx += 1;
+    ids.splice(idx, 0, dragId);
+    setDragOrder(ids);
+    clearDrag();
+  };
   // 已有选定(行动牌或搜寻弃牌)时,其余牌悬停不再提起;被选中的牌保持提起(固定悬浮)
   const hasSelection =
     scoutMode !== null && scoutMode !== undefined
@@ -198,36 +231,59 @@ export function HandBar({
   return (
     <section className={classes}>
       <div className="own-hand">
-        {self?.hand.kind === 'full'
-          ? self.hand.cards.map((card) => {
-              const isWild = card.kind === 'wild-location' || card.kind === 'wild-industry';
-              const selected =
+        {displayCards.map((card) => {
+          const isWild = card.kind === 'wild-location' || card.kind === 'wild-industry';
+          const selected =
+            scoutMode !== null && scoutMode !== undefined
+              ? scoutMode.picks.includes(card.id)
+              : selectedCard === card.id;
+          const classes = [
+            'hand-card',
+            isWild ? 'wild' : '',
+            selected ? 'selected' : '',
+            dragId === card.id ? 'dragging' : '',
+            dropMark?.id === card.id ? (dropMark.after ? 'drop-after' : 'drop-before') : '',
+          ]
+            .filter((c) => c !== '')
+            .join(' ');
+          return (
+            <button
+              key={card.id}
+              type="button"
+              data-testid={`hand-card-${card.id}`}
+              className={classes}
+              draggable
+              onDragStart={(e) => {
+                setDragId(card.id);
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', card.id);
+              }}
+              onDragOver={(e) => {
+                if (dragId === null || dragId === card.id) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                const rect = e.currentTarget.getBoundingClientRect();
+                setDropMark({ id: card.id, after: e.clientX > rect.left + rect.width / 2 });
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const rect = e.currentTarget.getBoundingClientRect();
+                handleDrop(card.id, e.clientX > rect.left + rect.width / 2);
+              }}
+              onDragEnd={clearDrag}
+              onClick={() =>
                 scoutMode !== null && scoutMode !== undefined
-                  ? scoutMode.picks.includes(card.id)
-                  : selectedCard === card.id;
-              const classes = ['hand-card', isWild ? 'wild' : '', selected ? 'selected' : '']
-                .filter((c) => c !== '')
-                .join(' ');
-              return (
-                <button
-                  key={card.id}
-                  type="button"
-                  data-testid={`hand-card-${card.id}`}
-                  className={classes}
-                  onClick={() =>
-                    scoutMode !== null && scoutMode !== undefined
-                      ? scoutMode.onToggle(card.id)
-                      : onSelect?.(card.id)
-                  }
-                >
-                  <img className="hand-card-art" src={cardImageSrc(card)} alt={cardName(card)} />
-                  <span className="hand-card-name">{cardName(card)}</span>
-                  <span className="card-tip">{cardName(card)}</span>
-                  {isWild ? <span className="wild-badge">百搭</span> : null}
-                </button>
-              );
-            })
-          : null}
+                  ? scoutMode.onToggle(card.id)
+                  : onSelect?.(card.id)
+              }
+            >
+              <img className="hand-card-art" src={cardImageSrc(card)} alt={cardName(card)} />
+              <span className="hand-card-name">{cardName(card)}</span>
+              <span className="card-tip">{cardName(card)}</span>
+              {isWild ? <span className="wild-badge">百搭</span> : null}
+            </button>
+          );
+        })}
       </div>
     </section>
   );
@@ -248,10 +304,13 @@ export function PlayerBoard({
   buildStatus,
   playedCards,
   eraActions,
+  roundNow,
+  turnHold,
   onTileDragStart,
   hiddenTopInd,
   stackView,
   developPicks,
+  buildPicks,
   developBinRef,
 }: {
   state: FilteredState;
@@ -271,6 +330,11 @@ export function PlayerBoard({
   playedCards?: Card[] | undefined;
   /** 本时代全部行动及实际现金变化(服务端结算时记录;note='round-income' 为轮末收入)。 */
   eraActions?: { action: Action; moneyDelta: number; note?: 'round-income' }[] | undefined;
+  /** 时代内当前轮号(由全座位 eraActions 推算;引擎 state.round 跨时代不重置,
+   *  不能直接拿来匹配时代内分组的轮次)。缺省回退 state.round。 */
+  roundNow?: number | undefined;
+  /** 扣住的回合(轮末停顿时非空):当前轮尚无行动时回落展示刚结束那轮。 */
+  turnHold?: PlayerIndex | null | undefined;
   /** 按下产业栈顶板块开始拖拽(宽屏拖拽建造/研发,仅紧凑面板用)。 */
   onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>) => void) | undefined;
   /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失)。 */
@@ -279,6 +343,8 @@ export function PlayerBoard({
   stackView?: 'mat' | 'list' | undefined;
   /** 研发暂存中的产业(每个出现一次 = 暂存移除 1 块;版面计数同步 -1,归零置灰)。 */
   developPicks?: IndustryType[] | undefined;
+  /** 建造暂存中的产业(已落槽/落点待确认:版面栈顶 token 同步 -1,与研发暂存同机制)。 */
+  buildPicks?: IndustryType[] | undefined;
   /** 垃圾桶(研发拖放目标)的容器 ref——只有拖到垃圾桶上松手才算研发。 */
   developBinRef?: React.LegacyRef<HTMLDivElement> | undefined;
 }): ReactElement {
@@ -309,8 +375,8 @@ export function PlayerBoard({
     const key = `${def.industry}-${def.level}`;
     remainingByTile.set(key, (remainingByTile.get(key) ?? 0) + 1);
   }
-  // 研发暂存同步减量(每暂存一次该产业,其最低级剩余 -1;归零显示耗尽)
-  for (const ind of developPicks ?? []) {
+  // 研发/建造暂存同步减量(每暂存一次该产业,其最低级剩余 -1;归零显示耗尽)
+  for (const ind of [...(developPicks ?? []), ...(buildPicks ?? [])]) {
     const top = TILES.filter((t) => t.industry === ind)
       .map((d) => d.level)
       .find((lv) => (remainingByTile.get(`${ind}-${lv}`) ?? 0) > 0);
@@ -369,9 +435,15 @@ export function PlayerBoard({
         </>
       );
     };
-    const acts = (rounds.find((r) => r.round === state.round)?.actions ?? []).filter(
-      (a) => a.note !== 'round-income',
-    );
+    // roundEndPending(轮末结算挂起,等 held 玩家确认回合)时轮次已指向"下一轮",
+    // 而刚结束那轮才是要展示的——此时取最新一轮;否则按时代内当前轮号 roundNow
+    // 匹配(缺省回退 state.round)。轮末停顿(turnHold 非空且新一轮还无人行动)同样回落
+    const acts = (
+      state.roundEndPending
+        ? (rounds[0]?.actions ?? [])
+        : (rounds.find((r) => r.round === (roundNow ?? state.round))?.actions ??
+          (turnHold !== null && turnHold !== undefined ? (rounds[0]?.actions ?? []) : []))
+    ).filter((a) => a.note !== 'round-income');
     const actionCardsText = (a: Action): string =>
       a.type === 'scout'
         ? a.cardIds.map((id) => cardName(cardFromId(id))).join('+')
@@ -477,7 +549,7 @@ export function PlayerBoard({
               colorKey={colorKey as 'purple' | 'yellow' | 'orange' | 'teal'}
               onTileDragStart={onTileDragStart}
               hiddenTopInd={hiddenTopInd}
-              stagedRemovals={developPicks}
+              stagedRemovals={[...(developPicks ?? []), ...(buildPicks ?? [])]}
             />
           ) : (
             INDUSTRY_ORDER.map((ind) => {

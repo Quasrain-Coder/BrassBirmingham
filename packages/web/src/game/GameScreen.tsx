@@ -9,13 +9,13 @@
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Action, Card, PlayerIndex } from '@brass/engine';
-import { LOCATIONS } from '@brass/engine';
+import { buildDeck } from '@brass/engine';
 import type { IndustryType, LocationId } from '@brass/engine';
 import type { DraftPreview, FilteredState, RoomState } from '@brass/protocol';
 import { BoardSvg, BOARD_VIEW } from '../board/BoardSvg';
 import { PLAYER_COLORS } from '../board/BoardSvg';
 import type { ActionSpotlight } from '../board/BoardSvg';
-import { locationAnchor } from '../board/geometry';
+import { SLOT_RECTS, SLOT_SIZE } from '../board/geometry';
 import { ActionBar, useActionDraft } from './ActionBar';
 import { AIIndicator } from './AIIndicator';
 import { ActionLogModal } from './DiscardModal';
@@ -44,6 +44,8 @@ interface GameBoardProps {
   thinkingSeats: PlayerIndex[];
   gameOver: GameStoreState['gameOver'];
   turnHold: PlayerIndex | null;
+  /** 轮末停顿中(收官玩家已 end_turn):"第 x 轮结束"播报的触发窗。 */
+  roundBreak: boolean;
   /** 宽屏面板固定座次(store 持久,断线重连/刷新不重置)。 */
   fixedSeats: PlayerIndex[];
   /** 本回合操作行(宽屏紧凑面板第二行):行动日志/本时代行动/当前 seq。 */
@@ -54,8 +56,8 @@ interface GameBoardProps {
   resetNotice: { seat: PlayerIndex; n: number } | null;
   /** 各座位本时代已打出的牌(打出记录弹层用)。 */
   playedCards: Card[][];
-  /** 各座位本时代的全部行动及实际现金变化(面板/日志用)。 */
-  eraActions: { action: Action; moneyDelta: number }[][];
+  /** 各座位本时代的全部行动及实际现金变化(面板/日志用;note='round-income' 为轮末收入合成条目)。 */
+  eraActions: { action: Action; moneyDelta: number; note?: 'round-income' }[][];
 }
 
 /** 非本人回合的固定空数组：避免每渲染新引用触发 useActionDraft 的重置 effect 死循环。 */
@@ -72,6 +74,7 @@ function GameBoard({
   thinkingSeats,
   gameOver,
   turnHold,
+  roundBreak,
   seq,
   fixedSeats,
   remoteDrafts,
@@ -102,6 +105,27 @@ function GameBoard({
     () => (myTurn ? buildabilityFor(state, seat, legalActions) : undefined),
     [myTurn, state, seat, legalActions],
   );
+  // 时代内当前轮号:引擎 state.round 跨时代不重置(rail 时代为 9~16),而个人版图
+  // "本回合"按时代内轮次分组——用全座位真实行动数 ÷ 每轮行动数推算
+  // (运河首轮 1 动/人,其余每轮 2 动/人;轮末收入合成条目不计)。
+  const roundNow = useMemo(() => {
+    const pc = state.playerCount;
+    const real = eraActions.reduce(
+      (n, list) => n + list.filter((a) => a.note !== 'round-income').length,
+      0,
+    );
+    if (state.era === 'canal') {
+      return real <= pc ? 1 : 2 + Math.floor((real - pc) / (2 * pc));
+    }
+    return Math.floor(real / (2 * pc)) + 1;
+  }, [eraActions, state.era, state.playerCount]);
+  // 时代总轮数 = 整副牌数 ÷ 每轮出牌数(2·人数):2P=10、3P=9、4P=8(模拟验证)
+  // 运河首轮 1 动/人不影响该恒等式(首轮少出的 pc 张恰由 setup 弃牌补足)
+  const eraTotal = useMemo(
+    () => buildDeck(state.playerCount as 2 | 3 | 4).length / (2 * state.playerCount),
+    [state.playerCount],
+  );
+  const eraRoundText = `${state.era === 'canal' ? '运河时代' : '铁路时代'} · 第 ${Math.min(roundNow, eraTotal)}/${eraTotal} 轮`;
   // 分数构成:时代切换时自动弹出(手动关闭),头部按钮随时查阅
   const scoreHistory = useScoreHistory(state);
 
@@ -183,7 +207,9 @@ function GameBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [log, seq]);
 
-  // 新一轮/新时代红字播放入队：round 递增或 era 切换时触发;首帧不播
+  // 新一轮/新时代红字播放入队:era 切换、或 AI 收官(无扣回合)的轮次推进。
+  // 真人收官的 round++ 发生在扣回合窗口(玩家还未点结束回合)——此时保持安静,
+  // "第 x 轮结束"必须由 roundBreak(点完结束回合后的轮末停顿)触发,见下方 effect
   const prevRoundRef = useRef<{ era: string; round: number } | null>(null);
   useEffect(() => {
     const prev = prevRoundRef.current;
@@ -191,11 +217,24 @@ function GameBoard({
     if (prev === null) return;
     if (prev.era !== state.era) {
       pushStage({ kind: 'round', text: '进入铁路时代！' });
-    } else if (state.round > prev.round) {
+    } else if (state.round > prev.round && !state.roundEndPending && turnHold === null) {
+      // roundEndPending(轮末结算挂起)与真人收官扣回合(turnHold)的 round++ 都不是新一轮开播
       pushStage({ kind: 'round', text: `第 ${state.round} 轮` });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.era, state.round]);
+  // 轮末停顿:"第 x 轮结束"在收官玩家点完结束回合(roundBreak 开始)才播;
+  // 停顿放行(roundBreak 结束)再播新一轮
+  const wasBreakRef = useRef(false);
+  useEffect(() => {
+    if (roundBreak && !wasBreakRef.current) {
+      pushStage({ kind: 'round', text: `第 ${state.round - 1} 轮结束` });
+    } else if (!roundBreak && wasBreakRef.current) {
+      pushStage({ kind: 'round', text: `第 ${state.round} 轮` });
+    }
+    wasBreakRef.current = roundBreak;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roundBreak]);
 
   // 行动日志补全:resume 后客户端 log 只有残尾——用 eraActions 按回合结构
   // (运河首轮各 1 动,其余各 2 动,turnOrder 轮转)重建全时代日志,残尾与实时
@@ -276,11 +315,16 @@ function GameBoard({
   const handleTileDrop = (ind: IndustryType, x: number, y: number): void => {
     const wrap = boardWrapRef.current;
     if (wrap === null) return;
-    // 拖到垃圾桶上松手 = 研发(唯一的研发拖放目标,等价按研发并选中该产业)
+    // 拖到垃圾桶上松手 = 研发(唯一的研发拖放目标,等价按研发并选中该产业);
+    // 卖货触发了格洛斯特研发奖励时 = 选该产业为免费研发(等价按行动栏按钮)
     const bin = developBinRef.current;
     if (bin !== null) {
       const r = bin.getBoundingClientRect();
       if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        if (draft.sellBonusPending && draft.bonusDevelopOptions.includes(ind)) {
+          draft.pickBonusDevelop(ind);
+          return;
+        }
         if (draft.developChoices.includes(ind)) {
           setTopAction('develop');
           draft.toggleDevelop(ind);
@@ -296,22 +340,21 @@ function GameBoard({
     }
     const rect = wrap.getBoundingClientRect();
     if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-      // 落点 → viewBox 坐标 → 最近城市锚点,与按钮流一致(预选产业+点规范化槽位)
+      // 落点 → viewBox 坐标 → 吸附到"该产业合法候选城市"的最近槽位印刷框:
+      // 只在候选集合里取最近,容差 1.4×槽位边长(≈287)——同城槽间空地能吸附,
+      // 邻近城市(间距 400+)不会被误吸;与按钮流一致(预选产业+规范化槽位)
       const vx = BOARD_VIEW.x + ((x - rect.left) / rect.width) * BOARD_VIEW.size;
       const vy = BOARD_VIEW.y + ((y - rect.top) / rect.height) * BOARD_VIEW.size;
       let best: { loc: LocationId; dist: number } | null = null;
-      for (const loc of Object.keys(LOCATIONS) as LocationId[]) {
-        const a = locationAnchor(loc);
-        const dist = Math.hypot(a.x - vx, a.y - vy);
-        if (best === null || dist < best.dist) best = { loc, dist };
+      for (const a of draft.candidates) {
+        if (a.type !== 'build' || a.industry !== ind) continue;
+        for (const r of SLOT_RECTS[a.location] ?? []) {
+          const dist = Math.hypot(r.x + r.w / 2 - vx, r.y + r.h / 2 - vy);
+          if (best === null || dist < best.dist) best = { loc: a.location, dist };
+        }
       }
-      if (best === null || best.dist > 400) return;
+      if (best === null || best.dist > SLOT_SIZE * 1.4) return;
       const loc = best.loc;
-      if (
-        !draft.candidates.some((a) => a.type === 'build' && a.industry === ind && a.location === loc)
-      ) {
-        return;
-      }
       const def = state.players[seat]?.tiles.find((t) => t.industry === ind);
       if (def === undefined) return;
       const target = resolveBuildSlot(state, seat, loc, ind, def.level);
@@ -474,7 +517,16 @@ function GameBoard({
             房间 {room.code}
           </span>
         ) : null}
-        <button type="button" className="btn-ghost" data-testid="open-prefs" onClick={() => setPrefsOpen(true)}>
+        <button
+          type="button"
+          className="btn-ghost"
+          data-testid="leave-game"
+          onClick={() => setLeaveConfirmOpen(true)}
+        >
+          离开对局
+        </button>
+        <span className="era-round" data-testid="era-round">{eraRoundText}</span>
+        <button type="button" className="btn-ghost head-right" data-testid="open-prefs" onClick={() => setPrefsOpen(true)}>
           偏好设置
         </button>
         <button
@@ -500,14 +552,6 @@ function GameBoard({
           onClick={(e) => setHintAnchor(hintAnchor === null ? e.currentTarget.getBoundingClientRect() : null)}
         >
           提示卡
-        </button>
-        <button
-          type="button"
-          className="btn-ghost"
-          data-testid="leave-game"
-          onClick={() => setLeaveConfirmOpen(true)}
-        >
-          离开对局
         </button>
       </header>
       )}
@@ -613,6 +657,7 @@ function GameBoard({
             <button type="button" className="btn-ghost" data-testid="leave-game" onClick={() => setLeaveConfirmOpen(true)}>
               离开对局
             </button>
+            <span className="era-round" data-testid="era-round">{eraRoundText}</span>
           </div>
           <TopActionBar
             myTurn={myTurn}
@@ -657,7 +702,7 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? draft.developPicks : undefined} developBinRef={i === seat ? developBinRef : undefined} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} roundNow={roundNow} turnHold={turnHold} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? [...draft.developPicks, ...(draft.bonusDevelop !== null ? [draft.bonusDevelop] : [])] : undefined} buildPicks={i === seat && draft.buildPreview !== null ? [draft.buildPreview.industry] : undefined} developBinRef={i === seat ? developBinRef : undefined} />
               </div>
             ))}
           </aside>
@@ -668,7 +713,7 @@ function GameBoard({
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? draft.developPicks : undefined} developBinRef={i === seat ? developBinRef : undefined} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} roundNow={roundNow} turnHold={turnHold} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? [...draft.developPicks, ...(draft.bonusDevelop !== null ? [draft.bonusDevelop] : [])] : undefined} buildPicks={i === seat && draft.buildPreview !== null ? [draft.buildPreview.industry] : undefined} developBinRef={i === seat ? developBinRef : undefined} />
               </div>
             ))}
           </aside>
@@ -721,6 +766,7 @@ export function GameScreen({ store }: { store: GameStore }): ReactElement {
       thinkingSeats={s.thinkingSeats}
       gameOver={s.gameOver}
       turnHold={s.turnHold}
+      roundBreak={s.roundBreak}
       seq={s.seq}
       fixedSeats={s.fixedSeats ?? s.snapshot.turnOrder}
       remoteDrafts={s.remoteDrafts}

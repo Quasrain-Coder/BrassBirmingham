@@ -70,7 +70,7 @@ describe('A. 双轨啤酒不可来自商人啤酒 [R p.11 "must be consumed from
     s.players[0]!.money = 30;
     oneCard(s, 0);
     // 前提：商人位确有啤酒（否则本测试无意义），且全场无酒厂
-    const merchantBeer = Object.values(s.merchants).reduce((sum, m) => sum + m.beer, 0);
+    const merchantBeer = Object.values(s.merchants).reduce((sum, m) => sum + m.barrels.filter(Boolean).length, 0);
     expect(merchantBeer).toBeGreaterThan(0);
     const actions = enumerateNetwork(s, 0);
     expect(actions.some((a) => a.type === 'network')).toBe(true); // 单轨合法

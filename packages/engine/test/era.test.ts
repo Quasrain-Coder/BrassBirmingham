@@ -140,14 +140,14 @@ describe('checkEraEnd: canal → rail', () => {
 
   it('merchant beer refills to one barrel per non-blank tile; blanks produce nothing', () => {
     const s = eraEndingState('canal', (st) => {
-      st.merchants['oxford'] = { tiles: ['cotton', 'manufacturer'], beer: 0 };
-      st.merchants['shrewsbury'] = { tiles: ['any'], beer: 0 };
-      st.merchants['gloucester'] = { tiles: ['blank', 'blank'], beer: 0 };
+      st.merchants['oxford'] = { tiles: ['cotton', 'manufacturer'], barrels: [false, false] };
+      st.merchants['shrewsbury'] = { tiles: ['any'], barrels: [false] };
+      st.merchants['gloucester'] = { tiles: ['blank', 'blank'], barrels: [false, false] };
     });
     const after = checkEraEnd(s);
-    expect(after.merchants['oxford']!.beer).toBe(2);
-    expect(after.merchants['shrewsbury']!.beer).toBe(1);
-    expect(after.merchants['gloucester']!.beer).toBe(0);
+    expect(after.merchants['oxford']!.barrels.filter(Boolean).length).toBe(2);
+    expect(after.merchants['shrewsbury']!.barrels.filter(Boolean).length).toBe(1);
+    expect(after.merchants['gloucester']!.barrels.filter(Boolean).length).toBe(0);
   });
 
   it('reshuffles discards into a new deck, redeals 8 each, era becomes rail', () => {

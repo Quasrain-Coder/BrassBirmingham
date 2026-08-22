@@ -24,6 +24,7 @@ import {
   enumerateActions,
   incomeLevelAt,
   newGame,
+  settleRoundEnd,
 } from '@brass/engine';
 import type { Action, Card, GameState, PlayerIndex } from '@brass/engine';
 import { filterStateFor } from '@brass/protocol';
@@ -83,7 +84,7 @@ export class GameSession {
   private turnBackup: { state: GameState; seq: number; played: Card[][]; actions: { action: Action; moneyDelta: number; note?: 'round-income' }[][] } | null = null;
   /**
    * 各座位本时代已打出的牌（按打出顺序）：实体弃牌堆公开规则的按玩家视图。
-   * Wild 卡弃置回供应区不入列；时代切换时（弃牌合洗进新牌堆）清空重计。
+   * 百搭卡也入列（与行动日志一致）；时代切换时（弃牌合洗进新牌堆）清空重计。
    * resetTurn 撤销时同步回滚到回合初状态。
    */
   private playedThisEra: Card[][];
@@ -133,14 +134,15 @@ export class GameSession {
   }
 
   /**
-   * 服务器重启后的对局恢复：库中 status='playing' 的对局按 actions 表重放重建
-   * （engine 确定性：newGame(seed) + 逐条 applyAction）。返回 null = 不可恢复
-   * （对局不存在/已终局/重放校验失败），WS 层回 'session-lost'。
+   * 服务器重启后的对局恢复：库中 status='playing'/'finished' 的对局按 actions 表
+   * 重放重建（engine 确定性：newGame(seed) + 逐条 applyAction）。返回 null = 不可恢复
+   * （对局不存在/重放校验失败），WS 层回 'session-lost'。
+   * 已终局对局同样恢复（只读查看终局盘面/记录;submitAction 仍被 game-finished 拒）。
    * 注意：turnBackup 不恢复——恢复后当前回合的"重置本回合"不可用（下回合起正常）。
    */
   static restore(db: Db, gameId: string): GameSession | null {
     const game = findGameById(db, gameId);
-    if (game === null || game.status !== 'playing') return null;
+    if (game === null || (game.status !== 'playing' && game.status !== 'finished')) return null;
     const playerCount = game.playerCount;
     if (playerCount !== 2 && playerCount !== 3 && playerCount !== 4) return null;
     const seatRows = listSeats(db, gameId);
@@ -221,7 +223,11 @@ export class GameSession {
    * 提交行动：校验 → engine applyAction 推进 → appendAction 落库（seq 递增）→
    * 终局则 finishGame 落 final_state。返回所落行动的 seq。
    */
-  submitAction(seat: PlayerIndex, action: Action): { seq: number } {
+  submitAction(
+    seat: PlayerIndex,
+    action: Action,
+    opts?: { deferRoundEnd?: boolean },
+  ): { seq: number; roundEndPending: boolean } {
     if (this.finished) {
       throw new SessionError('game-finished', `对局 ${this.gameId} 已结束，拒绝行动`);
     }
@@ -234,7 +240,7 @@ export class GameSession {
     }
     let next: GameState;
     try {
-      next = applyAction(this.gameState, action);
+      next = applyAction(this.gameState, action, opts);
     } catch (e) {
       if (e instanceof IllegalActionError) {
         throw new SessionError(e.code, e.message);
@@ -285,7 +291,39 @@ export class GameSession {
     if (this.finished) {
       finishGame(this.db, this.gameId, this.gameState);
     }
-    return { seq: applied };
+    return { seq: applied, roundEndPending: this.gameState.roundEndPending };
+  }
+
+  /**
+   * 消费被 defer 的轮末结算(WS 层在 held 玩家 end_turn 时调用):settleRoundEnd
+   * 落顺位重排/收入/round++,时代结束则清算进新时代/终局计分。
+   * 这些结算只有在此刻才广播——此前其他玩家只能看到行动播报与版图行动。
+   * 轮末收入(全局最后一轮不发)在此按座补 note 条目;时代切换清空出牌与行动簿记。
+   * 返回是否真的消费了 pending。
+   */
+  consumeRoundEnd(): boolean {
+    if (!this.gameState.roundEndPending) return false;
+    const eraBefore = this.gameState.era;
+    this.gameState = settleRoundEnd(this.gameState);
+    if (this.gameState.phase !== 'game-over') {
+      // 收入为 0 也记条目——前端轮标签要显式展示"（收入 +£0）"
+      for (const p of this.seats) {
+        this.eraActions[p]!.push({
+          action: { type: 'pass', cardId: '__round-income__' },
+          moneyDelta: incomeLevelAt(this.gameState.players[p]!.incomeSpace),
+          note: 'round-income',
+        });
+      }
+    }
+    if (this.gameState.era !== eraBefore) {
+      // 时代切换:弃牌合洗,出牌/行动记录重计
+      this.playedThisEra = this.playedThisEra.map(() => []);
+      this.eraActions = this.eraActions.map(() => []);
+    }
+    if (this.finished) {
+      finishGame(this.db, this.gameId, this.gameState);
+    }
+    return true;
   }
 
   /**
@@ -314,7 +352,7 @@ export class GameSession {
     for (const id of ids) {
       const card = hand.find((c) => c.id === id);
       if (card === undefined) continue;
-      if (card.kind === 'wild-location' || card.kind === 'wild-industry') continue;
+      // 百搭卡(搜寻换来)虽弃回供应区,但"打出记录"应与行动日志一致可见
       this.playedThisEra[seat]?.push(card);
     }
   }

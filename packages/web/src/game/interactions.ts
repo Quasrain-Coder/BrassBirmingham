@@ -13,7 +13,7 @@
  * - network：双轨 links 为有序对（放置顺序），两种顺序分别枚举——点击顺序即放置顺序。
  * - sell：单块全枚举 + "可卖全集"至多一个（sales.length >= 2）。
  */
-import { LINKS, LOCATIONS, MERCHANTS, reachableFrom } from '@brass/engine';
+import { LINKS, LOCATIONS, MERCHANTS, merchantHasUsableBarrel, reachableFrom } from '@brass/engine';
 import type {
   Action,
   BeerSourceRef,
@@ -521,11 +521,59 @@ export interface BreweryRef extends SlotRef {
   barrels: number;
 }
 
-/** 啤酒源候选:商人桶(有桶时至多 1)+ 自家酒厂(无需连通)+ 对手酒厂(须连通用酒处)。 */
+/** 已收卖出组的啤酒占用:酒厂按槽计数,商人桶按使用记录(后续组扣减可选范围用)。 */
+export interface CommittedBeerUses {
+  breweries: Map<string, number>;
+  merchantUses: { merchant: MerchantId; industry: IndustryType }[];
+}
+
+/** 从已收卖出组统计啤酒占用。 */
+export function committedBeerFromGroups(
+  state: FilteredState,
+  groups: { tile: SlotRef; merchant: MerchantId; beer: BeerSourceRef[] }[],
+): CommittedBeerUses {
+  const breweries = new Map<string, number>();
+  const merchantUses: CommittedBeerUses['merchantUses'] = [];
+  for (const g of groups) {
+    const ind = state.board.slots[g.tile.location]?.[g.tile.slotIndex]?.tile.industry;
+    for (const b of g.beer) {
+      if (b.kind === 'merchant') {
+        if (ind !== undefined) merchantUses.push({ merchant: g.merchant, industry: ind });
+      } else {
+        const k = `${b.location}:${b.slotIndex}`;
+        breweries.set(k, (breweries.get(k) ?? 0) + 1);
+      }
+    }
+  }
+  return { breweries, merchantUses };
+}
+
+/** 商人桶扣除已占位后的剩余可用(与引擎 takeMerchantBarrel 同序:最右可用格先耗)。 */
+export function merchantBarrelRemaining(
+  m: { tiles: ('any' | 'cotton' | 'manufacturer' | 'pottery' | 'blank')[]; barrels: boolean[] },
+  industry: IndustryType,
+  uses: IndustryType[],
+): boolean {
+  const barrels = [...m.barrels];
+  for (const u of uses) {
+    for (let i = barrels.length - 1; i >= 0; i -= 1) {
+      if (barrels[i] === true && (m.tiles[i] === 'any' || m.tiles[i] === u)) {
+        barrels[i] = false;
+        break;
+      }
+    }
+  }
+  return barrels.some((b, i) => b && (m.tiles[i] === 'any' || m.tiles[i] === industry));
+}
+
+/** 啤酒源候选:商人桶(有桶时至多 1)+ 自家酒厂(无需连通)+ 对手酒厂(须连通用酒处)。
+ *  committed = 已收卖出组的占用:对应酒厂/商人桶从候选中扣减。 */
 export function beerSourcesFor(
   state: FilteredState,
   seat: PlayerIndex,
   merchant: MerchantId,
+  industry: IndustryType,
+  committed?: CommittedBeerUses,
 ): { merchantBarrel: boolean; own: BreweryRef[]; opponent: BreweryRef[] } {
   const reach = reachableFrom(state as unknown as import('@brass/engine').GameState, [merchant]);
   const own: BreweryRef[] = [];
@@ -534,12 +582,22 @@ export function beerSourcesFor(
     for (let i = 0; i < slots.length; i++) {
       const t = slots[i];
       if (!t || t.flipped || t.tile.industry !== 'brewery' || t.resources <= 0) continue;
-      const ref: BreweryRef = { location: loc as LocationId, slotIndex: i, player: t.player, barrels: t.resources };
+      const left = t.resources - (committed?.breweries.get(`${loc}:${i}`) ?? 0);
+      if (left <= 0) continue;
+      const ref: BreweryRef = { location: loc as LocationId, slotIndex: i, player: t.player, barrels: left };
       if (t.player === seat) own.push(ref);
       else if (reach.has(loc as LocationId)) opponent.push(ref);
     }
   }
-  return { merchantBarrel: state.merchants[merchant].beer > 0, own, opponent };
+  // 商人桶按板块格绑定:须存在"收该产业(精确图标或万能)的板块格"旁的剩桶,
+  // 且未被已收组占位(与引擎同序扣减)
+  const usedIndustries = (committed?.merchantUses ?? [])
+    .filter((u) => u.merchant === merchant)
+    .map((u) => u.industry);
+  const merchantBarrel =
+    merchantHasUsableBarrel(state.merchants[merchant], industry) &&
+    merchantBarrelRemaining(state.merchants[merchant], industry, usedIndustries);
+  return { merchantBarrel, own, opponent };
 }
 
 /** 按已选 beerSources 计算还剩多少桶可用(组内连续消耗同一酒厂不能超过其桶数)。 */
@@ -603,9 +661,12 @@ export function feasibleSellMerchants(
   seat: PlayerIndex,
   tile: SlotRef,
   beerToFlip: number,
+  committed?: CommittedBeerUses,
 ): MerchantId[] {
+  const industry = state.board.slots[tile.location]?.[tile.slotIndex]?.tile.industry;
+  if (industry === undefined) return [];
   return merchantsForTile(state, tile).filter((id) => {
-    const src = beerSourcesFor(state, seat, id);
+    const src = beerSourcesFor(state, seat, id, industry, committed);
     const total =
       (src.merchantBarrel ? 1 : 0) +
       src.own.reduce((s, b) => s + b.barrels, 0) +

@@ -193,6 +193,8 @@ export interface GameStoreState {
   seq: number;
   /** 被扣住等待"结束回合"的座位（自己的回合打满后 = 本人,可按结束/重置）。 */
   turnHold: PlayerIndex | null;
+  /** 轮末停顿中(收官玩家已 end_turn,播"第 x 轮结束"到点放行);快照驱动。 */
+  roundBreak: boolean;
   log: LogEntry[];
   /** 正在决策中的 AI 座位（ai_thinking true 加入、false 移除）。 */
   thinkingSeats: PlayerIndex[];
@@ -225,6 +227,7 @@ const INITIAL_STATE: GameStoreState = {
   legalActions: [],
   seq: 0,
   turnHold: null,
+  roundBreak: false,
   log: [],
   thinkingSeats: [],
   gameOver: null,
@@ -564,8 +567,18 @@ export class GameStore {
           legalActions: msg.legalActions,
           seq: msg.seq,
           turnHold: msg.turnHold ?? null,
+          roundBreak: msg.roundBreak ?? false,
           playedCards: msg.playedCards ?? this.state.playedCards,
           eraActions: msg.eraActions ?? this.state.eraActions,
+          // 终局快照(resume 已终局对局/重启恢复):从状态推导 gameOver,
+          // 否则只靠 game_over 消息,刷新后胜者横幅与终局态会丢
+          gameOver:
+            msg.state.phase === 'game-over'
+              ? {
+                  winner: msg.state.winner ?? [],
+                  finalScores: msg.state.players.map((p) => p.vp),
+                }
+              : this.state.gameOver,
           ...(trimmedLog !== this.state.log ? { log: trimmedLog } : {}),
           ...(turnChanged ? { remoteDrafts: {} } : {}),
           // 固定座次:首个快照落地(优先读 localStorage,刷新后仍按开局座次);

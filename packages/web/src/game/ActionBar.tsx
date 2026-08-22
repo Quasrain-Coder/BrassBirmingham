@@ -16,7 +16,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
-import { reachableFrom } from '@brass/engine';
+import { MERCHANTS, firstLocationEndpoint, merchantHasUsableBarrel, reachableFrom } from '@brass/engine';
 import type { Action, BeerSourceRef, Card, IndustryType, LocationId, MerchantId, PlayerIndex } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { BoardHighlights, SlotRef } from '../board/BoardSvg';
@@ -25,6 +25,7 @@ import {
   beerSourcesFor,
   buildCandidatesAt,
   buildSlotTargets,
+  committedBeerFromGroups,
   describeAction,
   developDoubles,
   developOptions,
@@ -34,6 +35,7 @@ import {
   matchDevelop,
   matchNetwork,
   matchScout,
+  merchantBarrelRemaining,
   merchantsForTile,
   resolveBuildSlot,
   sellCandidatesAt,
@@ -42,7 +44,7 @@ import {
   sellableTilesFor,
   targetsFor,
 } from './interactions';
-import type { BuildAction, SellAction } from './interactions';
+import type { BuildAction, CommittedBeerUses, SellAction } from './interactions';
 import { cardName, industryName, locationName, merchantName } from './display';
 import { moneyDelta, previewOf } from './preview';
 
@@ -60,6 +62,11 @@ export interface ActionDraft {
   highlights: BoardHighlights;
   pickedLinks: number[];
   networkCanExtend: boolean;
+  /** 双轨啤酒:显式选择的酒源(null=规范化自动);可选酒源列表与选择器。 */
+  networkBeer: { location: LocationId; slotIndex: number } | null;
+  networkBeerOptions: { location: LocationId; slotIndex: number; own: boolean; barrels: number }[];
+  /** 选/取消双轨酒源(再点同一酒源取消;图上点可用酒厂等价)。 */
+  pickNetworkBeer: (ref: { location: LocationId; slotIndex: number }) => void;
   developPicks: IndustryType[];
   /** develop 可选产业（出现在任一候选中）。 */
   developChoices: IndustryType[];
@@ -75,6 +82,15 @@ export interface ActionDraft {
   /** 当前组的贸易商与已选啤酒。 */
   sellMerchant: MerchantId | null;
   sellBeer: BeerSourceRef[];
+  /** 已收卖出组的啤酒占用(后续组酒源候选/高亮已扣减)。 */
+  committedBeer: CommittedBeerUses;
+  /** 已拼卖货触发了 develop 类商人奖励(格洛斯特):行动栏应给出免费研发选择。 */
+  sellBonusPending: boolean;
+  /** 免费研发的显式选择(null = 规范化自动移除);可选产业 = 有可研发栈顶板块的产业。 */
+  bonusDevelop: IndustryType | null;
+  bonusDevelopOptions: IndustryType[];
+  /** 选/取消免费研发产业(再点同一产业取消;拖板块到垃圾桶等价)。 */
+  pickBonusDevelop: (ind: IndustryType) => void;
   /** 选/改本组建筑(再点同一板块取消;切换清空贸易商与啤酒)。 */
   pickSellTile: (ref: SlotRef) => void;
   /** 选/改本组贸易商(再点同一商人取消;切换清商人桶)。 */
@@ -125,11 +141,15 @@ export function useActionDraft({
   const [sellMerchant, setSellMerchant] = useState<MerchantId | null>(null);
   const [sellBeer, setSellBeer] = useState<BeerSourceRef[]>([]);
   const [sellGroups, setSellGroups] = useState<{ tile: SlotRef; merchant: MerchantId; beer: BeerSourceRef[] }[]>([]);
+  /** 格洛斯特(develop 类商人)奖励的显式研发产业:卖货触发奖励时玩家自选,缺省规范化。 */
+  const [bonusDevelop, setBonusDevelop] = useState<IndustryType | null>(null);
   const [buildChoices, setBuildChoices] = useState<BuildAction[]>([]);
   /** 槽位歧义待选时记住所点槽位(choose 时附显式 slotIndex)。 */
   const [choicesSlot, setChoicesSlot] = useState<SlotRef | null>(null);
   const [buildIndustry, setBuildIndustry] = useState<IndustryType | null>(null);
   const [chosen, setChosen] = useState<Action | null>(null);
+  /** 双轨啤酒显式酒源(选完两条路后;不可用商人桶,缺省规范化自动消耗)。 */
+  const [networkBeer, setNetworkBeer] = useState<{ location: LocationId; slotIndex: number } | null>(null);
 
   const reset = (): void => {
     setPickedLinks([]);
@@ -139,6 +159,8 @@ export function useActionDraft({
     setSellMerchant(null);
     setSellBeer([]);
     setSellGroups([]);
+    setBonusDevelop(null);
+    setNetworkBeer(null);
     setBuildChoices([]);
     setChoicesSlot(null);
     setBuildIndustry(null);
@@ -158,6 +180,10 @@ export function useActionDraft({
     return h?.kind === 'full' ? h.cards : [];
   }, [state, seat]);
 
+  // 已收卖出组的啤酒占用:扣减后续组的酒源候选与地图高亮(服务端组合校验同样会拒,
+  // 前端先行限制,避免选了非法酒源到确认才报错)
+  const committedBeer = useMemo(() => committedBeerFromGroups(state, sellGroups), [state, sellGroups]);
+
   const highlights = useMemo<BoardHighlights>(() => {
     // 已暂存一步(选好建造/卖出组/点完边):清掉其他行动的高亮——
     // 放入路后不再显示城市/建造高亮;拖入建筑后不再显示路边高亮
@@ -174,33 +200,51 @@ export function useActionDraft({
       if (!needsBeer) return out;
       if (sellMerchant !== null) {
         // 已选贸易商:桶位 = 该商人;酒厂 = 自家(无需连通) + 连通该商人的对手酒厂
+        // (已收组占用的酒桶不再圈:对应余量已扣减)
         out.merchants!.push(sellMerchant);
         const reach = reachableFrom(state as unknown as import('@brass/engine').GameState, [sellMerchant]);
         for (const [loc, slotsOfLoc] of Object.entries(state.board.slots)) {
           const hasUsable = slotsOfLoc.some(
-            (t) =>
+            (t, si) =>
               t &&
               !t.flipped &&
               t.tile.industry === 'brewery' &&
-              t.resources > 0 &&
+              t.resources - (committedBeer.breweries.get(`${loc}:${si}`) ?? 0) > 0 &&
               (t.player === seat || (t.player !== seat && reach.has(loc as LocationId))),
           );
           if (hasUsable) out.locations!.push(loc as LocationId);
         }
         return out;
       }
-      // 未选贸易商(或铁路双轨):自家酒厂 + 全部有桶商人位
+      // 未选贸易商(或铁路双轨):自家酒厂(扣除已收组占用) + 有可用桶的商人位
       for (const [loc, slotsOfLoc] of Object.entries(state.board.slots)) {
         if (
           slotsOfLoc.some(
-            (t) => t && t.player === seat && !t.flipped && t.tile.industry === 'brewery' && t.resources > 0,
+            (t, si) =>
+              t &&
+              t.player === seat &&
+              !t.flipped &&
+              t.tile.industry === 'brewery' &&
+              t.resources - (committedBeer.breweries.get(`${loc}:${si}`) ?? 0) > 0,
           )
         ) {
           out.locations!.push(loc as LocationId);
         }
       }
       for (const [mid, m] of Object.entries(state.merchants)) {
-        if (m.beer > 0) out.merchants!.push(mid as keyof typeof state.merchants);
+        // 商人桶按板块格绑定:只高亮"收当前板块产业的板块格"旁有剩桶且未被已收组占位的商人位
+        const ind = sellTile !== null ? state.board.slots[sellTile.location]?.[sellTile.slotIndex]?.tile.industry : undefined;
+        if (
+          ind !== undefined &&
+          merchantHasUsableBarrel(m, ind) &&
+          merchantBarrelRemaining(
+            m,
+            ind,
+            committedBeer.merchantUses.filter((u) => u.merchant === mid).map((u) => u.industry),
+          )
+        ) {
+          out.merchants!.push(mid as keyof typeof state.merchants);
+        }
       }
       return out;
     };
@@ -253,9 +297,48 @@ export function useActionDraft({
     // 可建城市级高亮:所有可放置地点(与槽位高亮互补,找城更快)
     const locations = pickedLinks.length > 0 ? [] : [...new Set(buildSlots.map((s) => s.location))];
     return { slots, links, locations, beerSources: computeBeerSources(), sellMerchants };
-  }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks, buildIndustry, chosen, sellTile, sellGroups, sellMerchant]);
+  }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks, buildIndustry, chosen, sellTile, sellGroups, sellMerchant, committedBeer]);
 
   const networkMatch = matchNetwork(candidates, pickedLinks);
+  // 双轨酒源:选完两条路后,所有可消耗的酒 token(自家任意未翻面有余量酒厂;
+  // 对手酒厂须连通第二条铁路放置后的位置;不可用商人桶 §9.4)
+  const networkBeerOptions = useMemo(() => {
+    const exact = networkMatch.exact;
+    if (state.era !== 'rail' || exact === null || exact.links.length !== 2) return [];
+    const anchor = firstLocationEndpoint(exact.links[1]!);
+    const reach = reachableFrom(state as unknown as import('@brass/engine').GameState, [anchor]);
+    const out: { location: LocationId; slotIndex: number; own: boolean; barrels: number }[] = [];
+    for (const [loc, slots] of Object.entries(state.board.slots)) {
+      for (let i = 0; i < slots.length; i++) {
+        const t = slots[i];
+        if (!t || t.flipped || t.tile.industry !== 'brewery' || t.resources <= 0) continue;
+        if (t.player === seat) {
+          out.push({ location: loc as LocationId, slotIndex: i, own: true, barrels: t.resources });
+        } else if (reach.has(loc as LocationId)) {
+          out.push({ location: loc as LocationId, slotIndex: i, own: false, barrels: t.resources });
+        }
+      }
+    }
+    return out;
+  }, [state, seat, networkMatch.exact]);
+  const pickNetworkBeer = (ref: { location: LocationId; slotIndex: number }): void => {
+    setNetworkBeer((prev) =>
+      prev !== null && prev.location === ref.location && prev.slotIndex === ref.slotIndex ? null : ref,
+    );
+  };
+  // 仅剩 1 个可用酒 token 时自动选中;选项变化使当前选择失效时清空
+  useEffect(() => {
+    if (networkBeerOptions.length === 1 && networkBeer === null) {
+      const o = networkBeerOptions[0]!;
+      setNetworkBeer({ location: o.location, slotIndex: o.slotIndex });
+    } else if (
+      networkBeer !== null &&
+      !networkBeerOptions.some((o) => o.location === networkBeer.location && o.slotIndex === networkBeer.slotIndex)
+    ) {
+      setNetworkBeer(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [networkBeerOptions]);
   const sell = sellOptions(candidates);
   const visibleSellSingles =
     sellTile === null
@@ -264,47 +347,86 @@ export function useActionDraft({
 
   // 分组卖出拼成的自定义行动:已收组 + 当前组(若已选齐)——选齐任意组确认即亮,
   // 玩家可随时"就卖当前这些";组合式校验,不必命中枚举集
-  const sellAction = useMemo((): Action | null => {
+  const sellAssembled = useMemo(() => {
     const curPlaced = sellTile !== null ? state.board.slots[sellTile.location]?.[sellTile.slotIndex] : null;
     const currentComplete =
       sellTile !== null && sellMerchant !== null && curPlaced != null && sellBeer.length === curPlaced.tile.beerToFlip;
-    if (sellGroups.length === 0 && !currentComplete) return null;
-    const cardId = candidates.find((a) => a.type === 'sell')?.cardId ?? selectedCard;
-    if (cardId === null) return null;
     const groups = [...sellGroups];
     if (currentComplete && sellTile !== null && sellMerchant !== null) {
       groups.push({ tile: sellTile, merchant: sellMerchant, beer: sellBeer });
     }
+    return { groups, currentComplete };
+  }, [sellGroups, sellTile, sellMerchant, sellBeer, state.board.slots]);
+  // 格洛斯特奖励:已拼组里有"用 develop 类商人桶"的组 → 触发免费研发,行动栏给显式选择
+  const sellBonusPending = sellAssembled.groups.some(
+    (g) => MERCHANTS[g.merchant].bonus.type === 'develop' && g.beer.some((b) => b.kind === 'merchant'),
+  );
+  // 可选研发产业:面板上有可研发栈顶板块(灯泡陶 developable:false 除外)
+  const bonusDevelopOptions = useMemo(() => {
+    const tiles = state.players[seat]?.tiles ?? [];
+    const seen = new Set<IndustryType>();
+    const out: IndustryType[] = [];
+    for (const t of tiles) {
+      if (seen.has(t.industry)) continue;
+      seen.add(t.industry);
+      if (t.developable) out.push(t.industry);
+    }
+    return out;
+  }, [state.players, seat]);
+  const pickBonusDevelop = (ind: IndustryType): void => {
+    setBonusDevelop((prev) => (prev === ind ? null : ind));
+  };
+  const sellAction = useMemo((): Action | null => {
+    if (sellGroups.length === 0 && !sellAssembled.currentComplete) return null;
+    const cardId = candidates.find((a) => a.type === 'sell')?.cardId ?? selectedCard;
+    if (cardId === null) return null;
     return {
       type: 'sell',
       cardId,
-      sales: groups.map((g) => ({
+      sales: sellAssembled.groups.map((g) => ({
         location: g.tile.location,
         slotIndex: g.tile.slotIndex,
         merchant: g.merchant,
         useMerchantBeer: g.beer.some((b) => b.kind === 'merchant'),
         beerSources: g.beer,
       })),
+      ...(sellBonusPending && bonusDevelop !== null && bonusDevelopOptions.includes(bonusDevelop)
+        ? { bonusDevelop }
+        : {}),
     };
-  }, [sellGroups, sellTile, sellMerchant, sellBeer, candidates, selectedCard, state.board.slots]);
+  }, [sellGroups, sellAssembled, candidates, selectedCard, sellBonusPending, bonusDevelop, bonusDevelopOptions]);
 
   // resolved 优先级：显式选定 > 槽位歧义待选（阻断）> 分组卖出 > network 序列 > develop > scout。
   // 多类型同时收集了参数时按此序取其一，确认钮文案可见所提交内容。
+  const networkResolved =
+    networkMatch.exact !== null && networkBeer !== null
+      ? { ...networkMatch.exact, beerSource: networkBeer }
+      : networkMatch.exact;
   const resolved: Action | null =
     chosen ??
     (buildChoices.length > 0
       ? null
       : sellAction ??
-        (pickedLinks.length > 0 ? networkMatch.exact : null) ??
+        (pickedLinks.length > 0 ? networkResolved : null) ??
         matchDevelop(candidates, developPicks) ??
         matchScout(legalActions, hand, scoutPicks));
 
   const pickSellTile = (ref: SlotRef): void => {
-    setSellTile((prev) =>
-      prev !== null && prev.location === ref.location && prev.slotIndex === ref.slotIndex
-        ? null
-        : ref,
-    );
+    const same =
+      sellTile !== null && sellTile.location === ref.location && sellTile.slotIndex === ref.slotIndex;
+    // 当前组已选齐(板块+贸易商+啤酒够数)时直接点下一块不同板块
+    // = 收下当前组并选中该板块开新组(不再整组作废)
+    const curPlaced = sellTile !== null ? state.board.slots[sellTile.location]?.[sellTile.slotIndex] : null;
+    const complete =
+      sellTile !== null && sellMerchant !== null && curPlaced != null && sellBeer.length === curPlaced.tile.beerToFlip;
+    if (complete && !same) {
+      setSellGroups((prev) => [...prev, { tile: sellTile!, merchant: sellMerchant!, beer: sellBeer }]);
+      setSellTile(ref);
+      setSellMerchant(null);
+      setSellBeer([]);
+      return;
+    }
+    setSellTile(same ? null : ref);
     setSellMerchant(null);
     setSellBeer([]);
   };
@@ -359,15 +481,29 @@ export function useActionDraft({
   const clickMerchantBeer = (id: MerchantId): void => {
     if (!candidates.some((a) => a.type === 'sell')) return;
     if (sellTile === null) return; // 顺序约束:先选建筑,否则无效
-    if (state.merchants[id].beer <= 0) return; // 该商人无桶,点了无效
+    const ind = state.board.slots[sellTile.location]?.[sellTile.slotIndex]?.tile.industry;
+    // 桶按板块格绑定:该商人"收当前板块产业的板块格"旁无剩桶,点了无效
+    if (ind === undefined || !merchantHasUsableBarrel(state.merchants[id], ind)) return;
     if (sellMerchant !== id) pickSellMerchant(id); // 顺带切到该商人
     toggleSellMerchantBarrel(); // 选/取消该商人的桶(与酒行按钮同状态)
   };
 
   const clickSlot = (location: LocationId, slotIndex: number): void => {
+    const placedT = state.board.slots[location]?.[slotIndex];
+    // 双轨选酒:选完两条路后点可用酒厂 = 选该酒源(等价行动栏按钮)
+    if (
+      networkBeerOptions.length > 0 &&
+      placedT &&
+      !placedT.flipped &&
+      placedT.tile.industry === 'brewery' &&
+      placedT.resources > 0 &&
+      networkBeerOptions.some((o) => o.location === location && o.slotIndex === slotIndex)
+    ) {
+      pickNetworkBeer({ location, slotIndex });
+      return;
+    }
     // 卖出流图上点选(顺序约束同按钮行):自己可卖板块 = 选本组建筑;
     // 酒厂 = 加一桶啤酒(须已选建筑+贸易商,先点酒厂无效)
-    const placedT = state.board.slots[location]?.[slotIndex];
     const sellFlow = candidates.some((a) => a.type === 'sell');
     if (sellFlow && placedT && !placedT.flipped) {
       if (placedT.player === seat && placedT.tile.sellable) {
@@ -513,11 +649,31 @@ export function useActionDraft({
     });
   }, [resolved, state.board.slots, seat, sellGroups, sellTile, sellMerchant, sellBeer]);
 
+  // 铺路中的啤酒高亮:双轨不可用商人桶——选完两条路后只圈可用酒源
+  // (自家任意 + 连通第二条的对手酒厂);铺路未满两条时只留自家酒厂提示
+  const highlightsFinal = useMemo(() => {
+    if (pickedLinks.length === 0) return highlights;
+    const base = highlights.beerSources ?? { locations: [], merchants: [] };
+    if (networkBeerOptions.length > 0) {
+      return {
+        ...highlights,
+        beerSources: {
+          locations: [...new Set(networkBeerOptions.map((o) => o.location))] as LocationId[],
+          merchants: [] as MerchantId[],
+        },
+      };
+    }
+    return { ...highlights, beerSources: { locations: base.locations ?? [], merchants: [] as MerchantId[] } };
+  }, [highlights, pickedLinks.length, networkBeerOptions]);
+
   return {
     candidates,
-    highlights,
+    highlights: highlightsFinal,
     pickedLinks,
     networkCanExtend: networkMatch.canExtend,
+    networkBeer,
+    networkBeerOptions,
+    pickNetworkBeer,
     developPicks,
     developChoices: developOptions(candidates),
     scoutPicks,
@@ -528,6 +684,11 @@ export function useActionDraft({
     sellGroups,
     sellMerchant,
     sellBeer,
+    committedBeer,
+    sellBonusPending,
+    bonusDevelop,
+    bonusDevelopOptions,
+    pickBonusDevelop,
     pickSellTile,
     pickSellMerchant,
     toggleSellMerchantBarrel,
@@ -625,7 +786,11 @@ export function ActionBar({
       <section className="action-bar" data-testid="action-bar">
         <div className="action-bar-head">{moneyChip(false)}</div>
         <p data-testid="waiting" className={turnHold !== null ? 'waiting-hold' : undefined}>
-          {turnHold !== null ? `等待 ${waitingFor} 确认回合…` : `等待 ${waitingFor} 行动…`}
+          {state.phase === 'game-over'
+            ? '对局已结束,可自由查看版图与记录'
+            : turnHold !== null
+              ? `等待 ${waitingFor} 确认回合…`
+              : `等待 ${waitingFor} 行动…`}
         </p>
       </section>
     );
@@ -679,6 +844,31 @@ export function ActionBar({
     <section className="action-bar" data-testid="action-bar">
       <div className="action-bar-head">{moneyChip(true)}</div>
       <div className="action-sections">
+        {/* 双轨选酒行:选完两条路后所有可消耗酒 token(自家任意/连通第二条的对手,不可用商人桶);
+            按钮与图上点酒厂等价;仅剩 1 个时自动选中 */}
+        {draft.networkBeerOptions.length > 0 ? (
+          <div className="action-choices" data-testid="network-beer-options">
+            <span>双轨酒（选 1 桶）：</span>
+            {draft.networkBeerOptions.map((o) => (
+              <button
+                key={`${o.location}:${o.slotIndex}`}
+                type="button"
+                data-testid={`network-beer-${o.location}-${o.slotIndex}`}
+                className={
+                  draft.networkBeer?.location === o.location && draft.networkBeer.slotIndex === o.slotIndex
+                    ? 'selected'
+                    : undefined
+                }
+                onClick={() => draft.pickNetworkBeer(o)}
+              >
+                {o.own ? '自家' : '对手'}·{locationName(o.location)}（{o.barrels} 桶）
+              </button>
+            ))}
+            {draft.networkBeer === null ? (
+              <span className="action-row-none">不选则按序自动消耗</span>
+            ) : null}
+          </div>
+        ) : null}
         {/* 建造行:常驻可整行收起(全局记住);产业按钮带 等级+花费 */}
         {buildRowHidden ? (
           <div className="action-choices" data-testid="build-options">
@@ -865,9 +1055,9 @@ export function SellDetails({
   seat: PlayerIndex;
 }): ReactElement {
           const sellRowDisabled = draft.sellSingles.length === 0 && draft.sellFullSet === null && draft.sellGroups.length === 0;
-          // 该板块当前真能卖向的商人(与地图高亮同一份判定),建筑行只列非空的
+          // 该板块当前真能卖向的商人(与地图高亮同一份判定;已收组酒桶占用已扣减),建筑行只列非空的
           const feasibleMerchants = (t: SlotRef, beerToFlip: number): MerchantId[] =>
-            feasibleSellMerchants(state, seat, t, beerToFlip);
+            feasibleSellMerchants(state, seat, t, beerToFlip, draft.committedBeer);
           const sellableNow = sellableTilesFor(state, seat).filter(
             (t) =>
               !draft.sellGroups.some((g) => g.tile.location === t.location && g.tile.slotIndex === t.slotIndex) &&
@@ -876,7 +1066,7 @@ export function SellDetails({
           const curPlaced = draft.sellTile !== null ? state.board.slots[draft.sellTile.location]?.[draft.sellTile.slotIndex] : null;
           const curNeed = curPlaced?.tile.beerToFlip ?? 0;
           const curMerchants = draft.sellTile !== null ? feasibleMerchants(draft.sellTile, curNeed) : [];
-          const curBeerSources = draft.sellMerchant !== null ? beerSourcesFor(state, seat, draft.sellMerchant) : null;
+          const curBeerSources = draft.sellMerchant !== null && curPlaced != null ? beerSourcesFor(state, seat, draft.sellMerchant, curPlaced.tile.industry, draft.committedBeer) : null;
           const breweryUsed = new Map<string, number>();
           for (const b of draft.sellBeer) {
             if (b.kind !== 'brewery') continue;
@@ -979,17 +1169,25 @@ export function SellDetails({
                         ...curBeerSources.opponent.map((b) => ({ ...b, own: false })),
                       ].map((b) => {
                         const k = `${b.location}:${b.slotIndex}`;
-                        const used = breweryUsed.get(k) ?? 0;
-                        return Array.from({ length: b.barrels }, (_, i) => {
-                          const selected = used > i;
+                        // 已收组占用的桶:锁定展示(置灰不可点);剩余桶按当前组已选标记
+                        const lockedCnt = draft.committedBeer.breweries.get(k) ?? 0;
+                        const curUsed = breweryUsed.get(k) ?? 0;
+                        return Array.from({ length: b.barrels + lockedCnt }, (_, i) => {
+                          const locked = i < lockedCnt;
+                          const selected = locked || curUsed > i - lockedCnt;
                           return (
                             <button
                               key={`${k}-${i}`}
                               type="button"
                               data-testid={`sell-beer-${b.location}-${b.slotIndex}-${i}`}
                               className={selected ? 'selected' : undefined}
-                              disabled={!selected && draft.sellBeer.length >= curNeed}
-                              onClick={() => draft.setSellBreweryCount(b, selected ? i : i + 1)}
+                              disabled={locked || (!selected && draft.sellBeer.length >= curNeed)}
+                              onClick={() =>
+                                draft.setSellBreweryCount(
+                                  b,
+                                  selected ? Math.max(0, i - lockedCnt) : i + 1 - lockedCnt,
+                                )
+                              }
                             >
                               {b.own ? '自家' : '对手'}·{locationName(b.location)}{BARREL_NUM[i] ?? `${i + 1}`}
                             </button>
@@ -1003,6 +1201,31 @@ export function SellDetails({
                       <button type="button" data-testid="sell-commit-group" onClick={() => draft.commitSellGroup()}>
                         收下本组，选下一组
                       </button>
+                    </div>
+                  ) : null}
+                  {draft.sellBonusPending ? (
+                    <div className="action-choices" data-testid="sell-bonus-develop">
+                      <span>格洛斯特奖励·免费研发：</span>
+                      {draft.bonusDevelopOptions.length === 0 ? (
+                        <span className="action-row-none">面板无可研发板块,奖励落空</span>
+                      ) : (
+                        <>
+                          {draft.bonusDevelopOptions.map((ind) => (
+                            <button
+                              key={ind}
+                              type="button"
+                              data-testid={`sell-bonus-develop-${ind}`}
+                              className={draft.bonusDevelop === ind ? 'selected' : undefined}
+                              onClick={() => draft.pickBonusDevelop(ind)}
+                            >
+                              {industryName(ind)}
+                            </button>
+                          ))}
+                          <span className="action-row-none">
+                            {draft.bonusDevelop === null ? '不选则按产业序自动移除;也可拖板块到垃圾桶选择' : '再点一次取消(恢复自动移除)'}
+                          </span>
+                        </>
+                      )}
                     </div>
                   ) : null}
                 </div>

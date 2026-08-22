@@ -201,12 +201,13 @@ export function summarizeState(state: GameState, viewer: PlayerIndex): string {
   }
   const merchantBeer: string[] = [];
   for (const [id, m] of Object.entries(state.merchants)) {
-    if (m.beer <= 0) continue;
+    const count = m.barrels.filter(Boolean).length;
+    if (count === 0) continue;
     const tiles = m.tiles
       .filter((t) => t !== 'blank')
       .map((t) => MERCHANT_TILE_CN[t] ?? t)
       .join('+');
-    merchantBeer.push(`${id}[${tiles}]×${m.beer}`);
+    merchantBeer.push(`${id}[${tiles}]×${count}`);
   }
   lines.push(
     `【啤酒】自己:${ownBeer.join(' ') || '无'} | ` +

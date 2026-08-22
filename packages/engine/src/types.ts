@@ -56,12 +56,14 @@ export type Action =
   // 允许在空双图标槽间自选;单图标槽优先规则仍强制,见 applyBuild)。
   // 缺省 = 规范化解析(对手 overbuild → 单图标空槽 → 双图标空槽 → 己方 overbuild)。
   | { type: 'build'; cardId: string; industry: IndustryType; location: LocationId; slotIndex?: number }
-  | { type: 'network'; cardId: string; links: number[]; beerFromOpponentBrewery?: LocationId } // links = LINKS 下标，len 1|2
+  | { type: 'network'; cardId: string; links: number[]; beerFromOpponentBrewery?: LocationId; beerSource?: { location: LocationId; slotIndex: number } } // links = LINKS 下标，len 1|2
   | { type: 'develop'; cardId: string; removals: IndustryType[] } // len 1|2
   // beerSources(可选):逐桶显式指定啤酒来源,长度须等于该板块 beerToFlip;
   // 缺省 = consumeBeer 自动解析(商人桶→自家酒厂→对手酒厂)。applySell 按组合式
   // 校验接受任意合法 sales 组合(不限于枚举集)。
-  | { type: 'sell'; cardId: string; sales: { location: LocationId; slotIndex: number; merchant: MerchantId; useMerchantBeer: boolean; beerSources?: BeerSourceRef[] }[] }
+  // bonusDevelop:卖货触发 develop 类商人奖励(格洛斯特)时的显式研发产业——
+  // 移除该产业栈顶可研发板块;缺省按产业序规范化移除(见 sell.ts settleFreeDevelop)。
+  | { type: 'sell'; cardId: string; sales: { location: LocationId; slotIndex: number; merchant: MerchantId; useMerchantBeer: boolean; beerSources?: BeerSourceRef[] }[]; bonusDevelop?: IndustryType }
   | { type: 'loan'; cardId: string }
   | { type: 'scout'; cardIds: [string, string, string] }
   | { type: 'pass'; cardId: string };

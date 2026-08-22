@@ -37,7 +37,7 @@
 import { MERCHANTS } from '../data/board.js';
 import { IllegalActionError } from '../errors.js';
 import { reachableFrom } from '../network.js';
-import { applyFlip, consumeBeer } from '../resources.js';
+import { applyFlip, consumeBeer, merchantHasUsableBarrel } from '../resources.js';
 import type { GameState, PlayerState } from '../state.js';
 import type {
   Action,
@@ -101,9 +101,10 @@ function beerFeasible(
   n: number,
   merchant: MerchantId,
   useMerchantBeer: boolean,
+  industry: IndustryType,
 ): boolean {
   try {
-    consumeBeer(state, player, n, { at: merchant, useMerchantBeer });
+    consumeBeer(state, player, n, { at: merchant, useMerchantBeer, industry });
     return true;
   } catch (e) {
     if (e instanceof IllegalActionError && e.code === 'insufficient-beer') return false;
@@ -122,11 +123,12 @@ function saleOptions(state: GameState, player: PlayerIndex, tile: SellableTile):
     if (!reach.has(merchant)) continue;
     const m = state.merchants[merchant];
     if (!m.tiles.some((t) => t === 'any' || t === tile.industry)) continue;
-    // useMerchantBeer:true 分支仅当该商人位有桶且板块确实需要啤酒
+    // useMerchantBeer:true 分支仅当存在"收该产业的板块格"旁的剩桶且板块确实需要啤酒
     // （beerToFlip=0 的板块无从消耗商人桶、无从触发奖励）
-    const flags = m.beer > 0 && tile.beerToFlip > 0 ? [true, false] : [false];
+    const flags =
+      tile.beerToFlip > 0 && merchantHasUsableBarrel(m, tile.industry) ? [true, false] : [false];
     for (const useMerchantBeer of flags) {
-      if (!beerFeasible(state, player, tile.beerToFlip, merchant, useMerchantBeer)) continue;
+      if (!beerFeasible(state, player, tile.beerToFlip, merchant, useMerchantBeer, tile.industry)) continue;
       out.push({
         location: tile.location,
         slotIndex: tile.slotIndex,
@@ -158,6 +160,7 @@ function maxSetSales(state: GameState, player: PlayerIndex, tiles: SellableTile[
       const sim2 = consumeBeer(sim, player, tile.beerToFlip, {
         at: sale.merchant,
         useMerchantBeer: sale.useMerchantBeer,
+        industry: tile.industry,
       }).state;
       dfs(i + 1, sim2, [...acc, sale]);
     }
@@ -215,6 +218,7 @@ export function validateSales(state: GameState, player: PlayerIndex, action: Sel
     throw new IllegalActionError('illegal-sell', 'illegal-sell: empty sales');
   }
   let sim = state;
+  let developBonusTriggers = 0;
   for (const sale of action.sales) {
     const placed = sim.board.slots[sale.location]?.[sale.slotIndex];
     if (
@@ -246,9 +250,30 @@ export function validateSales(state: GameState, player: PlayerIndex, action: Sel
     const rb = consumeBeer(sim, player, placed.tile.beerToFlip, {
       at: sale.merchant,
       useMerchantBeer: sale.useMerchantBeer,
+      industry: placed.tile.industry,
       ...(sale.beerSources !== undefined ? { explicit: sale.beerSources } : {}),
     });
+    if (rb.merchantBonus && MERCHANTS[sale.merchant].bonus.type === 'develop') {
+      developBonusTriggers += 1;
+    }
     sim = rb.state;
+  }
+  // 显式研发选择(bonusDevelop):本笔卖货须真的触发 develop 类商人奖励,
+  // 且所选产业栈顶板块存在且可研发(灯泡陶 developable:false 不可移除)
+  if (action.bonusDevelop !== undefined) {
+    if (developBonusTriggers === 0) {
+      throw new IllegalActionError(
+        'illegal-sell',
+        'illegal-sell: bonusDevelop given but no develop-type merchant bonus triggered',
+      );
+    }
+    const top = state.players[player]!.tiles.find((t) => t.industry === action.bonusDevelop);
+    if (top === undefined || !top.developable) {
+      throw new IllegalActionError(
+        'illegal-sell',
+        `illegal-sell: no developable top tile for ${action.bonusDevelop}`,
+      );
+    }
   }
 }
 
@@ -273,6 +298,18 @@ function settleFreeDevelop(state: GameState, player: PlayerIndex): GameState {
   return state;
 }
 
+/** 显式免费 develop(bonusDevelop):移除指定产业的栈顶板块(合法性已由 validateSales 保证)。 */
+function settleFreeDevelopExplicit(state: GameState, player: PlayerIndex, ind: IndustryType): GameState {
+  const ps: PlayerState = state.players[player]!;
+  const idx = ps.tiles.findIndex((t) => t.industry === ind);
+  const players = state.players.slice();
+  players[player] = {
+    ...ps,
+    tiles: [...ps.tiles.slice(0, idx), ...ps.tiles.slice(idx + 1)],
+  };
+  return { ...state, players };
+}
+
 /**
  * 执行 Sell。先组合式校验（validateSales：任意合法组合均可,不限枚举集），
  * 再按 sales 顺序逐块结算：耗啤酒（显式 beerSources 按显式,否则自动解析;
@@ -292,6 +329,7 @@ export function applySell(
 
   const events: GameEvent[] = [];
   let next = state;
+  let bonusDevelopUsed = false;
   for (const sale of action.sales) {
     const placed = next.board.slots[sale.location]?.[sale.slotIndex];
     if (!placed) {
@@ -303,6 +341,7 @@ export function applySell(
     const rb = consumeBeer(next, player, placed.tile.beerToFlip, {
       at: sale.merchant,
       useMerchantBeer: sale.useMerchantBeer,
+      industry: placed.tile.industry,
       ...(sale.beerSources !== undefined ? { explicit: sale.beerSources } : {}),
     });
     next = rb.state;
@@ -310,7 +349,13 @@ export function applySell(
     if (rb.merchantBonus) {
       events.push(rb.merchantBonus);
       if (MERCHANTS[sale.merchant].bonus.type === 'develop') {
-        next = settleFreeDevelop(next, player);
+        // 首个 develop 奖励优先用显式选择(bonusDevelop);其余/缺省按规范化
+        if (action.bonusDevelop !== undefined && !bonusDevelopUsed) {
+          next = settleFreeDevelopExplicit(next, player, action.bonusDevelop);
+          bonusDevelopUsed = true;
+        } else {
+          next = settleFreeDevelop(next, player);
+        }
       }
     }
     const f = applyFlip(next, sale.location, sale.slotIndex);

@@ -108,7 +108,7 @@ describe('network', () => {
     withTile(s, 0, 'coventry', 'pottery');
     s.players[0]!.money = 30;
     // 前置：场上确有商人啤酒可用（开局非 blank 商人板块带桶）
-    expect(Object.values(s.merchants).some((m) => m.beer > 0)).toBe(true);
+    expect(Object.values(s.merchants).some((m) => m.barrels.some(Boolean))).toBe(true);
     // 只有商人啤酒可用、无酒厂 → 不枚举任何双轨行动
     const nets = enumerateNetwork(s, 0);
     expect(nets.some((a) => a.type === 'network' && a.links.length === 2)).toBe(false);

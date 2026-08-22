@@ -21,6 +21,7 @@ async function main(): Promise<void> {
     // AI 行动节奏:每步 AI 行动之间停 5s(与客户端聚光灯时长一致,启发式瞬算
     // 也能逐步看清 AI 过程);BRASS_AI_PACE_MS 可调,0 = 不减速。
     aiPaceMs: Number(process.env['BRASS_AI_PACE_MS'] ?? 5000),
+    roundBreakMs: Number(process.env['BRASS_ROUND_BREAK_MS'] ?? 5000),
   };
   const webDist = process.env['WEB_DIST'];
   if (webDist !== undefined && webDist !== '' && existsSync(webDist)) {

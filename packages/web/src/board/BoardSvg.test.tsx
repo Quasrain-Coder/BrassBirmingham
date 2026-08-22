@@ -17,7 +17,7 @@ describe('<BoardSvg>', () => {
     expect(container.querySelectorAll('g.board-location')).toHaveLength(
       Object.keys(LOCATIONS).length,
     );
-    expect(container.querySelectorAll('line.board-link')).toHaveLength(LINKS.length);
+    expect(container.querySelectorAll('.board-link')).toHaveLength(LINKS.length);
   });
 
   it('viewBox 取官方版图有效区域', () => {
@@ -72,7 +72,7 @@ describe('<BoardSvg>', () => {
     slot.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(clicks).toEqual([['birmingham', 0]]);
 
-    const link = container.querySelector('line[data-link-index="0"]') as Element;
+    const link = container.querySelector('[data-link-index="0"]') as Element;
     link.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(linkClicks).toEqual([0]);
   });
@@ -86,7 +86,7 @@ describe('<BoardSvg>', () => {
         highlights={{ slots: [{ location: 'derby', slotIndex: 2 }], links: [3] }}
       />,
     );
-    const built = container.querySelector('line[data-link-index="0"]') as SVGLineElement;
+    const built = container.querySelector('[data-link-index="0"]') as SVGLineElement;
     expect(built.classList.contains('board-link-built')).toBe(true);
     // 已建连接不再画整条玩家色路径(避免被误读为残留高亮),归属由中点 token 表达
     expect(container.querySelector('polyline.board-link-visual')).toBeNull();
@@ -94,7 +94,7 @@ describe('<BoardSvg>', () => {
     const token = container.querySelector('.link-token image');
     expect(token?.getAttribute('href')).toBe('/assets/link-canal.png');
     expect(container.querySelector('.link-hl-chip')).not.toBeNull();
-    const hl = container.querySelector('line[data-link-index="3"]') as SVGLineElement;
+    const hl = container.querySelector('[data-link-index="3"]') as SVGLineElement;
     expect(hl.classList.contains('highlighted')).toBe(true);
     const slot = container.querySelectorAll(
       'g[data-location="derby"] rect.board-slot',

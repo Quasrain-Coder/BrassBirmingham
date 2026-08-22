@@ -1574,6 +1574,17 @@ body {
   transform: translateY(-4px);
 }
 
+/* 手牌拖拽排序:拖动源半透明;落点侧金色指示条 */
+.hand-card.dragging {
+  opacity: 0.4;
+}
+.hand-card.drop-before {
+  box-shadow: -4px 0 0 0 #f0c964;
+}
+.hand-card.drop-after {
+  box-shadow: 4px 0 0 0 #f0c964;
+}
+
 /* 回合待确认(该点"结束回合"):红色提醒底色 + 实心红按钮,区别于普通灰底 */
 .action-bar.turn-hold {
   border-color: rgba(192, 57, 43, 0.65);
@@ -1934,9 +1945,14 @@ body {
 .game-screen-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   padding: 8px 4px 0;
+}
+
+/* 头部右侧按钮组(偏好设置起)整体右推;左侧 = 房间号 + 离开对局 + 时代标识 */
+.game-screen-head .head-right {
+  margin-left: auto;
 }
 
 .game-room-code {
@@ -1944,6 +1960,17 @@ body {
   font-family: 'Special Elite', 'Courier New', monospace;
   font-size: 0.8rem;
   letter-spacing: 0.2em;
+}
+
+/* 时代/回合标识(离开对局右侧):运河时代 · 第 x/y 轮 */
+.era-round {
+  color: #c9a86a;
+  font-family: 'Special Elite', 'Courier New', monospace;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  align-self: center;
 }
 
 /* 玩家板块图列表 */
@@ -2700,14 +2727,6 @@ body {
   }
 }
 
-/* 左列:离开对局居中于左上角版面上方 */
-.wide-topline-left {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
 /* 离开对局防呆确认弹窗 */
 .leave-confirm-modal {
   min-width: 320px;
@@ -2756,11 +2775,15 @@ body {
   font-size: 0.78rem;
 }
 
-/* 左列:房间号绝对左对齐,离开对局居中 */
+/* 左列:房间号与离开对局紧挨左对齐;时代标识在第三列右对齐——
+   与下方左侧玩家版图列同宽(宽屏 grid 为 1fr/2fr/1fr、gap 10px),落在版图右上角 */
 .wide-topline-left {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto auto 1fr;
   align-items: center;
+  column-gap: 2px;
+  white-space: nowrap;
+  flex: 0 0 calc((100% - 20px) / 4);
 }
 
 .wide-topline-left .game-room-code {
@@ -2769,7 +2792,13 @@ body {
 
 .wide-topline-left > button {
   grid-column: 2;
-  justify-self: center;
+  justify-self: start;
+}
+
+/* 时代标识右对齐到左列版图边缘 */
+.wide-topline-left .era-round {
+  justify-self: end;
+  padding-right: 4px;
 }
 
 /* 金钱标记钉在行动行最右:等待/自己行动/确认回合各状态位置一致 */

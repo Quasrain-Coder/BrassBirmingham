@@ -28,10 +28,11 @@ import {
   ironSources,
   reachableFrom,
 } from './network.js';
-import type { GameState, PlacedTile, PlayerState } from './state.js';
+import type { GameState, MerchantTile, PlacedTile, PlayerState } from './state.js';
 import type {
   BeerSourceRef,
   FlipEvent,
+  IndustryType,
   LocationId,
   MerchantBonusEvent,
   MerchantId,
@@ -43,6 +44,9 @@ export interface ConsumeBeerOpts {
   at: LocationId | MerchantId;
   /** 仅 Sell 传 true：允许消耗 at 所涉商人的啤酒桶并触发该商人奖励。 */
   useMerchantBeer: boolean;
+  /** 所耗啤酒服务的产业(Sell = 所卖板块产业)：商人桶按板块格绑定,
+   *  须存在"收该产业(精确图标或万能)的板块格"旁的剩桶才可取。 */
+  industry?: IndustryType;
   /**
    * 显式啤酒来源（Sell 分组自选）：逐桶指定,长度须等于 n;提供时按此结算,
    * 忽略"商人桶→自家酒厂→对手酒厂"的自动解析顺序。{kind:'merchant'} 自身即
@@ -279,22 +283,36 @@ function isMerchantId(x: string): x is MerchantId {
   return Object.prototype.hasOwnProperty.call(MERCHANTS, x);
 }
 
-/** 取 1 桶商人啤酒：扣桶 + 结算商人奖励（vp/money/income 直接落；develop 由 Sell 层处理）。 */
+/**
+ * 取 1 桶商人啤酒：桶绑在板块格旁——卖货须用"收该产业(精确图标或万能)的板块格"旁的桶;
+ * 多格都收时规范化消耗**最右**可用格(UI 从左填充、从右消耗)。扣桶 + 结算商人奖励
+ * （vp/money/income 直接落；develop 由 Sell 层处理）。
+ */
 function takeMerchantBarrel(
   state: GameState,
   player: PlayerIndex,
   merchantId: MerchantId,
+  industry: IndustryType,
 ): { state: GameState; bonus: MerchantBonusEvent } {
   const m = state.merchants[merchantId];
-  if (m.beer <= 0) {
+  let bi = -1;
+  for (let i = m.barrels.length - 1; i >= 0; i -= 1) {
+    if (m.barrels[i] === true && (m.tiles[i] === 'any' || m.tiles[i] === industry)) {
+      bi = i;
+      break;
+    }
+  }
+  if (bi === -1) {
     throw new IllegalActionError(
       'insufficient-beer',
-      `insufficient-beer: merchant ${merchantId} has no barrel`,
+      `insufficient-beer: merchant ${merchantId} has no barrel for ${industry}`,
     );
   }
+  const barrels = [...m.barrels];
+  barrels[bi] = false;
   let next: GameState = {
     ...state,
-    merchants: { ...state.merchants, [merchantId]: { ...m, beer: m.beer - 1 } },
+    merchants: { ...state.merchants, [merchantId]: { ...m, barrels } },
   };
   const bonus = MERCHANTS[merchantId].bonus;
   const ps = next.players[player]!;
@@ -310,6 +328,14 @@ function takeMerchantBarrel(
   }
   // bonus.type === 'develop'：不在此结算，仅发事件
   return { state: next, bonus: { kind: 'merchant-bonus', player, merchant: merchantId } };
+}
+
+/** 该商人位是否有"收该产业(精确图标或万能)的板块格"旁的剩桶。 */
+export function merchantHasUsableBarrel(
+  m: { tiles: MerchantTile[]; barrels: boolean[] },
+  industry: IndustryType,
+): boolean {
+  return m.barrels.some((b, i) => b && (m.tiles[i] === 'any' || m.tiles[i] === industry));
 }
 
 /**
@@ -346,7 +372,13 @@ function consumeBeerExplicit(
         );
       }
       merchantTaken = true;
-      const r = takeMerchantBarrel(next, player, merchantId);
+      if (opts.industry === undefined) {
+        throw new IllegalActionError(
+          'illegal-beer-sources',
+          'illegal-beer-sources: merchant barrel requires industry context',
+        );
+      }
+      const r = takeMerchantBarrel(next, player, merchantId, opts.industry);
       next = r.state;
       merchantBonus = r.bonus;
       continue;
@@ -389,7 +421,12 @@ export function consumeBeer(
   const flipped: FlipEvent[] = [];
 
   const merchantId = isMerchantId(opts.at) ? opts.at : null;
-  const merchantAvailable = opts.useMerchantBeer && merchantId ? state.merchants[merchantId].beer : 0;
+  const merchantAvailable =
+    opts.useMerchantBeer && merchantId !== null && opts.industry !== undefined
+      ? merchantHasUsableBarrel(state.merchants[merchantId], opts.industry)
+        ? 1
+        : 0
+      : 0;
   // 每次调用至多取 1 桶商人啤酒（契约 merchantBonus 为单事件；多块板块 Sell 时行动层多次调用）
   const merchantTake = Math.min(n, merchantAvailable, 1);
 
@@ -424,9 +461,9 @@ export function consumeBeer(
   let need = n;
   let merchantBonus: MerchantBonusEvent | undefined;
 
-  if (merchantTake > 0 && merchantId) {
+  if (merchantTake > 0 && merchantId && opts.industry !== undefined) {
     need -= 1;
-    const r = takeMerchantBarrel(next, player, merchantId);
+    const r = takeMerchantBarrel(next, player, merchantId, opts.industry);
     next = r.state;
     merchantBonus = r.bonus;
   }

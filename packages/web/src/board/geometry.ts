@@ -387,9 +387,9 @@ export const INCOME_TRACK: Point[] = ringPositions(INCOME_SIDES);
 export const LINK_MIDPOINTS: Record<number, Point> = {
   0: { x: 4120, y: 1725 }, // belper-derby
   1: { x: 3645, y: 1360 }, // belper-leek
-  2: { x: 3950, y: 3880 }, // birmingham-coventry（校准:原值偏左下,移到印刷运河路径中点）
+  2: { x: 3953, y: 3913 }, // birmingham-coventry（校准:原值偏上,移到印刷轨道弧线上）
   3: { x: 3230, y: 3800 }, // birmingham-dudley（校准:原值偏左约 220px,移到路径中点）
-  4: { x: 3840, y: 3615 }, // birmingham-nuneaton
+  4: { x: 4030, y: 3635 }, // birmingham-nuneaton（校准:原值偏左上,移到印刷轨道弧线上）
   5: { x: 3885, y: 4165 }, // birmingham-oxford
   6: { x: 3520, y: 4140 }, // birmingham-redditch
   7: { x: 3790, y: 3420 }, // birmingham-tamworth

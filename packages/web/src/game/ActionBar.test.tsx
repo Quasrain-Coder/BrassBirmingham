@@ -278,7 +278,7 @@ describe('useActionDraft', () => {
     f.state.board.slots['birmingham']![0] = { tile: cotton, player: 0, flipped: false, resources: 0 };
     f.state.board.slots['derby']![0] = { tile: brew, player: 0, flipped: false, resources: 1 };
     f.state.board.links.push({ linkIndex: 5, player: 0, era: 'canal' }); // birmingham-oxford
-    f.state.merchants.oxford = { tiles: ['any'], beer: 1 };
+    f.state.merchants.oxford = { tiles: ['any'], barrels: [true] };
     const legal: Action[] = [
       {
         type: 'sell',
@@ -349,6 +349,9 @@ function draftFixture(overrides: Partial<ActionDraft> = {}): ActionDraft {
     highlights: {},
     pickedLinks: [],
     networkCanExtend: false,
+    networkBeer: null,
+    networkBeerOptions: [],
+    pickNetworkBeer: () => {},
     developPicks: [],
     developChoices: [],
     scoutPicks: [],
@@ -359,6 +362,11 @@ function draftFixture(overrides: Partial<ActionDraft> = {}): ActionDraft {
     sellGroups: [],
     sellMerchant: null,
     sellBeer: [],
+    committedBeer: { breweries: new Map(), merchantUses: [] },
+    sellBonusPending: false,
+    bonusDevelop: null,
+    bonusDevelopOptions: [],
+    pickBonusDevelop: () => {},
     pickSellTile: () => {},
     pickSellMerchant: () => {},
     toggleSellMerchantBarrel: () => {},

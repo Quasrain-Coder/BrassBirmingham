@@ -39,7 +39,16 @@ function setMerchant(
   tiles: ('any' | 'cotton' | 'manufacturer' | 'pottery' | 'blank')[],
   beer: number,
 ): void {
-  state.merchants[id] = { tiles, beer };
+  // 桶按板块格绑定:前 beer 个非 blank 格有桶(与 UI 从左填充一致)
+  let left = beer;
+  state.merchants[id] = {
+    tiles,
+    barrels: tiles.map((t) => {
+      if (t === 'blank' || left <= 0) return false;
+      left -= 1;
+      return true;
+    }),
+  };
 }
 
 /** 辅助：已建 Link（0 基下标；连通判定不看属主）。 */
@@ -98,7 +107,7 @@ describe('sell', () => {
     expect(after.players[0]!.incomeSpace).toBe(17);
     expect(after.players[0]!.vp).toBe(0);
     expect(after.players[0]!.money).toBe(17);
-    expect(after.merchants.oxford.beer).toBe(0);
+    expect(after.merchants.oxford.barrels.filter(Boolean).length).toBe(0);
     expect(after.board.slots['birmingham']![0]!.flipped).toBe(true);
     expect(events).toContainEqual({ kind: 'merchant-bonus', player: 0, merchant: 'oxford' });
     expect(events).toContainEqual({
@@ -126,8 +135,8 @@ describe('sell', () => {
 
     const { state: after } = applySell(s, 0, sells[0]!);
     // 用的是 oxford 的桶；shrewsbury 的桶原样保留
-    expect(after.merchants.oxford.beer).toBe(0);
-    expect(after.merchants.shrewsbury.beer).toBe(1);
+    expect(after.merchants.oxford.barrels.filter(Boolean).length).toBe(0);
+    expect(after.merchants.shrewsbury.barrels.filter(Boolean).length).toBe(1);
 
     // 商人位无桶时不存在 useMerchantBeer: true 分支
     const s2 = newGame(4, 9);
@@ -267,7 +276,7 @@ describe('sell', () => {
     expect(sells[0]!.sales[0]!.useMerchantBeer).toBe(false);
 
     const { state: after, events } = applySell(s, 0, sells[0]!);
-    expect(after.merchants.oxford.beer).toBe(1); // 商人桶原样保留
+    expect(after.merchants.oxford.barrels.filter(Boolean).length).toBe(1); // 商人桶原样保留
     expect(events.some((e) => e.kind === 'merchant-bonus')).toBe(false);
     expect(after.board.slots['birmingham']![0]!.flipped).toBe(true);
   });
@@ -287,7 +296,7 @@ describe('sell', () => {
     expect(full[0]!.sales.every((x) => x.useMerchantBeer)).toBe(true);
 
     const { state: after, events } = applySell(s, 0, full[0]!);
-    expect(after.merchants.gloucester.beer).toBe(0);
+    expect(after.merchants.gloucester.barrels.filter(Boolean).length).toBe(0);
     // 2 次 MerchantBonusEvent + 2 次免费 develop（产业序首个：cotton 栈顶连移 2 块）
     expect(events.filter((e) => e.kind === 'merchant-bonus')).toEqual([
       { kind: 'merchant-bonus', player: 0, merchant: 'gloucester' },
