@@ -437,6 +437,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                         >
                           <image
                             className="board-tile"
+                            style={onSlotClick ? { cursor: 'pointer' } : undefined}
                             href={tileImage(tile.tile.industry, tile.tile.level, tile.player, tile.flipped)}
                             x={r.x}
                             y={r.y}
@@ -475,6 +476,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                     ) : null}
                     <rect
                       className={`board-slot${hl ? ' highlighted' : ''}`}
+                      style={onSlotClick ? { cursor: 'pointer' } : undefined}
                       data-location={id}
                       data-slot-index={si}
                       x={r.x}
