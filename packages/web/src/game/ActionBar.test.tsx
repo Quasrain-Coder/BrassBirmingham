@@ -356,6 +356,28 @@ describe('useActionDraft', () => {
     expect(resolved.sales[0]!.beerSources).toEqual([{ kind: 'brewery', location: 'derby', slotIndex: 0 }]);
   });
 
+  it('出售暂存中拖拽触发改建:建造入选即清空出售暂存(回归:左侧停留出售行)', () => {
+    const f = freshFixture();
+    const cotton1 = tileDef('cotton', 1)!;
+    f.state.board.slots['birmingham']![0] = { tile: cotton1, player: 0, flipped: false, resources: 0 };
+    const sellAction: Action = {
+      type: 'sell',
+      cardId: 'c1',
+      sales: [{ location: 'birmingham', slotIndex: 0, merchant: 'oxford', useMerchantBeer: true }],
+    };
+    const overbuild: Action = { type: 'build', cardId: 'c1', industry: 'cotton', location: 'birmingham' };
+    const { result } = renderDraft(f, 'c1', [sellAction, overbuild]);
+
+    // 默认首次点击 = 进入出售流程
+    act(() => result.current.clickSlot('birmingham', 0));
+    expect(result.current.sellTile).toEqual({ location: 'birmingham', slotIndex: 0 });
+    // 拖拽(forceBuild)触发改建:chosen 为建造,出售暂存联动清空
+    act(() => result.current.clickSlot('birmingham', 0, true));
+    expect(result.current.sellTile).toBeNull();
+    expect(result.current.sellGroups).toEqual([]);
+    expect(result.current.resolved?.type).toBe('build');
+  });
+
   it('loan/pass 无参数：choose 即 resolved', () => {    const f = freshFixture();
     const card = locationCard(f);
     const { result } = renderDraft(f, card.id);

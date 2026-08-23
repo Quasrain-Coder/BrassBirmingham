@@ -556,6 +556,14 @@ export function useActionDraft({
     if (buildIndustry !== null) {
       builds = builds.filter((a) => a.industry === buildIndustry);
     }
+    if (builds.length > 0) {
+      // 建造被选中(含拖拽/预选触发的改建):出售暂存联动清空,左侧不再停留在出售行
+      setSellTile(null);
+      setSellMerchant(null);
+      setSellBeer([]);
+      setSellGroups([]);
+      setBonusDevelop(null);
+    }
     if (builds.length === 1) {
       const b = builds[0]!;
       // 双-双图标槽:玩家点的就是想建的槽位 → 附显式 slotIndex(engine 校验同规则)

@@ -464,6 +464,8 @@ function GameBoard({
       if (target === null) return;
       draft.pickIndustry(ind);
       draft.clickSlot(loc, target.slotIndex, true);
+      // 拖拽触发了建造/改建:左侧行动栏联动切到建造行(出售暂存已在 hook 内清空)
+      setTopAction('build');
       return;
     }
     // 落到地图外且非垃圾桶/非版图:什么都不发生(token 回归原位)
