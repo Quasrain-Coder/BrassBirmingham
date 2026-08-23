@@ -26,17 +26,18 @@
  * （true→false 成对），AI 的 action_applied 带 reason；usage 记内存，终局打日志行。
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { randomBytes } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import { PROTOCOL_VERSION } from '@brass/protocol';
-import type { ClientMessage, DraftPreview, ServerMessage } from '@brass/protocol';
-import { enumerateActions } from '@brass/engine';
+import type { ClientMessage, DraftPreview, GameRecord, ServerMessage } from '@brass/protocol';
+import { applyAction, enumerateActions, newGame } from '@brass/engine';
 import type { Action, PlayerIndex } from '@brass/engine';
 import { HeuristicAgent, type DecidingAgent, type Difficulty } from '@brass/llm';
 import { RoomError, RoomManager, toRoomState, type Room, type Seat } from './rooms.js';
 import { GameSession, SessionError, type SessionSeat } from './session.js';
-import { findGameById, findSeatByToken, listSeats, openDb, type Db } from './db/repo.js';
+import { findGameById, findSeatByToken, listActions, listSeats, openDb, type Db } from './db/repo.js';
 
 export interface GameServerOptions {
   port: number;
@@ -277,9 +278,37 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     if (typeof msg.code !== 'string' || typeof msg.nickname !== 'string') {
       throw new WsError('bad-message', 'join_room 需要 code(string) 与 nickname(string)');
     }
-    const { room, seat, token } = rooms.joinRoom(msg.code, msg.nickname);
+    let joined: { room: Room; seat: PlayerIndex; token: string };
+    try {
+      joined = rooms.joinRoom(msg.code, msg.nickname);
+    } catch (e) {
+      // 已开局但仍有开放真人座位(导入残局) → 补位加入
+      if (e instanceof RoomError && e.code === 'already-started') {
+        joined = rooms.joinStartedRoom(msg.code, msg.nickname);
+      } else {
+        throw e;
+      }
+    }
+    const { room, seat, token } = joined;
     attach(conn, room, seat);
     send(conn, { type: 'credentials', protocolVersion: PROTOCOL_VERSION, seat, token });
+    if (room.started) {
+      // 补位进已开局对局:补发快照(座位 token 在 import 时已入索引与库)
+      const entry = [...sessionsByGameId.values()].find((x) => x.room.code === room.code);
+      if (entry !== undefined) {
+        const snap = entry.session.snapshotFor(seat);
+        send(conn, {
+          type: 'snapshot',
+          protocolVersion: PROTOCOL_VERSION,
+          seq: snap.seq,
+          state: snap.state,
+          legalActions: snap.legalActions,
+          turnHold: entry.turnHold,
+          playedCards: snap.playedCards,
+          eraActions: snap.eraActions,
+        });
+      }
+    }
     broadcastRoomState(room);
   }
 
@@ -769,12 +798,159 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
       case 'leave':
         handleLeave(conn, msg);
         break;
+      case 'export_game':
+        handleExportGame(conn, msg);
+        break;
+      case 'import_game':
+        handleImportGame(conn, msg);
+        break;
       case 'ping':
         send(conn, { type: 'pong', protocolVersion: PROTOCOL_VERSION });
         break;
       default:
         sendError(conn, 'unknown-message', `未知消息类型: ${String((msg as { type: unknown }).type)}`);
     }
+  }
+
+  /** 导出对局记录：从库读出整局行动日志（开局到当前进度），客户端下载为 JSON。 */
+  function handleExportGame(conn: Conn, msg: { token: string }): void {
+    if (typeof msg.token !== 'string') throw new WsError('bad-message', 'export_game 需要 token');
+    const entry = sessionByToken.get(msg.token);
+    if (entry === undefined) throw new WsError('invalid-token', 'token 不属于任何进行中对局');
+    const game = findGameById(db, entry.session.gameId);
+    if (game === null) throw new WsError('session-lost', '对局不存在');
+    const record: GameRecord = {
+      version: 1,
+      playerCount: game.playerCount as 2 | 3 | 4,
+      seed: game.seed,
+      seats: listSeats(db, game.id).map((s) => ({
+        seat: s.seat as PlayerIndex,
+        nickname: s.nickname,
+        isAI: s.isAI,
+      })),
+      actions: listActions(db, game.id).map((r) => ({
+        seq: r.seq,
+        player: r.player as PlayerIndex,
+        action: r.action,
+      })),
+    };
+    send(conn, { type: 'export_data', protocolVersion: PROTOCOL_VERSION, record });
+  }
+
+  /**
+   * 导入对局记录并从残局开新局：先内存校验整个行动前缀可重放（顺序/合法性），
+   * 再落库建新局逐条提交（与 restore 同路径 inline 结算）。导入者占 msg.seat
+   * 指定座位（在线）；其余真人座位保持开放（connected=false,join_room 补位）；
+   * 记录里的 AI 座位照常由 driveAI 接管。
+   */
+  function handleImportGame(conn: Conn, msg: { record: GameRecord; seat: PlayerIndex; nickname: string }): void {
+    // 已在房间:先从当前房间解绑(旧对局可用原 token resume),再开新局
+    if (conn.roomCode !== null && conn.seat !== null) {
+      const oldRoom = rooms.getRoom(conn.roomCode);
+      if (oldRoom !== null) {
+        setSeatConnected(oldRoom, conn.seat, false);
+        broadcastRoomState(oldRoom);
+      }
+      conn.roomCode = null;
+      conn.seat = null;
+    }
+    const rec = msg.record;
+    if (
+      rec === null ||
+      typeof rec !== 'object' ||
+      rec.version !== 1 ||
+      (rec.playerCount !== 2 && rec.playerCount !== 3 && rec.playerCount !== 4) ||
+      !Array.isArray(rec.seats) ||
+      !Array.isArray(rec.actions) ||
+      typeof rec.seed !== 'number'
+    ) {
+      throw new WsError('bad-message', 'import_game 记录格式非法');
+    }
+    if (typeof msg.seat !== 'number' || msg.seat < 0 || msg.seat >= rec.playerCount) {
+      throw new WsError('invalid-seat', `座位 ${String(msg.seat)} 越界`);
+    }
+    const seatIdx = msg.seat as PlayerIndex;
+    // ① 内存校验:整个前缀按顺序可重放
+    try {
+      let s = newGame(rec.playerCount, rec.seed);
+      for (const { player, action } of rec.actions) {
+        if (player !== s.turnOrder[s.currentPlayerIdx]) {
+          throw new Error(`行动者错位(player=${player},当前=${s.turnOrder[s.currentPlayerIdx]})`);
+        }
+        s = applyAction(s, action);
+      }
+    } catch (e) {
+      throw new WsError('import-invalid', `行动日志无法重放: ${(e as Error).message}`);
+    }
+    if (typeof msg.nickname !== 'string' || msg.nickname.trim() === '') {
+      throw new WsError('bad-message', 'import_game 需要 nickname(string)');
+    }
+    // ② 落库建新局并逐条提交(隐式校验同上,理论不再失败)
+    const sessionSeats: SessionSeat[] = Array.from({ length: rec.playerCount }, (_, i) => {
+      const r = rec.seats.find((x) => x.seat === i);
+      return {
+        seat: i as PlayerIndex,
+        nickname: i === seatIdx ? msg.nickname.trim() : (r?.nickname ?? `玩家${i + 1}`),
+        token: randomBytes(18).toString('base64url'),
+        isAI: i === seatIdx ? false : (r?.isAI ?? false),
+      };
+    });
+    const code = rooms.newCode();
+    const session = new GameSession(db, undefined, rec.playerCount, rec.seed, sessionSeats, code);
+    for (const { player, action } of rec.actions) {
+      session.submitAction(player as PlayerIndex, action);
+    }
+    // ③ Room + SessionEntry:导入者在线,其余真人座位开放,AI 座位接管
+    const agents = new Map<PlayerIndex, DecidingAgent>();
+    const tokenSeats = new Map<string, PlayerIndex>();
+    const roomSeats: Seat[] = sessionSeats.map((s) => {
+      const online = s.seat === seatIdx || s.isAI === true;
+      if (s.isAI === true) agents.set(s.seat, makeAgent(s.seat, 'normal'));
+      else tokenSeats.set(s.token, s.seat);
+      return { seat: s.seat, nickname: s.nickname, token: s.token, connected: online, isAI: s.isAI === true };
+    });
+    const room: Room = {
+      code,
+      config: { playerCount: rec.playerCount, seed: rec.seed },
+      seats: roomSeats,
+      started: true,
+      seed: rec.seed,
+      customSeed: true,
+    };
+    rooms.adopt(room);
+    const entry: SessionEntry = {
+      session,
+      room,
+      tokenSeats,
+      agents,
+      driving: false,
+      turnHold: null,
+      holdEndedRound: false,
+      roundBreakTimer: null,
+      usage: { decisions: 0, input: 0, output: 0 },
+    };
+    sessionsByGameId.set(session.gameId, entry);
+    for (const token of tokenSeats.keys()) sessionByToken.set(token, entry);
+    attach(conn, room, seatIdx);
+    send(conn, {
+      type: 'credentials',
+      protocolVersion: PROTOCOL_VERSION,
+      seat: seatIdx,
+      token: sessionSeats[seatIdx]!.token,
+    });
+    const snap = entry.session.snapshotFor(seatIdx);
+    send(conn, {
+      type: 'snapshot',
+      protocolVersion: PROTOCOL_VERSION,
+      seq: snap.seq,
+      state: snap.state,
+      legalActions: snap.legalActions,
+      turnHold: entry.turnHold,
+      playedCards: snap.playedCards,
+      eraActions: snap.eraActions,
+    });
+    broadcastRoomState(room);
+    void driveAI(entry);
   }
 
   function handleMessage(conn: Conn, data: RawData): void {

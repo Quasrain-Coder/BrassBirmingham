@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { GameScreen } from './game/GameScreen';
+import { ReviewScreen } from './game/ReviewScreen';
 import { GameClient, GameStore, useGameStore } from './game/store';
 import { Lobby, RoomView } from './lobby/Lobby';
 
@@ -53,6 +54,9 @@ export function App({ store: injected }: { store?: GameStore } = {}): ReactEleme
 
   if (s.takenOver) {
     return <TakenOverScreen store={store} />;
+  }
+  if (s.review !== null) {
+    return <ReviewScreen store={store} />;
   }
   if (s.snapshot !== null && s.seat !== null) {
     return <GameScreen store={store} />;

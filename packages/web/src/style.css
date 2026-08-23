@@ -1574,6 +1574,53 @@ body {
   transform: translateY(-4px);
 }
 
+/* 回看模式(导入对局记录):布局与控件 */
+.review-screen .game-screen-head {
+  gap: 10px;
+}
+.review-progress {
+  color: #c9a86a;
+  font-family: 'Special Elite', 'Courier New', monospace;
+  font-size: 0.85rem;
+}
+.review-seats {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #9aa4b2;
+  font-size: 0.85rem;
+}
+.review-seat-active {
+  border-color: #f0c964 !important;
+  color: #f0c964 !important;
+}
+.review-body {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.review-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.review-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px;
+}
+.review-controls input[type='range'] {
+  flex: 1;
+  accent-color: #c9a86a;
+}
+@media (max-width: 1200px) {
+  .review-body {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* 飞牌动画(补牌/搜寻/百搭飞回):固定定位,从牌堆/面板中心飞向目标 */
 .card-flight {
   position: fixed;

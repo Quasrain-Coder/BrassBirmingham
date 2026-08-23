@@ -26,6 +26,7 @@ import type {
   ClientMessage,
   DraftPreview,
   FilteredState,
+  GameRecord,
   RoomConfig,
   RoomState,
   ServerMessage,
@@ -214,6 +215,8 @@ export interface GameStoreState {
   remoteDrafts: Partial<Record<PlayerIndex, DraftPreview>>;
   /** 最近一次"重置本回合"广播（n 单调递增作触发键）。 */
   resetNotice: { seat: PlayerIndex; n: number } | null;
+  /** 回看模式:导入的对局记录 + 当前步数(已应用行动数)与视角座位;null=不在回看。 */
+  review: { record: GameRecord; step: number; viewSeat: PlayerIndex } | null;
 }
 
 export const LOG_CAPACITY = 100;
@@ -239,6 +242,7 @@ const INITIAL_STATE: GameStoreState = {
   fixedSeats: null,
   remoteDrafts: {},
   resetNotice: null,
+  review: null,
 };
 
 export interface GameStoreOptions {
@@ -393,6 +397,50 @@ export class GameStore {
    * 座位标断线、广播、断开本连接），再清持久化会话、以无 token 干净身份重连。
    * 未入房（token 为空）时直接走断开 + 重置。
    */
+  /** 导出当前对局记录(服务器回 export_data 后浏览器下载 JSON)。 */
+  exportGame(): void {
+    const token = this.state.token;
+    if (token === null) return;
+    this.send({ type: 'export_game', protocolVersion: PROTOCOL_VERSION, token });
+  }
+
+  /** 进入回看模式(导入记录,纯前端逐步回放)。 */
+  enterReview(record: GameRecord): void {
+    this.patch({ review: { record, step: record.actions.length, viewSeat: 0 as PlayerIndex } });
+  }
+
+  exitReview(): void {
+    this.patch({ review: null });
+  }
+
+  setReviewStep(step: number): void {
+    const r = this.state.review;
+    if (r === null) return;
+    const clamped = Math.max(0, Math.min(step, r.record.actions.length));
+    this.patch({ review: { ...r, step: clamped } });
+  }
+
+  setReviewSeat(viewSeat: PlayerIndex): void {
+    const r = this.state.review;
+    if (r === null) return;
+    this.patch({ review: { ...r, viewSeat } });
+  }
+
+  /** 从回看的当前步数进入真实对局(残局开新房间;其余座位开放加入)。 */
+  startFromReview(): void {
+    const r = this.state.review;
+    if (r === null) return;
+    const nickname = r.record.seats[r.viewSeat]?.nickname ?? `玩家${r.viewSeat + 1}`;
+    this.patch({ review: null });
+    this.send({
+      type: 'import_game',
+      protocolVersion: PROTOCOL_VERSION,
+      record: { ...r.record, actions: r.record.actions.slice(0, r.step) },
+      seat: r.viewSeat,
+      nickname,
+    });
+  }
+
   leaveRoom(): void {
     if (this.state.token !== null && this.state.connection === 'connected') {
       try {
@@ -647,6 +695,12 @@ export class GameStore {
         }
         this.patch({ lastError: { code: msg.code, message: msg.message } });
         break;
+      case 'export_data': {
+        // 导出记录下载为 JSON 文件(文件名带房间号与步数,便于归档/回传 debug)
+        const code = this.roomCode() ?? 'game';
+        downloadJson(`brass-${code}-${msg.record.actions.length}steps.json`, msg.record);
+        break;
+      }
       case 'pong':
         break;
     }
@@ -657,6 +711,17 @@ export class GameStore {
     this.state = { ...this.state, ...partial };
     for (const cb of this.listeners) cb();
   }
+}
+
+/** 触发浏览器下载(JSON Blob + a[download])。 */
+function downloadJson(filename: string, data: unknown): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /** React 绑定：订阅整个 store 状态。 */

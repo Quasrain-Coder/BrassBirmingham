@@ -9,9 +9,9 @@
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Action, Card, PlayerIndex } from '@brass/engine';
-import { buildDeck } from '@brass/engine';
+import { applyAction, buildDeck, newGame } from '@brass/engine';
 import type { IndustryType, LocationId } from '@brass/engine';
-import type { DraftPreview, FilteredState, RoomState } from '@brass/protocol';
+import type { DraftPreview, FilteredState, GameRecord, RoomState } from '@brass/protocol';
 import { BoardSvg, BOARD_VIEW } from '../board/BoardSvg';
 import { PLAYER_COLORS } from '../board/BoardSvg';
 import type { ActionSpotlight } from '../board/BoardSvg';
@@ -470,6 +470,24 @@ function GameBoard({
     }
     // 落到地图外且非垃圾桶/非版图:什么都不发生(token 回归原位)
   };
+  /** 导入对局记录文件:校验可从头重放后进入回看模式。 */
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const handleImportFile = (file: File): void => {
+    void (async () => {
+      try {
+        const rec = JSON.parse(await file.text()) as GameRecord;
+        let s = newGame(rec.playerCount, rec.seed);
+        for (const { player, action } of rec.actions) {
+          if (player !== s.turnOrder[s.currentPlayerIdx]) throw new Error('行动者错位');
+          s = applyAction(s, action);
+        }
+        store.enterReview(rec);
+      } catch (e) {
+        window.alert(`导入失败：${(e as Error).message}`);
+      }
+    })();
+  };
+
   const handleSlotClick = (loc: LocationId, si: number): void => {
     const t = state.board.slots[loc]?.[si];
     if (
@@ -664,6 +682,12 @@ function GameBoard({
         >
           离开对局
         </button>
+        <button type="button" className="btn-ghost" data-testid="export-game" title="导出对局记录(JSON,含种子与全部行动)" onClick={() => store.exportGame()}>
+          导出
+        </button>
+        <button type="button" className="btn-ghost" data-testid="import-game" title="导入对局记录进入回看模式" onClick={() => importFileRef.current?.click()}>
+          导入
+        </button>
         <span className="era-round" data-testid="era-round">{eraRoundText}</span>
         <button type="button" className="btn-ghost head-right" data-testid="open-prefs" onClick={() => setPrefsOpen(true)}>
           偏好设置
@@ -717,6 +741,19 @@ function GameBoard({
           onDone={() => setFlights((fs) => fs.filter((x) => x.id !== f.id))}
         />
       ))}
+      {/* 导入对局记录的隐藏文件框(导入按钮触发) */}
+      <input
+        ref={importFileRef}
+        type="file"
+        accept="application/json,.json"
+        style={{ display: 'none' }}
+        data-testid="import-file-input"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file !== undefined) handleImportFile(file);
+          e.target.value = '';
+        }}
+      />
       {scoreHistory.open ? (
         <ScoreModal
           entries={scoreHistory.entries}
@@ -805,6 +842,12 @@ function GameBoard({
             ) : null}
             <button type="button" className="btn-ghost" data-testid="leave-game" onClick={() => setLeaveConfirmOpen(true)}>
               离开对局
+            </button>
+            <button type="button" className="btn-ghost" data-testid="export-game" title="导出对局记录(JSON,含种子与全部行动)" onClick={() => store.exportGame()}>
+              导出
+            </button>
+            <button type="button" className="btn-ghost" data-testid="import-game" title="导入对局记录进入回看模式" onClick={() => importFileRef.current?.click()}>
+              导入
             </button>
             <span className="era-round" data-testid="era-round">{eraRoundText}</span>
           </div>

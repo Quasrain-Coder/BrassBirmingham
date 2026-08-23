@@ -2,6 +2,15 @@ import type { Action, Card, GameState, IndustryType, LocationId, MerchantId, Pla
 
 export const PROTOCOL_VERSION = 1;
 
+/** 导出/导入对局记录:种子 + 全量行动日志,确定性重放(newGame + 逐条 applyAction)。 */
+export interface GameRecord {
+  version: 1;
+  playerCount: 2 | 3 | 4;
+  seed: number;
+  seats: { seat: PlayerIndex; nickname: string; isAI: boolean }[];
+  actions: { seq: number; player: PlayerIndex; action: Action }[];
+}
+
 export { filterStateFor } from './filter.js';
 
 // 房间配置与大厅
@@ -23,6 +32,7 @@ export type ServerMessage =
   | { type: 'turn_reset'; protocolVersion: number; seat: PlayerIndex } // 某座位重置了本回合(全场播报用)
   | { type: 'ai_thinking'; protocolVersion: number; seat: PlayerIndex; thinking: boolean } // AI 决策中指示（true→false 成对）
   | { type: 'game_over'; protocolVersion: number; winner: PlayerIndex[]; finalScores: number[] } // finalScores = 终局 state.players[].vp 按座位序
+  | { type: 'export_data'; protocolVersion: number; record: GameRecord } // export_game 的应答:整局记录(开局到当前进度)
   | { type: 'error'; protocolVersion: number; code: string; message: string }
   | { type: 'pong'; protocolVersion: number };
 
@@ -66,4 +76,6 @@ export type ClientMessage =
   | { type: 'reset_turn'; protocolVersion: number; token: string } // 扣住的回合:撤销本轮全部行动重来
   | { type: 'draft_update'; protocolVersion: number; token: string; draft: DraftPreview | null } // 暂存预览同步(null=清除);服务器广播 player_draft 给同房其他人
   | { type: 'leave'; protocolVersion: number; token: string } // 主动退出：清座位索引 + 广播 + 断开本连接（对局继续）
+  | { type: 'export_game'; protocolVersion: number; token: string } // 导出当前对局记录(服务器从库读出整局行动日志)
+  | { type: 'import_game'; protocolVersion: number; record: GameRecord; seat: PlayerIndex; nickname: string } // 从记录的某个前缀开新局:seat=导入者座位(其余座位开放加入),actions 须为从开局起的前缀
   | { type: 'ping'; protocolVersion: number };
