@@ -12,6 +12,7 @@ import type { FormEvent, ReactElement, ReactNode } from 'react';
 import type { AIDifficulty, RoomConfig } from '@brass/protocol';
 import type { GameStore } from '../game/store';
 import { useGameStore } from '../game/store';
+import { readRecordFile } from '../game/importRecord';
 
 /** 种子字符集：与房间号一致（大写字母数字去混淆 31 个）。 */
 const SEED_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -119,6 +120,7 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('normal');
   const [joinNick, setJoinNick] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   const onCreate = (e: FormEvent): void => {
     e.preventDefault();
@@ -276,6 +278,35 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
             disabled={!connected || joinNick.trim() === '' || joinCode.trim() === ''}
           >
             加入房间
+          </button>
+        </form>
+
+        <form className="panel" data-testid="import-form" onSubmit={(e) => e.preventDefault()}>
+          <h2 className="panel-title">导入对局记录</h2>
+          <p className="panel-desc">选择导出的 JSON 文件,进入回看模式(可逐步回放、从残局实战)</p>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: 'none' }}
+            data-testid="import-file-input"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file !== undefined) {
+                void readRecordFile(file)
+                  .then((rec) => store.enterReview(rec))
+                  .catch((err: unknown) => window.alert(`导入失败：${err instanceof Error ? err.message : String(err)}`));
+              }
+              e.target.value = '';
+            }}
+          />
+          <button
+            type="button"
+            className="btn-primary"
+            data-testid="import-submit"
+            onClick={() => importFileRef.current?.click()}
+          >
+            选择记录文件…
           </button>
         </form>
       </div>
