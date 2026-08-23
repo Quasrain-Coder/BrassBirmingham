@@ -319,6 +319,43 @@ describe('useActionDraft', () => {
     expect(result.current.resolved).toBeNull();
   });
 
+  it('一键出售后 continue 拼组:chosen 失效,确认跟随自定义组(回归:一键 ×2 钉死)', () => {
+    const f = freshFixture();
+    const cotton = tileDef('cotton', 1)!;
+    const brew = tileDef('brewery', 1)!;
+    f.state.board.slots['birmingham']![0] = { tile: cotton, player: 0, flipped: false, resources: 0 };
+    f.state.board.slots['derby']![0] = { tile: brew, player: 0, flipped: false, resources: 1 };
+    f.state.board.links.push({ linkIndex: 5, player: 0, era: 'canal' }); // birmingham-oxford
+    f.state.merchants.oxford = { tiles: ['any'], barrels: [true] };
+    const fullSet: Action = {
+      type: 'sell',
+      cardId: 'c1',
+      sales: [
+        { location: 'birmingham', slotIndex: 0, merchant: 'oxford', useMerchantBeer: true },
+        { location: 'derby', slotIndex: 0, merchant: 'oxford', useMerchantBeer: false },
+      ],
+    };
+    const single: Action = {
+      type: 'sell',
+      cardId: 'c1',
+      sales: [{ location: 'birmingham', slotIndex: 0, merchant: 'oxford', useMerchantBeer: true }],
+    };
+    const { result } = renderDraft(f, 'c1', [fullSet, single]);
+
+    // 点了一键出售 ×2 → chosen 钉住
+    act(() => result.current.choose(fullSet));
+    expect(result.current.resolved).toBe(fullSet);
+    // 继续自定义拼组(点板块/贸易商/酒) → chosen 失效,确认跟随自定义组
+    act(() => result.current.clickSlot('birmingham', 0));
+    act(() => result.current.pickSellMerchant('oxford'));
+    act(() => result.current.setSellBreweryCount({ location: 'derby', slotIndex: 0 }, 1));
+    const resolved = result.current.resolved as Extract<Action, { type: 'sell' }>;
+    expect(resolved.type).toBe('sell');
+    expect(resolved).not.toBe(fullSet); // 不再是一键的原对象
+    expect(resolved.sales).toHaveLength(1);
+    expect(resolved.sales[0]!.beerSources).toEqual([{ kind: 'brewery', location: 'derby', slotIndex: 0 }]);
+  });
+
   it('loan/pass 无参数：choose 即 resolved', () => {    const f = freshFixture();
     const card = locationCard(f);
     const { result } = renderDraft(f, card.id);

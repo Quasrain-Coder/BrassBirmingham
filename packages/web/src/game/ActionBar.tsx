@@ -330,6 +330,7 @@ export function useActionDraft({
     return out;
   }, [state, seat, networkMatch.exact]);
   const pickNetworkBeer = (ref: { location: LocationId; slotIndex: number }): void => {
+    clearChosen();
     setNetworkBeer((prev) =>
       prev !== null && prev.location === ref.location && prev.slotIndex === ref.slotIndex ? null : ref,
     );
@@ -382,6 +383,7 @@ export function useActionDraft({
     return out;
   }, [state.players, seat]);
   const pickBonusDevelop = (ind: IndustryType): void => {
+    clearChosen();
     setBonusDevelop((prev) => (prev === ind ? null : ind));
   };
   const sellAction = useMemo((): Action | null => {
@@ -426,7 +428,12 @@ export function useActionDraft({
         matchDevelop(candidates, developPicks) ??
         matchScout(legalActions, hand, scoutPicksEff));
 
+  /** 显式选定(choose)后的任何参数变更都使选定失效——否则一键出售 ×2 会钉死,
+   *  继续拼第三组也无法提交(确认钮停留在一键的组合)。 */
+  const clearChosen = (): void => setChosen(null);
+
   const pickSellTile = (ref: SlotRef): void => {
+    clearChosen();
     const same =
       sellTile !== null && sellTile.location === ref.location && sellTile.slotIndex === ref.slotIndex;
     // 当前组已选齐(板块+贸易商+啤酒够数)时直接点下一块不同板块
@@ -447,11 +454,13 @@ export function useActionDraft({
   };
 
   const pickSellMerchant = (id: MerchantId): void => {
+    clearChosen();
     setSellMerchant((prev) => (prev === id ? null : id));
     setSellBeer((prev) => prev.filter((b) => b.kind !== 'merchant'));
   };
 
   const toggleSellMerchantBarrel = (): void => {
+    clearChosen();
     setSellBeer((prev) =>
       prev.some((b) => b.kind === 'merchant')
         ? prev.filter((b) => b.kind !== 'merchant')
@@ -460,6 +469,7 @@ export function useActionDraft({
   };
 
   const setSellBreweryCount = (ref: SlotRef, count: number): void => {
+    clearChosen();
     setSellBeer((prev) => {
       const rest = prev.filter(
         (b) => !(b.kind === 'brewery' && b.location === ref.location && b.slotIndex === ref.slotIndex),
@@ -474,6 +484,7 @@ export function useActionDraft({
   };
 
   const commitSellGroup = (): void => {
+    clearChosen();
     if (sellTile === null || sellMerchant === null) return;
     const placed = state.board.slots[sellTile.location]?.[sellTile.slotIndex];
     if (placed == null || sellBeer.length !== placed.tile.beerToFlip) return;
@@ -484,6 +495,7 @@ export function useActionDraft({
   };
 
   const removeSellGroup = (i: number): void => {
+    clearChosen();
     setSellGroups((prev) => prev.filter((_, idx) => idx !== i));
   };
 
@@ -566,10 +578,12 @@ export function useActionDraft({
     setBuildIndustry((prev) => (prev === ind ? null : ind));
     setBuildChoices([]);
     setChoicesSlot(null);
-    setChosen((prev) => (prev?.type === 'build' && prev.industry !== ind ? null : prev));
+    // 切换/取消产业预选:与此产业无关的显式选定失效(含一键出售)
+    setChosen((prev) => (prev !== null && (prev.type !== 'build' || prev.industry !== ind) ? null : prev));
   };
 
   const clickLink = (linkIndex: number): void => {
+    clearChosen();
     // 点末条 = 撤销
     if (pickedLinks[pickedLinks.length - 1] === linkIndex) {
       setPickedLinks(pickedLinks.slice(0, -1));
@@ -586,6 +600,7 @@ export function useActionDraft({
    * 仅当 legalActions 含 [x,x] 候选时开放；否则 0→1→0 即原 toggle 语义）。
    */
   const toggleDevelop = (ind: IndustryType): void => {
+    clearChosen();
     setDevelopPicks((prev) => {
       const count = prev.filter((x) => x === ind).length;
       if (count === 0) return prev.length >= 2 ? prev : [...prev, ind];
@@ -600,6 +615,7 @@ export function useActionDraft({
   };
 
   const toggleScoutCard = (cardId: string): void => {
+    clearChosen();
     // 当前行动牌(selectedCard)视为已选且不可取消——搜寻弃 3 张本就含它
     if (cardId === selectedCard) return;
     setScoutPicks((prev) => {
