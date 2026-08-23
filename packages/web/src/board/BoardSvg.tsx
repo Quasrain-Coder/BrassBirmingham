@@ -62,6 +62,8 @@ export interface SlotRef {
 
 export interface BoardHighlights {
   slots?: SlotRef[];
+  /** 己方改建目标(槽内有己方更低级板块,可被同级更高级板块覆盖):虚线圈 + 「改建」标。 */
+  overbuildSlots?: SlotRef[];
   links?: number[];
   /** 可建城市级高亮（选产业/城市卡时，所有可放置地点的外框）。 */
   locations?: LocationId[];
@@ -88,6 +90,8 @@ export interface BoardSvgProps {
   highlightSeat?: PlayerIndex | null | undefined;
   /** 建造预览:非贴合预览 token 盖在目标槽位(确认前,切换城市即跟随)。 */
   buildPreview?: { location: LocationId; slotIndex: number; industry: IndustryType; player: PlayerIndex } | null | undefined;
+  /** 拖拽悬停吸附预览(拖到合法槽附近时临时显示新板块覆盖,松手/移开即消)。 */
+  dragSnapPreview?: { location: LocationId; slotIndex: number; industry: IndustryType; player: PlayerIndex } | null | undefined;
   /** 啤酒匹配线(resolved 卖货):啤酒来源 → 卖货地点(虚线动效)。 */
   beerMatches?: { from: LocationId | MerchantId; to: LocationId }[] | undefined;
   /** 铺路预览:点选中的连线,暂放一个半透明玩家连接牌(确认前可改选,跟随移动)。 */
@@ -310,9 +314,10 @@ function DeckStack({
   );
 }
 
-export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinkingSeats, buildPreview, beerMatches, linkPreview, onSlotClick, onLinkClick, onMerchantClick, onMerchantBeerClick }: BoardSvgProps): ReactElement {
+export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinkingSeats, buildPreview, dragSnapPreview, beerMatches, linkPreview, onSlotClick, onLinkClick, onMerchantClick, onMerchantBeerClick }: BoardSvgProps): ReactElement {
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
+  const overbuildSlots = new Set((highlights?.overbuildSlots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const highlightedLocations = new Set(highlights?.locations ?? []);
   const beerSourceLocs = new Set(highlights?.beerSources?.locations ?? []);
   const beerSourceMerchants = new Set(highlights?.beerSources?.merchants ?? []);
@@ -477,6 +482,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
               {centers.map((c, si) => {
                 const tile = placed[si] ?? null;
                 const hl = highlightedSlots.has(`${id}:${si}`);
+                const overbuildHl = tile !== null && overbuildSlots.has(`${id}:${si}`);
                 // 印刷框精确矩形(几何标定);兜底退回中心方块
                 const r = rects[si] ?? { x: c.x - SLOT_SIZE / 2, y: c.y - SLOT_SIZE / 2, w: SLOT_SIZE, h: SLOT_SIZE };
                 const fresh =
@@ -531,6 +537,27 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                         filter="url(#hl-glow)"
                         pointerEvents="none"
                       />
+                    ) : null}
+                    {/* 己方改建目标:虚线圈 + 「改建」标(与空槽实线圈区分) */}
+                    {overbuildHl ? (
+                      <g pointerEvents="none">
+                        <rect
+                          x={r.x + 4}
+                          y={r.y + 4}
+                          width={r.w - 8}
+                          height={r.h - 8}
+                          rx={16}
+                          fill="none"
+                          stroke="#f0c964"
+                          strokeWidth={8}
+                          strokeDasharray="22 14"
+                          filter="url(#hl-glow)"
+                        />
+                        <rect x={r.x + r.w / 2 - 52} y={r.y - 44} width={104} height={48} rx={12} fill="#f0c964" opacity={0.92} filter="url(#hl-glow)" />
+                        <text x={r.x + r.w / 2} y={r.y - 10} textAnchor="middle" fontSize={34} fontWeight={700} fill="#241b0b">
+                          改建
+                        </text>
+                      </g>
                     ) : null}
                     <rect
                       className={`board-slot${hl ? ' highlighted' : ''}`}
@@ -720,6 +747,28 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
               >
                 <image
                   href={tileImage(buildPreview.industry, def.level, buildPreview.player, false)}
+                  x={r.x}
+                  y={r.y}
+                  width={r.w}
+                  height={r.h}
+                />
+              </g>
+            );
+          })()
+        : null}
+
+      {/* 拖拽悬停吸附预览:半透明新板块盖在候选槽(己方改建槽 = 覆盖低级板块的视觉) */}
+      {dragSnapPreview && !buildPreview
+        ? (() => {
+            const r = SLOT_RECTS[dragSnapPreview.location]?.[dragSnapPreview.slotIndex];
+            const def = state.players[dragSnapPreview.player]?.tiles.find(
+              (t) => t.industry === dragSnapPreview.industry,
+            );
+            if (r === undefined || def === undefined) return null;
+            return (
+              <g className="drag-snap-preview" data-testid="drag-snap-preview" pointerEvents="none" opacity={0.72}>
+                <image
+                  href={tileImage(dragSnapPreview.industry, def.level, dragSnapPreview.player, false)}
                   x={r.x}
                   y={r.y}
                   width={r.w}

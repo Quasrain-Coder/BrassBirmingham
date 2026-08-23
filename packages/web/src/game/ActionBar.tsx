@@ -23,6 +23,7 @@ import type { BoardHighlights, SlotRef } from '../board/BoardSvg';
 import {
   actionsForCard,
   beerSourcesFor,
+  buildActionLabel,
   buildCandidatesAt,
   buildSlotTargets,
   committedBeerFromGroups,
@@ -37,6 +38,7 @@ import {
   matchScout,
   merchantBarrelRemaining,
   merchantsForTile,
+  overbuildSlotTargets,
   resolveBuildSlot,
   sellCandidatesAt,
   sellOptions,
@@ -118,7 +120,7 @@ export interface ActionDraft {
   beerMatches: { from: LocationId | MerchantId; to: LocationId }[];
   /** 唯一匹配到的可提交行动（legalActions 原对象）。 */
   resolved: Action | null;
-  clickSlot: (location: LocationId, slotIndex: number) => void;
+  clickSlot: (location: LocationId, slotIndex: number, forceBuild?: boolean) => void;
   clickLink: (linkIndex: number) => void;
   toggleDevelop: (ind: IndustryType) => void;
   toggleScoutCard: (cardId: string) => void;
@@ -294,9 +296,15 @@ export function useActionDraft({
     // 已放入路边:只留可继续点的边与啤酒源,其余高亮全清
     const slots =
       pickedLinks.length > 0 ? [] : [...buildSlots, ...sellSlotTargets(candidates)];
+    // 己方改建目标:仅在产业预选(按钮流走建造)时圈出,虚线圈 + 「改建」标——
+    // 不预选时点击建筑默认走卖出,不圈以免误导
+    const overbuildSlots =
+      buildIndustry !== null && pickedLinks.length === 0
+        ? overbuildSlotTargets(state, seat, candidates.filter((a) => a.type === 'build' && a.industry === buildIndustry))
+        : [];
     // 可建城市级高亮:所有可放置地点(与槽位高亮互补,找城更快)
     const locations = pickedLinks.length > 0 ? [] : [...new Set(buildSlots.map((s) => s.location))];
-    return { slots, links, locations, beerSources: computeBeerSources(), sellMerchants };
+    return { slots, links, locations, overbuildSlots, beerSources: computeBeerSources(), sellMerchants };
   }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks, buildIndustry, chosen, sellTile, sellGroups, sellMerchant, committedBeer]);
 
   const networkMatch = matchNetwork(candidates, pickedLinks);
@@ -488,7 +496,7 @@ export function useActionDraft({
     toggleSellMerchantBarrel(); // 选/取消该商人的桶(与酒行按钮同状态)
   };
 
-  const clickSlot = (location: LocationId, slotIndex: number): void => {
+  const clickSlot = (location: LocationId, slotIndex: number, forceBuild = false): void => {
     const placedT = state.board.slots[location]?.[slotIndex];
     // 双轨选酒:选完两条路后点可用酒厂 = 选该酒源(等价行动栏按钮)
     if (
@@ -503,8 +511,9 @@ export function useActionDraft({
       return;
     }
     // 卖出流图上点选(顺序约束同按钮行):自己可卖板块 = 选本组建筑;
-    // 酒厂 = 加一桶啤酒(须已选建筑+贸易商,先点酒厂无效)
-    const sellFlow = candidates.some((a) => a.type === 'sell');
+    // 酒厂 = 加一桶啤酒(须已选建筑+贸易商,先点酒厂无效)。
+    // 产业预选(按钮流走建造)或拖拽(forceBuild)时,占用槽一律按建造解析(含己方改建)
+    const sellFlow = !forceBuild && buildIndustry === null && candidates.some((a) => a.type === 'sell');
     if (sellFlow && placedT && !placedT.flipped) {
       if (placedT.player === seat && placedT.tile.sellable) {
         pickSellTile({ location, slotIndex });
@@ -1019,7 +1028,7 @@ export function ActionBar({
           disabled={draft.resolved === null}
           onClick={onConfirm}
         >
-          {draft.resolved === null ? '确认（先完成选择）' : `确认：${describeAction(draft.resolved)}`}
+          {draft.resolved === null ? '确认（先完成选择）' : `确认：${buildActionLabel(state, seat, draft.resolved)}`}
         </button>
         <button
           type="button"

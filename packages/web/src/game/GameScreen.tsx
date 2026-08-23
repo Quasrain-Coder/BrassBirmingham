@@ -461,7 +461,7 @@ function GameBoard({
       const target = resolveBuildSlot(state, seat, loc, ind, def.level);
       if (target === null) return;
       draft.pickIndustry(ind);
-      draft.clickSlot(loc, target.slotIndex);
+      draft.clickSlot(loc, target.slotIndex, true);
       return;
     }
     // 落到地图外且非垃圾桶/非版图:什么都不发生(token 回归原位)
@@ -490,14 +490,40 @@ function GameBoard({
     const rect = (e.target as SVGElement).getBoundingClientRect();
     setDragTile({ ind, x: e.clientX, y: e.clientY, w: rect.width, h: rect.height });
   };
+  // 拖拽悬停吸附预览:拖到合法候选槽(含己方改建槽)附近时,临时显示新板块覆盖其上
+  const [dragSnap, setDragSnap] = useState<{ location: LocationId; slotIndex: number } | null>(null);
+  const computeSnap = (ind: IndustryType, x: number, y: number): { location: LocationId; slotIndex: number } | null => {
+    const wrap = boardWrapRef.current;
+    if (wrap === null) return null;
+    const rect = wrap.getBoundingClientRect();
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return null;
+    const vx = BOARD_VIEW.x + ((x - rect.left) / rect.width) * BOARD_VIEW.size;
+    const vy = BOARD_VIEW.y + ((y - rect.top) / rect.height) * BOARD_VIEW.size;
+    const def = state.players[seat]?.tiles.find((t) => t.industry === ind);
+    if (def === undefined) return null;
+    let best: { location: LocationId; slotIndex: number; dist: number } | null = null;
+    for (const a of draft.candidates) {
+      if (a.type !== 'build' || a.industry !== ind) continue;
+      const target = resolveBuildSlot(state, seat, a.location, ind, def.level);
+      if (target === null) continue;
+      const r = SLOT_RECTS[target.location]?.[target.slotIndex];
+      if (r === undefined) continue;
+      const dist = Math.hypot(r.x + r.w / 2 - vx, r.y + r.h / 2 - vy);
+      if (best === null || dist < best.dist) best = { ...target, dist };
+    }
+    if (best === null || best.dist > SLOT_SIZE * 1.4) return null;
+    return { location: best.location, slotIndex: best.slotIndex };
+  };
   useEffect(() => {
     if (dragTile === null) return;
     const onMove = (e: PointerEvent): void => {
       setDragTile((d) => (d === null ? null : { ...d, x: e.clientX, y: e.clientY }));
+      setDragSnap(computeSnap(dragTile.ind, e.clientX, e.clientY));
     };
     const onUp = (e: PointerEvent): void => {
       const d = dragTile;
       setDragTile(null);
+      setDragSnap(null);
       handleTileDrop(d.ind, e.clientX, e.clientY);
     };
     window.addEventListener('pointermove', onMove);
@@ -534,6 +560,11 @@ function GameBoard({
         highlightSeat={highlightSeat}
         thinkingSeats={thinkingSeats}
         buildPreview={ghostBuild}
+        dragSnapPreview={
+          dragTile !== null && dragSnap !== null
+            ? { ...dragSnap, industry: dragTile.ind, player: seat }
+            : undefined
+        }
         beerMatches={ghostBeerMatches.length > 0 ? ghostBeerMatches : undefined}
         linkPreview={ghostLinks}
         onSlotClick={myTurn ? handleSlotClick : undefined}

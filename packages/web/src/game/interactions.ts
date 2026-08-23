@@ -223,8 +223,52 @@ export function resolveBuildSlot(
   return null;
 }
 
-/** 点击槽位后的 sell 单卖候选：sales[0] 对应该槽位（单卖 sales 长度恒为 1）。 */
-export function sellCandidatesAt(
+/**
+ * 己方改建目标槽位:候选 build 经 resolveBuildSlot 规范化后落在"有己方板块"的槽
+ * (同产业更低级被覆盖,规则书 §6.2)。按钮流(产业预选后)高亮与拖拽改建共用。
+ */
+export function overbuildSlotTargets(
+  state: FilteredState,
+  seat: PlayerIndex,
+  candidates: readonly Action[],
+): SlotRef[] {
+  const out: SlotRef[] = [];
+  const seen = new Set<string>();
+  for (const a of candidates) {
+    if (a.type !== 'build') continue;
+    const def = state.players[seat]?.tiles.find((t) => t.industry === a.industry);
+    if (def === undefined) continue;
+    const target = resolveBuildSlot(state, seat, a.location, a.industry, def.level);
+    if (target === null) continue;
+    const placed = state.board.slots[target.location]?.[target.slotIndex];
+    if (placed === null || placed === undefined || placed.player !== seat) continue;
+    const key = `${target.location}:${target.slotIndex}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(target);
+  }
+  return out;
+}
+
+/** 该 build 行动规范化后是否为"己方改建"(覆盖自己更低级板块)。 */
+export function isOwnOverbuild(state: FilteredState, seat: PlayerIndex, action: BuildAction): boolean {
+  const def = state.players[seat]?.tiles.find((t) => t.industry === action.industry);
+  if (def === undefined) return false;
+  const target = resolveBuildSlot(state, seat, action.location, action.industry, def.level);
+  if (target === null) return false;
+  const placed = state.board.slots[target.location]?.[target.slotIndex];
+  return placed !== null && placed !== undefined && placed.player === seat;
+}
+
+/** build 行动文案:己方改建加「改建」前缀,其余同 describeAction。 */
+export function buildActionLabel(state: FilteredState, seat: PlayerIndex, action: Action): string {
+  if (action.type === 'build' && isOwnOverbuild(state, seat, action)) {
+    return `改建 ${industryName(action.industry)} @ ${locationName(action.location)}`;
+  }
+  return describeAction(action);
+}
+
+/** 点击槽位后的 sell 单卖候选：sales[0] 对应该槽位（单卖 sales 长度恒为 1）。 */export function sellCandidatesAt(
   candidates: readonly Action[],
   location: LocationId,
   slotIndex: number,
