@@ -441,20 +441,22 @@ function GameBoard({
     }
     const rect = wrap.getBoundingClientRect();
     if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-      // 落点 → viewBox 坐标 → 吸附到"该产业合法候选城市"的最近槽位印刷框:
-      // 只在候选集合里取最近,容差 1.4×槽位边长(≈287)——同城槽间空地能吸附,
-      // 邻近城市(间距 400+)不会被误吸;与按钮流一致(预选产业+规范化槽位)
+      // 落点 → viewBox 坐标 → 吸附到"该产业合法候选城市"的最近槽位:
+      // 以槽位印刷框**边缘**为基准放宽半格(容错 = 正方形格子的一半,落框内必中,
+      // 超出半格不吸附;只在合法候选集合里取最近,不会跨城误吸)
       const vx = BOARD_VIEW.x + ((x - rect.left) / rect.width) * BOARD_VIEW.size;
       const vy = BOARD_VIEW.y + ((y - rect.top) / rect.height) * BOARD_VIEW.size;
       let best: { loc: LocationId; dist: number } | null = null;
       for (const a of draft.candidates) {
         if (a.type !== 'build' || a.industry !== ind) continue;
         for (const r of SLOT_RECTS[a.location] ?? []) {
-          const dist = Math.hypot(r.x + r.w / 2 - vx, r.y + r.h / 2 - vy);
+          const dx = Math.max(r.x - vx, 0, vx - (r.x + r.w));
+          const dy = Math.max(r.y - vy, 0, vy - (r.y + r.h));
+          const dist = Math.hypot(dx, dy);
           if (best === null || dist < best.dist) best = { loc: a.location, dist };
         }
       }
-      if (best === null || best.dist > SLOT_SIZE * 1.4) return;
+      if (best === null || best.dist > SLOT_SIZE / 2) return;
       const loc = best.loc;
       const def = state.players[seat]?.tiles.find((t) => t.industry === ind);
       if (def === undefined) return;
@@ -508,10 +510,13 @@ function GameBoard({
       if (target === null) continue;
       const r = SLOT_RECTS[target.location]?.[target.slotIndex];
       if (r === undefined) continue;
-      const dist = Math.hypot(r.x + r.w / 2 - vx, r.y + r.h / 2 - vy);
+      // 与落锤(handleTileDrop)同一容错:以印刷框边缘为基准放宽半格
+      const dx = Math.max(r.x - vx, 0, vx - (r.x + r.w));
+      const dy = Math.max(r.y - vy, 0, vy - (r.y + r.h));
+      const dist = Math.hypot(dx, dy);
       if (best === null || dist < best.dist) best = { ...target, dist };
     }
-    if (best === null || best.dist > SLOT_SIZE * 1.4) return null;
+    if (best === null || best.dist > SLOT_SIZE / 2) return null;
     return { location: best.location, slotIndex: best.slotIndex };
   };
   useEffect(() => {

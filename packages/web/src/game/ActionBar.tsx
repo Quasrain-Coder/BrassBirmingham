@@ -406,6 +406,13 @@ export function useActionDraft({
 
   // resolved 优先级：显式选定 > 槽位歧义待选（阻断）> 分组卖出 > network 序列 > develop > scout。
   // 多类型同时收集了参数时按此序取其一，确认钮文案可见所提交内容。
+  // 搜寻预填:已选中的行动牌自动算 1 张弃牌,玩家只需再补选 2 张
+  const scoutPicksEff =
+    selectedCard !== null &&
+    candidates.some((a) => a.type === 'scout') &&
+    !scoutPicks.includes(selectedCard)
+      ? [selectedCard, ...scoutPicks]
+      : scoutPicks;
   const networkResolved =
     networkMatch.exact !== null && networkBeer !== null
       ? { ...networkMatch.exact, beerSource: networkBeer }
@@ -417,7 +424,7 @@ export function useActionDraft({
       : sellAction ??
         (pickedLinks.length > 0 ? networkResolved : null) ??
         matchDevelop(candidates, developPicks) ??
-        matchScout(legalActions, hand, scoutPicks));
+        matchScout(legalActions, hand, scoutPicksEff));
 
   const pickSellTile = (ref: SlotRef): void => {
     const same =
@@ -593,6 +600,8 @@ export function useActionDraft({
   };
 
   const toggleScoutCard = (cardId: string): void => {
+    // 当前行动牌(selectedCard)视为已选且不可取消——搜寻弃 3 张本就含它
+    if (cardId === selectedCard) return;
     setScoutPicks((prev) => {
       const i = prev.indexOf(cardId);
       if (i >= 0) return [...prev.slice(0, i), ...prev.slice(i + 1)];
@@ -685,7 +694,7 @@ export function useActionDraft({
     pickNetworkBeer,
     developPicks,
     developChoices: developOptions(candidates),
-    scoutPicks,
+    scoutPicks: scoutPicksEff,
     scoutAvailable: candidates.some((a) => a.type === 'scout'),
     sellSingles: visibleSellSingles,
     sellFullSet: sell.fullSet,
