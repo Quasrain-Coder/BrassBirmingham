@@ -307,6 +307,7 @@ export function PlayerBoard({
   eraActions,
   roundNow,
   turnHold,
+  seatSwitch,
   onTileDragStart,
   hiddenTopInd,
   stackView,
@@ -336,6 +337,9 @@ export function PlayerBoard({
   roundNow?: number | undefined;
   /** 扣住的回合(轮末停顿时非空):当前轮尚无行动时回落展示刚结束那轮。 */
   turnHold?: PlayerIndex | null | undefined;
+  /** 回看模式:在面板右上角("打出"左边)渲染"视角"切换按钮;
+   *  当前视角座位的按钮高亮且禁用(不可重复点击)。 */
+  seatSwitch?: { current: PlayerIndex; onSwitch: (seat: PlayerIndex) => void } | undefined;
   /** 按下产业栈顶板块开始拖拽(宽屏拖拽建造/研发,仅紧凑面板用)。 */
   onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>) => void) | undefined;
   /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失)。 */
@@ -417,6 +421,18 @@ export function PlayerBoard({
           <span className="player-name">{playerName(room, seat)}</span>
           <AIBadge room={room} seat={seat} />
           <span className="head-money money-oval">£{self.money}</span>
+          {seatSwitch !== undefined ? (
+            <button
+              type="button"
+              className={`discard-open-btn${seat === seatSwitch.current ? ' seat-switch-active' : ''}`}
+              data-testid={`seat-switch-${seat}`}
+              disabled={seat === seatSwitch.current}
+              title={seat === seatSwitch.current ? '当前视角' : '切换到该玩家视角(手牌/隐藏信息)'}
+              onClick={() => seatSwitch.onSwitch(seat)}
+            >
+              视角
+            </button>
+          ) : null}
           {playedCards !== undefined ? (
             <button
               type="button"

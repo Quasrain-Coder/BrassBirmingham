@@ -9,11 +9,13 @@ import type { ReactElement } from 'react';
 import { buildDeck } from '@brass/engine';
 import type { PlayerIndex } from '@brass/engine';
 import type { RoomState } from '@brass/protocol';
-import { BoardSvg, PLAYER_COLORS } from '../board/BoardSvg';
-import { HandBar, PlayerBoard, playerName } from './Panels';
+import { BoardSvg } from '../board/BoardSvg';
+import { HandBar, PlayerBoard } from './Panels';
 import { ActionLogModal } from './DiscardModal';
 import { ScoreModal, type EraScoreEntry } from './ScoreTable';
 import { HintPopup } from './HintPopup';
+import { PrefsModal } from './PrefsModal';
+import type { HandRaiseMode, StackViewMode } from './PrefsModal';
 import { replayFrame } from './replayFrame';
 import { useGameStore, type GameStore } from './store';
 
@@ -21,8 +23,20 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
   const review = useGameStore(store).review;
   const [logOpen, setLogOpen] = useState(false);
   const [scoreOpen, setScoreOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
   const [hintAnchor, setHintAnchor] = useState<DOMRect | null>(null);
   const hintBtnRef = useRef<HTMLButtonElement>(null);
+  // 偏好设置(与对战共用 localStorage;布局在回看固定为宽屏,仅卡牌悬浮/版图风格/日志风格生效)
+  const storage = typeof localStorage === 'undefined' ? null : localStorage;
+  const [handRaise, setHandRaise] = useState<HandRaiseMode>(
+    () => (storage?.getItem('brass-hand-raise') as HandRaiseMode | null) ?? 'single',
+  );
+  const [stackView, setStackView] = useState<StackViewMode>(
+    () => (storage?.getItem('brass-stack-view') === 'list' ? 'list' : 'mat'),
+  );
+  const [logStyle, setLogStyle] = useState<'split' | 'grouped'>(
+    () => (storage?.getItem('brass-log-style') === 'grouped' ? 'grouped' : 'split'),
+  );
 
   const frame = useMemo(
     () => (review === null ? null : replayFrame(review.record, review.step, review.viewSeat)),
@@ -70,16 +84,27 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
       playedCards={playedCards[i] ?? []}
       eraActions={eraActions[i] ?? []}
       roundNow={roundNow}
+      stackView={stackView}
+      seatSwitch={{ current: viewSeat, onSwitch: (s) => store.setReviewSeat(s) }}
     />
   );
 
   return (
     <div className="game-screen wide review-screen" data-testid="review-screen">
       <header className="review-topline">
+        <span className="game-room-code" data-testid="review-room-code">房间 {room.code}</span>
         <button type="button" className="btn-ghost" data-testid="review-close" onClick={() => store.exitReview()}>
           离开回看
         </button>
-        <span className="game-room-code" data-testid="review-room-code">房间 {room.code}</span>
+        <button
+          type="button"
+          data-testid="review-start-here"
+          disabled={state.phase === 'game-over'}
+          title={state.phase === 'game-over' ? '终局面不可实战' : '以当前局面为残局开新房间(其余座位开放加入)'}
+          onClick={() => store.startFromReview()}
+        >
+          从此处实战
+        </button>
         <span className="review-controls" data-testid="review-controls">
           <button type="button" disabled={step === 0} title="开头" onClick={() => store.setReviewStep(0)}>
             ⏮
@@ -105,32 +130,10 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
             {step}/{total}
           </span>
         </span>
-        <span className="review-seats">
-          视角
-          {seats.map((i) => (
-            <button
-              key={i}
-              type="button"
-              className={`btn-ghost${viewSeat === i ? ' review-seat-active' : ''}`}
-              data-testid={`review-seat-${i}`}
-              title={`以 ${playerName(room, i)} 视角(手牌/隐藏信息)`}
-              onClick={() => store.setReviewSeat(i)}
-            >
-              <span className="color-dot" style={{ background: PLAYER_COLORS[i] }} />
-              {playerName(room, i)}
-            </button>
-          ))}
-        </span>
-        <button
-          type="button"
-          data-testid="review-start-here"
-          disabled={state.phase === 'game-over'}
-          title={state.phase === 'game-over' ? '终局面不可实战' : '以当前局面为残局开新房间(其余座位开放加入)'}
-          onClick={() => store.startFromReview()}
-        >
-          从此处实战
-        </button>
         <span className="review-utils">
+          <button type="button" className="btn-ghost" data-testid="review-open-prefs" onClick={() => setPrefsOpen(true)}>
+            偏好设置
+          </button>
           <button type="button" className="btn-ghost" data-testid="review-open-score" onClick={() => setScoreOpen(true)}>
             分数构成
           </button>
@@ -161,7 +164,7 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
         <aside className="wide-col wide-col-right">{rightSeats.map(boardOf)}</aside>
       </div>
       <div className="review-hand">
-        <HandBar state={state} seat={viewSeat} overlay />
+        <HandBar state={state} seat={viewSeat} overlay handRaise={handRaise} />
       </div>
       {logOpen ? (
         <ActionLogModal
@@ -169,6 +172,7 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
           playedCards={playedCards}
           eraActions={eraActions}
           room={room}
+          logStyle={logStyle}
           onClose={() => setLogOpen(false)}
         />
       ) : null}
@@ -177,6 +181,20 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
       ) : null}
       {hintAnchor !== null ? (
         <HintPopup playerCount={pc as 2 | 3 | 4} anchor={hintAnchor} onClose={() => setHintAnchor(null)} />
+      ) : null}
+      {prefsOpen ? (
+        <PrefsModal
+          prefs={{ layoutWide: true, handRaise, stackView, logStyle }}
+          onChange={(next) => {
+            setHandRaise(next.handRaise);
+            setStackView(next.stackView);
+            setLogStyle(next.logStyle);
+            storage?.setItem('brass-hand-raise', next.handRaise);
+            storage?.setItem('brass-stack-view', next.stackView);
+            storage?.setItem('brass-log-style', next.logStyle);
+          }}
+          onClose={() => setPrefsOpen(false)}
+        />
       ) : null}
     </div>
   );
