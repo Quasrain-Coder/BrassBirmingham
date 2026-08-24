@@ -66,6 +66,8 @@ export const OWNER_KEY_PREFIX = 'brass:owner:';
 export const FIXED_SEATS_KEY_PREFIX = 'brass:fixedseats:';
 /** owner 标记新鲜窗口：被动 close 时他 tab 在此窗口内抢座才判为"被接管"。 */
 export const TAKEOVER_WINDOW_MS = 10_000;
+/** 回看模式持久化键(`brass:review` = {record, step, viewSeat};刷新不丢,除非手动"离开回看")。 */
+export const REVIEW_KEY = 'brass:review';
 
 /** 浏览器环境取 localStorage；隐私模式/非浏览器降级为 null（不持久化）。 */
 function defaultStorage(): SessionStorageLike | null {
@@ -373,6 +375,24 @@ export class GameStore {
    */
   restoreSession(): boolean {
     if (this.storage === null) return false;
+    // 回看模式优先恢复(刷新保持在回看界面;与房间会话互不冲突,后台照常重连)
+    const reviewRaw = this.storage.getItem(REVIEW_KEY);
+    if (reviewRaw !== null) {
+      try {
+        const saved = JSON.parse(reviewRaw) as { record: GameRecord; step: number; viewSeat: PlayerIndex };
+        if (saved.record?.version === 1 && Array.isArray(saved.record.actions)) {
+          this.patch({
+            review: {
+              record: saved.record,
+              step: Math.max(0, Math.min(saved.step ?? saved.record.actions.length, saved.record.actions.length)),
+              viewSeat: saved.viewSeat ?? (0 as PlayerIndex),
+            },
+          });
+        }
+      } catch {
+        this.storage.removeItem(REVIEW_KEY);
+      }
+    }
     for (let i = 0; i < this.storage.length; i++) {
       const key = this.storage.key(i);
       if (key === null || !key.startsWith(TOKEN_KEY_PREFIX)) continue;
@@ -404,13 +424,15 @@ export class GameStore {
     this.send({ type: 'export_game', protocolVersion: PROTOCOL_VERSION, token });
   }
 
-  /** 进入回看模式(导入记录,纯前端逐步回放)。 */
+  /** 进入回看模式(导入记录,纯前端逐步回放);持久化到 localStorage(刷新不丢)。 */
   enterReview(record: GameRecord): void {
     this.patch({ review: { record, step: record.actions.length, viewSeat: 0 as PlayerIndex } });
+    this.persistReview();
   }
 
   exitReview(): void {
     this.patch({ review: null });
+    this.storage?.removeItem(REVIEW_KEY);
   }
 
   setReviewStep(step: number): void {
@@ -418,12 +440,21 @@ export class GameStore {
     if (r === null) return;
     const clamped = Math.max(0, Math.min(step, r.record.actions.length));
     this.patch({ review: { ...r, step: clamped } });
+    this.persistReview();
   }
 
   setReviewSeat(viewSeat: PlayerIndex): void {
     const r = this.state.review;
     if (r === null) return;
     this.patch({ review: { ...r, viewSeat } });
+    this.persistReview();
+  }
+
+  /** 回看状态写 localStorage(记录+进度+视角;刷新后 restoreSession 读回)。 */
+  private persistReview(): void {
+    const r = this.state.review;
+    if (r === null || this.storage === null) return;
+    this.storage.setItem(REVIEW_KEY, JSON.stringify({ record: r.record, step: r.step, viewSeat: r.viewSeat }));
   }
 
   /** 从回看的当前步数进入真实对局(残局开新房间;其余座位开放加入)。 */
