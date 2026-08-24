@@ -18,8 +18,9 @@ export interface ReviewFrame {
   playedCards: Card[][];
   /** 运河时代末分数构成(step 已过时代切换才有;否则 null)。 */
   canalEntry: EraScoreEntry | null;
-  /** 当前步(step 最后一条行动)该行动者打出的牌——手牌区保留并高亮展示用。 */
-  stepPlayed: { player: PlayerIndex; cards: Card[] } | null;
+  /** 当前步(step 最后一条行动)该行动者打出的牌与其**行动前手牌**——
+   *  手牌区按行动前展示(打出的红框高亮,新补的牌/搜寻摸的百搭一律不显示)。 */
+  stepPlayed: { player: PlayerIndex; cards: Card[]; preHand: Card[] } | null;
 }
 
 export function replayFrame(record: GameRecord, step: number, viewSeat: PlayerIndex): ReviewFrame {
@@ -28,7 +29,7 @@ export function replayFrame(record: GameRecord, step: number, viewSeat: PlayerIn
   const playedThisEra: Card[][] = Array.from({ length: pc }, () => []);
   const eraActions: EraActionEntry[][] = Array.from({ length: pc }, () => []);
   let canalEntry: EraScoreEntry | null = null;
-  let stepPlayed: { player: PlayerIndex; cards: Card[] } | null = null;
+  let stepPlayed: { player: PlayerIndex; cards: Card[]; preHand: Card[] } | null = null;
   let s: GameState = newGame(pc, record.seed);
   const stepActions = record.actions.slice(0, step);
   for (let i = 0; i < stepActions.length; i += 1) {
@@ -40,9 +41,9 @@ export function replayFrame(record: GameRecord, step: number, viewSeat: PlayerIn
       .map((id) => hand.find((c) => c.id === id))
       .filter((c): c is Card => c !== undefined);
     for (const card of playedCardsNow) playedThisEra[player]!.push(card);
-    // 最后一条行动 = 当前步:记下打出的牌(手牌区保留高亮)
+    // 最后一条行动 = 当前步:记下打出的牌与行动前手牌
     if (i === stepActions.length - 1) {
-      stepPlayed = { player, cards: playedCardsNow };
+      stepPlayed = { player, cards: playedCardsNow, preHand: [...hand] };
     }
     const moneyBefore = s.players[player]!.money;
     const roundBefore = s.round;

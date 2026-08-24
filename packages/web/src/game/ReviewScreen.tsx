@@ -167,7 +167,14 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
           seat={viewSeat}
           overlay
           handRaise={handRaise}
-          highlightCards={frame.stepPlayed !== null && frame.stepPlayed.player === viewSeat ? frame.stepPlayed.cards : []}
+          handOverride={
+            frame.stepPlayed !== null && frame.stepPlayed.player === viewSeat
+              ? {
+                  cards: frame.stepPlayed.preHand,
+                  highlightIds: frame.stepPlayed.cards.map((c) => c.id),
+                }
+              : undefined
+          }
         />
       </div>
       {logOpen ? (
