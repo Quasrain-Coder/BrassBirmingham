@@ -1578,20 +1578,25 @@ body {
 .review-topline {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 10px;
+  flex-wrap: nowrap;
   padding: 8px 4px 0;
+  overflow: hidden;
 }
 .review-controls {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  flex: 1 1 120px;
   min-width: 0;
-  padding: 4px 2px 8px;
 }
 .review-controls input[type='range'] {
-  flex: 1;
+  width: 100%;
+  min-width: 60px;
   accent-color: #c9a86a;
+}
+.review-controls button {
+  padding: 2px 6px;
 }
 /* 回看:当前步打出的牌——红框高亮(保留在手牌末尾) */
 .hand-card.step-played {
