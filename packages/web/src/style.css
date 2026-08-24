@@ -1593,6 +1593,13 @@ body {
   flex: 1;
   accent-color: #c9a86a;
 }
+/* 回看:当前步打出的牌——红框高亮(保留在手牌末尾) */
+.hand-card.step-played {
+  outline: 3px solid #c0392b;
+  outline-offset: 2px;
+  box-shadow: 0 0 14px rgba(192, 57, 43, 0.55);
+}
+
 /* 视角切换按钮(回看模式,个人版图"打出"左边):当前视角高亮且禁用 */
 .seat-switch-active {
   border-color: #f0c964 !important;

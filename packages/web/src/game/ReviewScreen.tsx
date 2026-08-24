@@ -164,7 +164,13 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
         <aside className="wide-col wide-col-right">{rightSeats.map(boardOf)}</aside>
       </div>
       <div className="review-hand">
-        <HandBar state={state} seat={viewSeat} overlay handRaise={handRaise} />
+        <HandBar
+          state={state}
+          seat={viewSeat}
+          overlay
+          handRaise={handRaise}
+          highlightCards={frame.stepPlayed !== null && frame.stepPlayed.player === viewSeat ? frame.stepPlayed.cards : []}
+        />
       </div>
       {logOpen ? (
         <ActionLogModal

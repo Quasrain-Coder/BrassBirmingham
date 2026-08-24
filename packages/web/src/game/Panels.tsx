@@ -167,6 +167,7 @@ export function HandBar({
   overlay = false,
   scoutMode,
   handRaise = 'single',
+  highlightCards,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -178,6 +179,8 @@ export function HandBar({
   scoutMode?: { picks: string[]; onToggle: (cardId: string) => void } | null | undefined;
   /** 卡牌悬浮效果(偏好设置):single=悬停提起单张;all=悬停整排提起,选中单张固定。 */
   handRaise?: 'single' | 'all' | undefined;
+  /** 回看模式:当前步打出的牌(已不在手牌)——追加在手牌末尾并以红框高亮。 */
+  highlightCards?: Card[] | undefined;
 }): ReactElement {
   const self = state.players[seat];
   // 手牌自定义排序(纯前端,服务端不关心手牌顺序):dragOrder 保存拖拽后的卡牌 id 序列;
@@ -285,6 +288,26 @@ export function HandBar({
             </button>
           );
         })}
+        {/* 回看:当前步打出的牌保留在手牌末尾,红框高亮(不重复列已在手牌中的) */}
+        {(highlightCards ?? [])
+          .filter((card) => !displayCards.some((c) => c.id === card.id))
+          .map((card) => {
+            const isWild = card.kind === 'wild-location' || card.kind === 'wild-industry';
+            return (
+              <button
+                key={`step-played-${card.id}`}
+                type="button"
+                data-testid={`hand-card-step-played-${card.id}`}
+                className={['hand-card', 'step-played', isWild ? 'wild' : ''].filter((c) => c !== '').join(' ')}
+                title="当前步打出的牌"
+              >
+                <img className="hand-card-art" src={cardImageSrc(card)} alt={cardName(card)} />
+                <span className="hand-card-name">{cardName(card)}</span>
+                <span className="card-tip">{cardName(card)}</span>
+                {isWild ? <span className="wild-badge">百搭</span> : null}
+              </button>
+            );
+          })}
       </div>
     </section>
   );

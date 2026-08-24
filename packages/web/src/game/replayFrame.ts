@@ -18,6 +18,8 @@ export interface ReviewFrame {
   playedCards: Card[][];
   /** 运河时代末分数构成(step 已过时代切换才有;否则 null)。 */
   canalEntry: EraScoreEntry | null;
+  /** 当前步(step 最后一条行动)该行动者打出的牌——手牌区保留并高亮展示用。 */
+  stepPlayed: { player: PlayerIndex; cards: Card[] } | null;
 }
 
 export function replayFrame(record: GameRecord, step: number, viewSeat: PlayerIndex): ReviewFrame {
@@ -26,14 +28,21 @@ export function replayFrame(record: GameRecord, step: number, viewSeat: PlayerIn
   const playedThisEra: Card[][] = Array.from({ length: pc }, () => []);
   const eraActions: EraActionEntry[][] = Array.from({ length: pc }, () => []);
   let canalEntry: EraScoreEntry | null = null;
+  let stepPlayed: { player: PlayerIndex; cards: Card[] } | null = null;
   let s: GameState = newGame(pc, record.seed);
-  for (const { player, action } of record.actions.slice(0, step)) {
+  const stepActions = record.actions.slice(0, step);
+  for (let i = 0; i < stepActions.length; i += 1) {
+    const { player, action } = stepActions[i]!;
     // 打出记录(须在 applyAction 前按应用前手牌查卡面;含百搭)
     const hand = s.players[player]!.hand;
     const ids = action.type === 'scout' ? action.cardIds : [action.cardId];
-    for (const id of ids) {
-      const card = hand.find((c) => c.id === id);
-      if (card !== undefined) playedThisEra[player]!.push(card);
+    const playedCardsNow = ids
+      .map((id) => hand.find((c) => c.id === id))
+      .filter((c): c is Card => c !== undefined);
+    for (const card of playedCardsNow) playedThisEra[player]!.push(card);
+    // 最后一条行动 = 当前步:记下打出的牌(手牌区保留高亮)
+    if (i === stepActions.length - 1) {
+      stepPlayed = { player, cards: playedCardsNow };
     }
     const moneyBefore = s.players[player]!.money;
     const roundBefore = s.round;
@@ -70,5 +79,5 @@ export function replayFrame(record: GameRecord, step: number, viewSeat: PlayerIn
       }
     }
   }
-  return { state: filterStateFor(s, viewSeat), eraActions, playedCards: playedThisEra, canalEntry };
+  return { state: filterStateFor(s, viewSeat), eraActions, playedCards: playedThisEra, canalEntry, stepPlayed };
 }
