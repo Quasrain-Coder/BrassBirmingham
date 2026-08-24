@@ -447,7 +447,7 @@ export function PlayerBoard({
           {seatSwitch !== undefined ? (
             <button
               type="button"
-              className={`discard-open-btn${seat === seatSwitch.current ? ' seat-switch-active' : ''}`}
+              className={`discard-open-btn seat-switch-btn${seat === seatSwitch.current ? ' seat-switch-active' : ''}`}
               data-testid={`seat-switch-${seat}`}
               disabled={seat === seatSwitch.current}
               title={seat === seatSwitch.current ? '当前视角' : '切换到该玩家视角(手牌/隐藏信息)'}

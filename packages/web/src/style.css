@@ -2529,6 +2529,14 @@ body {
   margin-left: auto;
 }
 
+/* 回看视角切换按钮:与"打出"一起右对齐贴边(两个 auto 边距会把它挤到中间) */
+.compact-head .seat-switch-btn {
+  margin-left: auto;
+}
+.compact-head .seat-switch-btn ~ .discard-open-btn {
+  margin-left: 0;
+}
+
 .compact-round-line .compact-history-card,
 .compact-history-act .compact-history-card {
   margin-left: auto;
