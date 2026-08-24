@@ -821,6 +821,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     if (game === null) throw new WsError('session-lost', '对局不存在');
     const record: GameRecord = {
       version: 1,
+      roomCode: game.roomCode,
       playerCount: game.playerCount as 2 | 3 | 4,
       seed: game.seed,
       seats: listSeats(db, game.id).map((s) => ({

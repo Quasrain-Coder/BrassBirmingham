@@ -5,6 +5,8 @@ export const PROTOCOL_VERSION = 1;
 /** 导出/导入对局记录:种子 + 全量行动日志,确定性重放(newGame + 逐条 applyAction)。 */
 export interface GameRecord {
   version: 1;
+  /** 原始房间号(展示用;老记录可缺省)。 */
+  roomCode?: string;
   playerCount: 2 | 3 | 4;
   seed: number;
   seats: { seat: PlayerIndex; nickname: string; isAI: boolean }[];
