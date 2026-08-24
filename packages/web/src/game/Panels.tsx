@@ -315,6 +315,7 @@ export function PlayerBoard({
   roundNow,
   turnHold,
   seatSwitch,
+  actsLatestRound,
   onTileDragStart,
   hiddenTopInd,
   stackView,
@@ -347,6 +348,9 @@ export function PlayerBoard({
   /** 回看模式:在面板右上角("打出"左边)渲染"视角"切换按钮;
    *  当前视角座位的按钮高亮且禁用(不可重复点击)。 */
   seatSwitch?: { current: PlayerIndex; onSwitch: (seat: PlayerIndex) => void } | undefined;
+  /** 展示最新一轮行动(回看模式回合刚结算推进时兜底:此时新一轮还无人行动,
+   *  应显示刚结束那轮的两动,而不是"本回合未行动")。 */
+  actsLatestRound?: boolean | undefined;
   /** 按下产业栈顶板块开始拖拽(宽屏拖拽建造/研发,仅紧凑面板用)。 */
   onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>) => void) | undefined;
   /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失)。 */
@@ -409,7 +413,7 @@ export function PlayerBoard({
     // 而刚结束那轮才是要展示的——此时取最新一轮;否则按时代内当前轮号 roundNow
     // 匹配(缺省回退 state.round)。轮末停顿(turnHold 非空且新一轮还无人行动)同样回落
     const acts = (
-      state.roundEndPending
+      state.roundEndPending || actsLatestRound === true
         ? (rounds[0]?.actions ?? [])
         : (rounds.find((r) => r.round === (roundNow ?? state.round))?.actions ??
           (turnHold !== null && turnHold !== undefined ? (rounds[0]?.actions ?? []) : []))

@@ -21,6 +21,9 @@ export interface ReviewFrame {
   /** 当前步(step 最后一条行动)该行动者打出的牌与其**行动前手牌**——
    *  手牌区按行动前展示(打出的红框高亮,新补的牌/搜寻摸的百搭一律不显示)。 */
   stepPlayed: { player: PlayerIndex; cards: Card[]; preHand: Card[] } | null;
+  /** 当前步是否恰为某轮收官(该行动使轮次推进或时代切换)——
+   *  回看 inline 结算后新一轮无人行动,个人版图应回落显示刚结束那轮。 */
+  roundJustEnded: boolean;
 }
 
 export function replayFrame(record: GameRecord, step: number, viewSeat: PlayerIndex): ReviewFrame {
@@ -30,6 +33,7 @@ export function replayFrame(record: GameRecord, step: number, viewSeat: PlayerIn
   const eraActions: EraActionEntry[][] = Array.from({ length: pc }, () => []);
   let canalEntry: EraScoreEntry | null = null;
   let stepPlayed: { player: PlayerIndex; cards: Card[]; preHand: Card[] } | null = null;
+  let roundJustEnded = false;
   let s: GameState = newGame(pc, record.seed);
   const stepActions = record.actions.slice(0, step);
   for (let i = 0; i < stepActions.length; i += 1) {
@@ -50,6 +54,9 @@ export function replayFrame(record: GameRecord, step: number, viewSeat: PlayerIn
     const eraBefore = s.era;
     const preApply = s;
     s = applyAction(s, action);
+    if (i === stepActions.length - 1) {
+      roundJustEnded = s.round > roundBefore || s.era !== eraBefore;
+    }
     // 轮末收入拆分(与服务端 submitAction/restore 同一簿记:真实行动在前,收入 note 在后)
     let moneyDelta = s.players[player]!.money - moneyBefore;
     if (s.round > roundBefore || s.era !== eraBefore) {
@@ -80,5 +87,5 @@ export function replayFrame(record: GameRecord, step: number, viewSeat: PlayerIn
       }
     }
   }
-  return { state: filterStateFor(s, viewSeat), eraActions, playedCards: playedThisEra, canalEntry, stepPlayed };
+  return { state: filterStateFor(s, viewSeat), eraActions, playedCards: playedThisEra, canalEntry, stepPlayed, roundJustEnded };
 }

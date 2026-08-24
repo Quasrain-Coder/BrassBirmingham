@@ -86,6 +86,7 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
       roundNow={roundNow}
       stackView={stackView}
       seatSwitch={{ current: viewSeat, onSwitch: (s) => store.setReviewSeat(s) }}
+      actsLatestRound={frame.roundJustEnded}
     />
   );
 
