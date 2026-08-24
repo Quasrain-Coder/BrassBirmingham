@@ -105,31 +105,6 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
         >
           从此处实战
         </button>
-        <span className="review-controls" data-testid="review-controls">
-          <button type="button" disabled={step === 0} title="开头" onClick={() => store.setReviewStep(0)}>
-            ⏮
-          </button>
-          <button type="button" data-testid="review-prev" disabled={step === 0} title="上一步" onClick={() => store.setReviewStep(step - 1)}>
-            ◀
-          </button>
-          <input
-            type="range"
-            min={0}
-            max={total}
-            value={step}
-            aria-label="回放进度"
-            onChange={(e) => store.setReviewStep(Number(e.target.value))}
-          />
-          <button type="button" data-testid="review-next" disabled={step >= total} title="下一步" onClick={() => store.setReviewStep(step + 1)}>
-            ▶
-          </button>
-          <button type="button" disabled={step >= total} title="末尾" onClick={() => store.setReviewStep(total)}>
-            ⏭
-          </button>
-          <span className="review-progress" data-testid="review-progress">
-            {step}/{total}
-          </span>
-        </span>
         <span className="review-utils">
           <button type="button" className="btn-ghost" data-testid="review-open-prefs" onClick={() => setPrefsOpen(true)}>
             偏好设置
@@ -159,6 +134,31 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
           {leftSeats.map(boardOf)}
         </aside>
         <div className="wide-center">
+          <div className="review-controls" data-testid="review-controls">
+            <button type="button" disabled={step === 0} title="开头" onClick={() => store.setReviewStep(0)}>
+              ⏮
+            </button>
+            <button type="button" data-testid="review-prev" disabled={step === 0} title="上一步" onClick={() => store.setReviewStep(step - 1)}>
+              ◀
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={total}
+              value={step}
+              aria-label="回放进度"
+              onChange={(e) => store.setReviewStep(Number(e.target.value))}
+            />
+            <button type="button" data-testid="review-next" disabled={step >= total} title="下一步" onClick={() => store.setReviewStep(step + 1)}>
+              ▶
+            </button>
+            <button type="button" disabled={step >= total} title="末尾" onClick={() => store.setReviewStep(total)}>
+              ⏭
+            </button>
+            <span className="review-progress" data-testid="review-progress">
+              {step}/{total}
+            </span>
+          </div>
           <BoardSvg state={state} />
         </div>
         <aside className="wide-col wide-col-right">{rightSeats.map(boardOf)}</aside>

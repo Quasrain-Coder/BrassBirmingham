@@ -1583,14 +1583,14 @@ body {
   padding: 8px 4px 0;
 }
 .review-controls {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+  padding: 4px 2px 8px;
 }
 .review-controls input[type='range'] {
-  width: 100%;
-  max-width: 400px;
+  flex: 1;
   accent-color: #c9a86a;
 }
 /* 视角切换按钮(回看模式,个人版图"打出"左边):当前视角高亮且禁用 */
