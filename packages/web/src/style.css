@@ -2837,9 +2837,10 @@ body {
 
 /* 左列:房间号与离开对局紧挨左对齐;时代标识在第三列右对齐——
    与下方左侧玩家版图列同宽(宽屏 grid 为 1fr/2fr/1fr、gap 10px),落在版图右上角 */
+/* 左列:房间号/离开对局/导出 紧挨左对齐;时代标识在第四列右对齐 */
 .wide-topline-left {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto auto auto 1fr;
   align-items: center;
   column-gap: 2px;
   white-space: nowrap;
@@ -2851,12 +2852,12 @@ body {
 }
 
 .wide-topline-left > button {
-  grid-column: 2;
   justify-self: start;
 }
 
 /* 时代标识右对齐到左列版图边缘 */
 .wide-topline-left .era-round {
+  grid-column: 4;
   justify-self: end;
   padding-right: 4px;
 }
