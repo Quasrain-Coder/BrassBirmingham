@@ -21,6 +21,7 @@ export type RoomErrorCode =
   | 'room-full'
   | 'room-not-found'
   | 'already-started'
+  | 'not-started'
   | 'not-in-room'
   | 'room-not-full'
   | 'invalid-nickname'
@@ -213,6 +214,33 @@ export class RoomManager {
   /** 主动离开：从 token 索引移除（该 token 不再能 resume/create 相关操作）。 */
   dropToken(token: string): void {
     this.tokenIndex.delete(token);
+  }
+
+  /** 公开取号（导入残局建新局用；与 createRoom 同一分配器）。 */
+  newCode(): string {
+    return this.generateCode();
+  }
+
+  /**
+   * 加入一个**已开局**房间的开放真人座位（导入残局：其余座位开放加入）。
+   * 开放 = 真人且未连接;领取即标记 connected,沿用该座位原 token(直接 resume 语义)。
+   */
+  joinStartedRoom(code: string, nickname: string): JoinResult {
+    const name = validateNickname(nickname);
+    const room = this.rooms.get(code.toUpperCase());
+    if (room === undefined) {
+      throw new RoomError('room-not-found', `房间不存在: ${code}`);
+    }
+    if (!room.started) {
+      throw new RoomError('not-started', `房间 ${room.code} 尚未开始,走正常加入`);
+    }
+    const seatObj = room.seats.find((s): s is Seat => s !== null && !s.isAI && !s.connected);
+    if (seatObj === undefined || seatObj === null) {
+      throw new RoomError('room-full', `房间 ${room.code} 没有开放座位`);
+    }
+    seatObj.nickname = name;
+    seatObj.connected = true;
+    return { room, seat: seatObj.seat, token: seatObj.token };
   }
 
   private generateCode(): string {

@@ -1574,6 +1574,79 @@ body {
   transform: translateY(-4px);
 }
 
+/* 回看模式(导入对局记录):布局与控件 */
+.review-topline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  padding: 8px 4px 0;
+  overflow: hidden;
+}
+.review-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.review-controls input[type='range'] {
+  width: 100%;
+  min-width: 60px;
+  accent-color: #c9a86a;
+}
+.review-controls button {
+  padding: 2px 6px;
+}
+/* 回看:当前步打出的牌——红框高亮(保留在手牌末尾) */
+.hand-card.step-played {
+  outline: 3px solid #c0392b;
+  outline-offset: 2px;
+  box-shadow: 0 0 14px rgba(192, 57, 43, 0.55);
+}
+
+/* 视角切换按钮(回看模式,个人版图"打出"左边):当前视角高亮且禁用 */
+.seat-switch-active {
+  border-color: #f0c964 !important;
+  color: #f0c964 !important;
+  opacity: 1 !important;
+  cursor: default;
+}
+.review-progress {
+  color: #c9a86a;
+  font-family: 'Special Elite', 'Courier New', monospace;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.review-seats {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #9aa4b2;
+  font-size: 0.85rem;
+}
+.review-seat-active {
+  border-color: #f0c964 !important;
+  color: #f0c964 !important;
+}
+.review-utils {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.review-era-row {
+  display: flex;
+  justify-content: flex-end;
+}
+.review-hand {
+  margin-top: 8px;
+}
+@media (max-width: 1200px) {
+  .review-body {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* 飞牌动画(补牌/搜寻/百搭飞回):固定定位,从牌堆/面板中心飞向目标 */
 .card-flight {
   position: fixed;
@@ -2456,6 +2529,14 @@ body {
   margin-left: auto;
 }
 
+/* 回看视角切换按钮:与"打出"一起右对齐贴边(两个 auto 边距会把它挤到中间) */
+.compact-head .seat-switch-btn {
+  margin-left: auto;
+}
+.compact-head .seat-switch-btn ~ .discard-open-btn {
+  margin-left: 0;
+}
+
 .compact-round-line .compact-history-card,
 .compact-history-act .compact-history-card {
   margin-left: auto;
@@ -2790,9 +2871,10 @@ body {
 
 /* 左列:房间号与离开对局紧挨左对齐;时代标识在第三列右对齐——
    与下方左侧玩家版图列同宽(宽屏 grid 为 1fr/2fr/1fr、gap 10px),落在版图右上角 */
+/* 左列:房间号/离开对局/导出 紧挨左对齐;时代标识在第四列右对齐 */
 .wide-topline-left {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto auto auto 1fr;
   align-items: center;
   column-gap: 2px;
   white-space: nowrap;
@@ -2804,12 +2886,12 @@ body {
 }
 
 .wide-topline-left > button {
-  grid-column: 2;
   justify-self: start;
 }
 
 /* 时代标识右对齐到左列版图边缘 */
 .wide-topline-left .era-round {
+  grid-column: 4;
   justify-self: end;
   padding-right: 4px;
 }

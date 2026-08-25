@@ -441,27 +441,31 @@ function GameBoard({
     }
     const rect = wrap.getBoundingClientRect();
     if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-      // 落点 → viewBox 坐标 → 吸附到"该产业合法候选城市"的最近槽位印刷框:
-      // 只在候选集合里取最近,容差 1.4×槽位边长(≈287)——同城槽间空地能吸附,
-      // 邻近城市(间距 400+)不会被误吸;与按钮流一致(预选产业+规范化槽位)
+      // 落点 → viewBox 坐标 → 吸附到"该产业合法候选城市"的最近槽位:
+      // 以槽位印刷框**边缘**为基准放宽半格(容错 = 正方形格子的一半,落框内必中,
+      // 超出半格不吸附;只在合法候选集合里取最近,不会跨城误吸)
       const vx = BOARD_VIEW.x + ((x - rect.left) / rect.width) * BOARD_VIEW.size;
       const vy = BOARD_VIEW.y + ((y - rect.top) / rect.height) * BOARD_VIEW.size;
       let best: { loc: LocationId; dist: number } | null = null;
       for (const a of draft.candidates) {
         if (a.type !== 'build' || a.industry !== ind) continue;
         for (const r of SLOT_RECTS[a.location] ?? []) {
-          const dist = Math.hypot(r.x + r.w / 2 - vx, r.y + r.h / 2 - vy);
+          const dx = Math.max(r.x - vx, 0, vx - (r.x + r.w));
+          const dy = Math.max(r.y - vy, 0, vy - (r.y + r.h));
+          const dist = Math.hypot(dx, dy);
           if (best === null || dist < best.dist) best = { loc: a.location, dist };
         }
       }
-      if (best === null || best.dist > SLOT_SIZE * 1.4) return;
+      if (best === null || best.dist > SLOT_SIZE / 2) return;
       const loc = best.loc;
       const def = state.players[seat]?.tiles.find((t) => t.industry === ind);
       if (def === undefined) return;
       const target = resolveBuildSlot(state, seat, loc, ind, def.level);
       if (target === null) return;
       draft.pickIndustry(ind);
-      draft.clickSlot(loc, target.slotIndex);
+      draft.clickSlot(loc, target.slotIndex, true);
+      // 拖拽触发了建造/改建:左侧行动栏联动切到建造行(出售暂存已在 hook 内清空)
+      setTopAction('build');
       return;
     }
     // 落到地图外且非垃圾桶/非版图:什么都不发生(token 回归原位)
@@ -490,14 +494,43 @@ function GameBoard({
     const rect = (e.target as SVGElement).getBoundingClientRect();
     setDragTile({ ind, x: e.clientX, y: e.clientY, w: rect.width, h: rect.height });
   };
+  // 拖拽悬停吸附预览:拖到合法候选槽(含己方改建槽)附近时,临时显示新板块覆盖其上
+  const [dragSnap, setDragSnap] = useState<{ location: LocationId; slotIndex: number } | null>(null);
+  const computeSnap = (ind: IndustryType, x: number, y: number): { location: LocationId; slotIndex: number } | null => {
+    const wrap = boardWrapRef.current;
+    if (wrap === null) return null;
+    const rect = wrap.getBoundingClientRect();
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return null;
+    const vx = BOARD_VIEW.x + ((x - rect.left) / rect.width) * BOARD_VIEW.size;
+    const vy = BOARD_VIEW.y + ((y - rect.top) / rect.height) * BOARD_VIEW.size;
+    const def = state.players[seat]?.tiles.find((t) => t.industry === ind);
+    if (def === undefined) return null;
+    let best: { location: LocationId; slotIndex: number; dist: number } | null = null;
+    for (const a of draft.candidates) {
+      if (a.type !== 'build' || a.industry !== ind) continue;
+      const target = resolveBuildSlot(state, seat, a.location, ind, def.level);
+      if (target === null) continue;
+      const r = SLOT_RECTS[target.location]?.[target.slotIndex];
+      if (r === undefined) continue;
+      // 与落锤(handleTileDrop)同一容错:以印刷框边缘为基准放宽半格
+      const dx = Math.max(r.x - vx, 0, vx - (r.x + r.w));
+      const dy = Math.max(r.y - vy, 0, vy - (r.y + r.h));
+      const dist = Math.hypot(dx, dy);
+      if (best === null || dist < best.dist) best = { ...target, dist };
+    }
+    if (best === null || best.dist > SLOT_SIZE / 2) return null;
+    return { location: best.location, slotIndex: best.slotIndex };
+  };
   useEffect(() => {
     if (dragTile === null) return;
     const onMove = (e: PointerEvent): void => {
       setDragTile((d) => (d === null ? null : { ...d, x: e.clientX, y: e.clientY }));
+      setDragSnap(computeSnap(dragTile.ind, e.clientX, e.clientY));
     };
     const onUp = (e: PointerEvent): void => {
       const d = dragTile;
       setDragTile(null);
+      setDragSnap(null);
       handleTileDrop(d.ind, e.clientX, e.clientY);
     };
     window.addEventListener('pointermove', onMove);
@@ -534,6 +567,11 @@ function GameBoard({
         highlightSeat={highlightSeat}
         thinkingSeats={thinkingSeats}
         buildPreview={ghostBuild}
+        dragSnapPreview={
+          dragTile !== null && dragSnap !== null
+            ? { ...dragSnap, industry: dragTile.ind, player: seat }
+            : undefined
+        }
         beerMatches={ghostBeerMatches.length > 0 ? ghostBeerMatches : undefined}
         linkPreview={ghostLinks}
         onSlotClick={myTurn ? handleSlotClick : undefined}
@@ -625,6 +663,9 @@ function GameBoard({
           onClick={() => setLeaveConfirmOpen(true)}
         >
           离开对局
+        </button>
+        <button type="button" className="btn-ghost" data-testid="export-game" title="导出对局记录(JSON,含种子与全部行动)" onClick={() => store.exportGame()}>
+          导出
         </button>
         <span className="era-round" data-testid="era-round">{eraRoundText}</span>
         <button type="button" className="btn-ghost head-right" data-testid="open-prefs" onClick={() => setPrefsOpen(true)}>
@@ -767,6 +808,9 @@ function GameBoard({
             ) : null}
             <button type="button" className="btn-ghost" data-testid="leave-game" onClick={() => setLeaveConfirmOpen(true)}>
               离开对局
+            </button>
+            <button type="button" className="btn-ghost" data-testid="export-game" title="导出对局记录(JSON,含种子与全部行动)" onClick={() => store.exportGame()}>
+              导出
             </button>
             <span className="era-round" data-testid="era-round">{eraRoundText}</span>
           </div>

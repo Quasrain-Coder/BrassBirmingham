@@ -11,6 +11,7 @@ import type { Action, Card, PlayerIndex } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { ActionDraft } from './ActionBar';
 import { SellDetails } from './ActionBar';
+import { buildActionLabel } from './interactions';
 import { cardName, describeAction, industryName, locationName } from './display';
 import { moneyDelta, previewOf } from './preview';
 
@@ -189,7 +190,7 @@ export function TopActionBar({
           disabled={draft.resolved === null}
           onClick={onConfirm}
         >
-          {draft.resolved === null ? '确认' : `确认：${describeShort(draft.resolved)}`}
+          {draft.resolved === null ? '确认' : `确认：${describeShort(draft.resolved, state, seat)}`}
         </button>
         <button type="button" data-testid="cancel-draft" onClick={onCancel}>
           取消
@@ -324,7 +325,8 @@ export function TopActionBar({
 }
 
 /** 确认钮短文案:过长时截断。 */
-function describeShort(action: Action): string {
-  const text: string = describeAction(action);
+function describeShort(action: Action, state?: FilteredState, seat?: PlayerIndex): string {
+  const text: string =
+    state !== undefined && seat !== undefined ? buildActionLabel(state, seat, action) : describeAction(action);
   return text.length > 18 ? `${text.slice(0, 18)}…` : text;
 }

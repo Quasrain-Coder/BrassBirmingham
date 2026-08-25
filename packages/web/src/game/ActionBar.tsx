@@ -23,6 +23,7 @@ import type { BoardHighlights, SlotRef } from '../board/BoardSvg';
 import {
   actionsForCard,
   beerSourcesFor,
+  buildActionLabel,
   buildCandidatesAt,
   buildSlotTargets,
   committedBeerFromGroups,
@@ -37,6 +38,7 @@ import {
   matchScout,
   merchantBarrelRemaining,
   merchantsForTile,
+  overbuildSlotTargets,
   resolveBuildSlot,
   sellCandidatesAt,
   sellOptions,
@@ -118,7 +120,7 @@ export interface ActionDraft {
   beerMatches: { from: LocationId | MerchantId; to: LocationId }[];
   /** 唯一匹配到的可提交行动（legalActions 原对象）。 */
   resolved: Action | null;
-  clickSlot: (location: LocationId, slotIndex: number) => void;
+  clickSlot: (location: LocationId, slotIndex: number, forceBuild?: boolean) => void;
   clickLink: (linkIndex: number) => void;
   toggleDevelop: (ind: IndustryType) => void;
   toggleScoutCard: (cardId: string) => void;
@@ -294,9 +296,15 @@ export function useActionDraft({
     // 已放入路边:只留可继续点的边与啤酒源,其余高亮全清
     const slots =
       pickedLinks.length > 0 ? [] : [...buildSlots, ...sellSlotTargets(candidates)];
+    // 己方改建目标:仅在产业预选(按钮流走建造)时圈出,虚线圈 + 「改建」标——
+    // 不预选时点击建筑默认走卖出,不圈以免误导
+    const overbuildSlots =
+      buildIndustry !== null && pickedLinks.length === 0
+        ? overbuildSlotTargets(state, seat, candidates.filter((a) => a.type === 'build' && a.industry === buildIndustry))
+        : [];
     // 可建城市级高亮:所有可放置地点(与槽位高亮互补,找城更快)
     const locations = pickedLinks.length > 0 ? [] : [...new Set(buildSlots.map((s) => s.location))];
-    return { slots, links, locations, beerSources: computeBeerSources(), sellMerchants };
+    return { slots, links, locations, overbuildSlots, beerSources: computeBeerSources(), sellMerchants };
   }, [selectedCard, legalActions, candidates, state.board.slots, state.merchants, seat, pickedLinks, buildIndustry, chosen, sellTile, sellGroups, sellMerchant, committedBeer]);
 
   const networkMatch = matchNetwork(candidates, pickedLinks);
@@ -322,6 +330,7 @@ export function useActionDraft({
     return out;
   }, [state, seat, networkMatch.exact]);
   const pickNetworkBeer = (ref: { location: LocationId; slotIndex: number }): void => {
+    clearChosen();
     setNetworkBeer((prev) =>
       prev !== null && prev.location === ref.location && prev.slotIndex === ref.slotIndex ? null : ref,
     );
@@ -374,6 +383,7 @@ export function useActionDraft({
     return out;
   }, [state.players, seat]);
   const pickBonusDevelop = (ind: IndustryType): void => {
+    clearChosen();
     setBonusDevelop((prev) => (prev === ind ? null : ind));
   };
   const sellAction = useMemo((): Action | null => {
@@ -398,6 +408,13 @@ export function useActionDraft({
 
   // resolved 优先级：显式选定 > 槽位歧义待选（阻断）> 分组卖出 > network 序列 > develop > scout。
   // 多类型同时收集了参数时按此序取其一，确认钮文案可见所提交内容。
+  // 搜寻预填:已选中的行动牌自动算 1 张弃牌,玩家只需再补选 2 张
+  const scoutPicksEff =
+    selectedCard !== null &&
+    candidates.some((a) => a.type === 'scout') &&
+    !scoutPicks.includes(selectedCard)
+      ? [selectedCard, ...scoutPicks]
+      : scoutPicks;
   const networkResolved =
     networkMatch.exact !== null && networkBeer !== null
       ? { ...networkMatch.exact, beerSource: networkBeer }
@@ -409,9 +426,14 @@ export function useActionDraft({
       : sellAction ??
         (pickedLinks.length > 0 ? networkResolved : null) ??
         matchDevelop(candidates, developPicks) ??
-        matchScout(legalActions, hand, scoutPicks));
+        matchScout(legalActions, hand, scoutPicksEff));
+
+  /** 显式选定(choose)后的任何参数变更都使选定失效——否则一键出售 ×2 会钉死,
+   *  继续拼第三组也无法提交(确认钮停留在一键的组合)。 */
+  const clearChosen = (): void => setChosen(null);
 
   const pickSellTile = (ref: SlotRef): void => {
+    clearChosen();
     const same =
       sellTile !== null && sellTile.location === ref.location && sellTile.slotIndex === ref.slotIndex;
     // 当前组已选齐(板块+贸易商+啤酒够数)时直接点下一块不同板块
@@ -432,11 +454,13 @@ export function useActionDraft({
   };
 
   const pickSellMerchant = (id: MerchantId): void => {
+    clearChosen();
     setSellMerchant((prev) => (prev === id ? null : id));
     setSellBeer((prev) => prev.filter((b) => b.kind !== 'merchant'));
   };
 
   const toggleSellMerchantBarrel = (): void => {
+    clearChosen();
     setSellBeer((prev) =>
       prev.some((b) => b.kind === 'merchant')
         ? prev.filter((b) => b.kind !== 'merchant')
@@ -445,6 +469,7 @@ export function useActionDraft({
   };
 
   const setSellBreweryCount = (ref: SlotRef, count: number): void => {
+    clearChosen();
     setSellBeer((prev) => {
       const rest = prev.filter(
         (b) => !(b.kind === 'brewery' && b.location === ref.location && b.slotIndex === ref.slotIndex),
@@ -459,6 +484,7 @@ export function useActionDraft({
   };
 
   const commitSellGroup = (): void => {
+    clearChosen();
     if (sellTile === null || sellMerchant === null) return;
     const placed = state.board.slots[sellTile.location]?.[sellTile.slotIndex];
     if (placed == null || sellBeer.length !== placed.tile.beerToFlip) return;
@@ -469,6 +495,7 @@ export function useActionDraft({
   };
 
   const removeSellGroup = (i: number): void => {
+    clearChosen();
     setSellGroups((prev) => prev.filter((_, idx) => idx !== i));
   };
 
@@ -488,7 +515,7 @@ export function useActionDraft({
     toggleSellMerchantBarrel(); // 选/取消该商人的桶(与酒行按钮同状态)
   };
 
-  const clickSlot = (location: LocationId, slotIndex: number): void => {
+  const clickSlot = (location: LocationId, slotIndex: number, forceBuild = false): void => {
     const placedT = state.board.slots[location]?.[slotIndex];
     // 双轨选酒:选完两条路后点可用酒厂 = 选该酒源(等价行动栏按钮)
     if (
@@ -503,8 +530,9 @@ export function useActionDraft({
       return;
     }
     // 卖出流图上点选(顺序约束同按钮行):自己可卖板块 = 选本组建筑;
-    // 酒厂 = 加一桶啤酒(须已选建筑+贸易商,先点酒厂无效)
-    const sellFlow = candidates.some((a) => a.type === 'sell');
+    // 酒厂 = 加一桶啤酒(须已选建筑+贸易商,先点酒厂无效)。
+    // 产业预选(按钮流走建造)或拖拽(forceBuild)时,占用槽一律按建造解析(含己方改建)
+    const sellFlow = !forceBuild && buildIndustry === null && candidates.some((a) => a.type === 'sell');
     if (sellFlow && placedT && !placedT.flipped) {
       if (placedT.player === seat && placedT.tile.sellable) {
         pickSellTile({ location, slotIndex });
@@ -528,6 +556,14 @@ export function useActionDraft({
     if (buildIndustry !== null) {
       builds = builds.filter((a) => a.industry === buildIndustry);
     }
+    if (builds.length > 0) {
+      // 建造被选中(含拖拽/预选触发的改建):出售暂存联动清空,左侧不再停留在出售行
+      setSellTile(null);
+      setSellMerchant(null);
+      setSellBeer([]);
+      setSellGroups([]);
+      setBonusDevelop(null);
+    }
     if (builds.length === 1) {
       const b = builds[0]!;
       // 双-双图标槽:玩家点的就是想建的槽位 → 附显式 slotIndex(engine 校验同规则)
@@ -550,10 +586,12 @@ export function useActionDraft({
     setBuildIndustry((prev) => (prev === ind ? null : ind));
     setBuildChoices([]);
     setChoicesSlot(null);
-    setChosen((prev) => (prev?.type === 'build' && prev.industry !== ind ? null : prev));
+    // 切换/取消产业预选:与此产业无关的显式选定失效(含一键出售)
+    setChosen((prev) => (prev !== null && (prev.type !== 'build' || prev.industry !== ind) ? null : prev));
   };
 
   const clickLink = (linkIndex: number): void => {
+    clearChosen();
     // 点末条 = 撤销
     if (pickedLinks[pickedLinks.length - 1] === linkIndex) {
       setPickedLinks(pickedLinks.slice(0, -1));
@@ -570,6 +608,7 @@ export function useActionDraft({
    * 仅当 legalActions 含 [x,x] 候选时开放；否则 0→1→0 即原 toggle 语义）。
    */
   const toggleDevelop = (ind: IndustryType): void => {
+    clearChosen();
     setDevelopPicks((prev) => {
       const count = prev.filter((x) => x === ind).length;
       if (count === 0) return prev.length >= 2 ? prev : [...prev, ind];
@@ -584,6 +623,9 @@ export function useActionDraft({
   };
 
   const toggleScoutCard = (cardId: string): void => {
+    clearChosen();
+    // 当前行动牌(selectedCard)视为已选且不可取消——搜寻弃 3 张本就含它
+    if (cardId === selectedCard) return;
     setScoutPicks((prev) => {
       const i = prev.indexOf(cardId);
       if (i >= 0) return [...prev.slice(0, i), ...prev.slice(i + 1)];
@@ -676,7 +718,7 @@ export function useActionDraft({
     pickNetworkBeer,
     developPicks,
     developChoices: developOptions(candidates),
-    scoutPicks,
+    scoutPicks: scoutPicksEff,
     scoutAvailable: candidates.some((a) => a.type === 'scout'),
     sellSingles: visibleSellSingles,
     sellFullSet: sell.fullSet,
@@ -1019,7 +1061,7 @@ export function ActionBar({
           disabled={draft.resolved === null}
           onClick={onConfirm}
         >
-          {draft.resolved === null ? '确认（先完成选择）' : `确认：${describeAction(draft.resolved)}`}
+          {draft.resolved === null ? '确认（先完成选择）' : `确认：${buildActionLabel(state, seat, draft.resolved)}`}
         </button>
         <button
           type="button"

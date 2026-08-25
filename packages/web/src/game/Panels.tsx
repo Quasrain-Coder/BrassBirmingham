@@ -14,6 +14,7 @@ import type { Action, Card, IndustryType, MerchantId, PlayerIndex } from '@brass
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { INDUSTRY_STYLE, PLAYER_COLORS, PLAYER_COLOR_KEYS } from '../board/BoardSvg';
 import { cardFaceKey, cardFromId, cardName, describeAction, industryName, locationName, merchantName } from './display';
+import { actionCardsText, buildRounds, incomeSuffix } from './eraLog';
 import { INDUSTRY_ORDER } from './interactions';
 import { DiscardModal } from './DiscardModal';
 import { PlayerMat } from './PlayerMat';
@@ -166,6 +167,7 @@ export function HandBar({
   overlay = false,
   scoutMode,
   handRaise = 'single',
+  handOverride,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -177,14 +179,19 @@ export function HandBar({
   scoutMode?: { picks: string[]; onToggle: (cardId: string) => void } | null | undefined;
   /** 卡牌悬浮效果(偏好设置):single=悬停提起单张;all=悬停整排提起,选中单张固定。 */
   handRaise?: 'single' | 'all' | undefined;
+  /** 回看模式:用指定手牌覆盖展示(行动前手牌,highlightIds 中的牌红框高亮);
+   *  设置后忽略 state 手牌与拖拽排序。 */
+  handOverride?: { cards: Card[]; highlightIds: string[] } | undefined;
 }): ReactElement {
   const self = state.players[seat];
+  const overrideIds = new Set(handOverride?.highlightIds ?? []);
   // 手牌自定义排序(纯前端,服务端不关心手牌顺序):dragOrder 保存拖拽后的卡牌 id 序列;
   // 每次渲染与快照手牌对账——仍在手牌的按自定义序,新摸的牌追加在尾
   const [dragOrder, setDragOrder] = useState<string[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropMark, setDropMark] = useState<{ id: string; after: boolean } | null>(null);
-  const handCards = self?.hand.kind === 'full' ? self.hand.cards : [];
+  const handCards =
+    handOverride !== undefined ? handOverride.cards : self?.hand.kind === 'full' ? self.hand.cards : [];
   const displayCards = (() => {
     if (dragOrder.length === 0) return handCards;
     const byId = new Map(handCards.map((c) => [c.id, c]));
@@ -241,6 +248,7 @@ export function HandBar({
             'hand-card',
             isWild ? 'wild' : '',
             selected ? 'selected' : '',
+            overrideIds.has(card.id) ? 'step-played' : '',
             dragId === card.id ? 'dragging' : '',
             dropMark?.id === card.id ? (dropMark.after ? 'drop-after' : 'drop-before') : '',
           ]
@@ -306,6 +314,8 @@ export function PlayerBoard({
   eraActions,
   roundNow,
   turnHold,
+  seatSwitch,
+  actsLatestRound,
   onTileDragStart,
   hiddenTopInd,
   stackView,
@@ -335,6 +345,12 @@ export function PlayerBoard({
   roundNow?: number | undefined;
   /** 扣住的回合(轮末停顿时非空):当前轮尚无行动时回落展示刚结束那轮。 */
   turnHold?: PlayerIndex | null | undefined;
+  /** 回看模式:在面板右上角("打出"左边)渲染"视角"切换按钮;
+   *  当前视角座位的按钮高亮且禁用(不可重复点击)。 */
+  seatSwitch?: { current: PlayerIndex; onSwitch: (seat: PlayerIndex) => void } | undefined;
+  /** 展示最新一轮行动(回看模式回合刚结算推进时兜底:此时新一轮还无人行动,
+   *  应显示刚结束那轮的两动,而不是"本回合未行动")。 */
+  actsLatestRound?: boolean | undefined;
   /** 按下产业栈顶板块开始拖拽(宽屏拖拽建造/研发,仅紧凑面板用)。 */
   onTileDragStart?: ((ind: IndustryType, e: React.PointerEvent<HTMLElement | SVGElement>) => void) | undefined;
   /** 正在拖拽中的产业(该栈顶 token 从版图上即时消失)。 */
@@ -392,62 +408,16 @@ export function PlayerBoard({
     const rank = state.turnOrder.indexOf(seat) + 1;
     // 本时代行动按回合分组(最新轮在前);本回合行动取当前轮组——
     // 刷新后 log 只剩残尾,但 eraActions 是服务端全量簿记,记录不丢
-    const rounds: { round: number; actions: { action: Action; moneyDelta: number; note?: 'round-income' }[] }[] = [];
-    {
-      const ea = eraActions ?? [];
-      const apr = (r: number): number => (state.era === 'canal' && r === 1 ? 1 : 2);
-      // 与 DiscardModal.buildRounds 同一 walk 方案:note 条目附进当前轮,不占名额
-      let current: { round: number; actions: { action: Action; moneyDelta: number; note?: 'round-income' }[] } | null = null;
-      let used = 0;
-      for (const a of ea) {
-        if (a.note === 'round-income') {
-          current?.actions.push(a);
-          continue;
-        }
-        if (current === null || used >= apr(current.round)) {
-          current = { round: rounds.length + 1, actions: [] };
-          rounds.push(current);
-          used = 0;
-        }
-        current.actions.push(a);
-        used += 1;
-      }
-      rounds.reverse();
-    }
-    // 轮末收入合计 → 轮标签后缀(着色与行动盈亏一致):"（收入 +£30）/（收入 −£3）/（收入 +£0）"
-    const incomeSuffixOf = (entries: { moneyDelta: number; note?: 'round-income' }[]): ReactNode => {
-      let sum = 0;
-      let has = false;
-      for (const e of entries) {
-        if (e.note === 'round-income') {
-          sum += e.moneyDelta;
-          has = true;
-        }
-      }
-      if (!has) return null;
-      return (
-        <>
-          （收入{' '}
-          <em className={`compact-round-delta ${sum >= 0 ? 'pos' : 'neg'}`}>
-            {sum >= 0 ? `+£${sum}` : `−£${-sum}`}
-          </em>
-          ）
-        </>
-      );
-    };
+    const rounds = buildRounds(state, eraActions ?? [], true);
     // roundEndPending(轮末结算挂起,等 held 玩家确认回合)时轮次已指向"下一轮",
     // 而刚结束那轮才是要展示的——此时取最新一轮;否则按时代内当前轮号 roundNow
     // 匹配(缺省回退 state.round)。轮末停顿(turnHold 非空且新一轮还无人行动)同样回落
     const acts = (
-      state.roundEndPending
+      state.roundEndPending || actsLatestRound === true
         ? (rounds[0]?.actions ?? [])
         : (rounds.find((r) => r.round === (roundNow ?? state.round))?.actions ??
           (turnHold !== null && turnHold !== undefined ? (rounds[0]?.actions ?? []) : []))
     ).filter((a) => a.note !== 'round-income');
-    const actionCardsText = (a: Action): string =>
-      a.type === 'scout'
-        ? a.cardIds.map((id) => cardName(cardFromId(id))).join('+')
-        : cardName(cardFromId(a.cardId));
     return (
       <section
         className={`player-board compact${pulse ? ' pulse' : ''}${activeTurn ? ' active-turn' : ''}`}
@@ -462,6 +432,18 @@ export function PlayerBoard({
           <span className="player-name">{playerName(room, seat)}</span>
           <AIBadge room={room} seat={seat} />
           <span className="head-money money-oval">£{self.money}</span>
+          {seatSwitch !== undefined ? (
+            <button
+              type="button"
+              className={`discard-open-btn seat-switch-btn${seat === seatSwitch.current ? ' seat-switch-active' : ''}`}
+              data-testid={`seat-switch-${seat}`}
+              disabled={seat === seatSwitch.current}
+              title={seat === seatSwitch.current ? '当前视角' : '切换到该玩家视角(手牌/隐藏信息)'}
+              onClick={() => seatSwitch.onSwitch(seat)}
+            >
+              视角
+            </button>
+          ) : null}
           {playedCards !== undefined ? (
             <button
               type="button"
@@ -509,7 +491,7 @@ export function PlayerBoard({
               rounds.map((r) => (
                 <div key={r.round} className="compact-history-round">
                   <span className="compact-history-label">
-                    第 {r.round} 轮{incomeSuffixOf(r.actions)}
+                    第 {r.round} 轮{incomeSuffix(r.round, r.actions)}
                   </span>
                   {r.actions
                     .filter((a) => a.note !== 'round-income')

@@ -260,4 +260,35 @@ describe('audit D: sell', () => {
     setMerchant(s, 'oxford', ['blank'], 1);
     expect(sellActions(s)).toHaveLength(0);
   });
+
+  it('同次 Sell 可卖三块(规则书 §6.5 可对多块重复):三板块×三商人组合枚举个数为 3', () => {
+    // 场景(用户实测回归):stafford 陶器(酒2)→gloucester、walsall 制造(酒1)→gloucester、
+    // derby 制造(酒1)→nottingham;啤酒 = gloucester 2 桶 + nottingham 1 桶 + 自家酒厂 1 桶
+    const s = newGame(4, 9);
+    oneCard(s);
+    withTile(s, 0, 'stafford', 'pottery');
+    withTile(s, 0, 'walsall', 'manufacturer', 2);
+    withTile(s, 0, 'derby', 'manufacturer', 1);
+    withTile(s, 0, 'uttoxeter', 'brewery');
+    withLink(s, 15); // cannock-stafford
+    withLink(s, 17); // cannock-walsall
+    withLink(s, 8); // birmingham-walsall
+    withLink(s, 5); // birmingham-oxford
+    withLink(s, 32); // redditch-oxford
+    withLink(s, 27); // gloucester-redditch
+    withLink(s, 23); // derby-nottingham
+    setMerchant(s, 'gloucester', ['manufacturer', 'any'], 2);
+    setMerchant(s, 'nottingham', ['manufacturer'], 1);
+    const sells = sellActions(s);
+    const maxLen = Math.max(0, ...sells.map((a) => a.sales.length));
+    expect(maxLen).toBe(3);
+    // 自定义三组一并应用:三块全部翻面,两商人桶耗尽
+    const three = sells.find((a) => a.sales.length === 3)!;
+    const { state: after } = applySell(s, 0, three);
+    for (const loc of ['stafford', 'walsall', 'derby'] as const) {
+      expect(after.board.slots[loc]!.some((t) => t && t.player === 0 && t.flipped)).toBe(true);
+    }
+    expect(after.merchants.gloucester.barrels.filter(Boolean).length).toBe(0);
+    expect(after.merchants.nottingham.barrels.filter(Boolean).length).toBe(0);
+  });
 });
