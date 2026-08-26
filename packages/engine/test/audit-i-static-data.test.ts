@@ -117,7 +117,7 @@ const EXPECTED_TILES: Row[] = [
   r({ industry: 'manufacturer', level: 1, count: 1, costMoney: 8, costCoal: 1, beerToFlip: 1, vp: 3, incomeAdvance: 5, linkIcons: 2, railEraBuildable: false }),
   r({ industry: 'manufacturer', level: 2, count: 2, costMoney: 10, costIron: 1, beerToFlip: 1, vp: 5, incomeAdvance: 1, linkIcons: 1 }),
   r({ industry: 'manufacturer', level: 3, count: 1, costMoney: 12, costCoal: 2, vp: 4, incomeAdvance: 4, linkIcons: 0 }),
-  r({ industry: 'manufacturer', level: 4, count: 1, costMoney: 14, costIron: 1, beerToFlip: 1, vp: 3, incomeAdvance: 6, linkIcons: 1 }),
+  r({ industry: 'manufacturer', level: 4, count: 1, costMoney: 8, costIron: 1, beerToFlip: 1, vp: 3, incomeAdvance: 6, linkIcons: 1 }),
   r({ industry: 'manufacturer', level: 5, count: 2, costMoney: 16, costCoal: 1, beerToFlip: 2, vp: 8, incomeAdvance: 2, linkIcons: 2 }),
   r({ industry: 'manufacturer', level: 6, count: 1, costMoney: 20, beerToFlip: 1, vp: 7, incomeAdvance: 6, linkIcons: 1 }),
   r({ industry: 'manufacturer', level: 7, count: 1, costMoney: 16, costCoal: 1, costIron: 1, vp: 9, incomeAdvance: 4, linkIcons: 0 }),

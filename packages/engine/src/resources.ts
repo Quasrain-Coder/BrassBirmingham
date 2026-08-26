@@ -37,6 +37,7 @@ import type {
   MerchantBonusEvent,
   MerchantId,
   PlayerIndex,
+  ResourceSourceRef,
 } from './types.js';
 
 export interface ConsumeBeerOpts {
@@ -173,8 +174,53 @@ function payMarket(
   });
 }
 
+/** 显式煤/铁来源选项（并列任选的自由选择）：给定后按此计划取用，余量市场买。 */
+export interface ConsumeResourceOpts {
+  explicit?: ResourceSourceRef[];
+}
+
+/** 校验显式资源来源并转成取用计划：须未翻面、正确产业、余量充足；煤还要求连通 at。 */
+function planExplicit(
+  state: GameState,
+  player: PlayerIndex,
+  at: LocationId,
+  industry: 'coal' | 'iron',
+  explicit: ResourceSourceRef[],
+): { src: Source; take: number }[] {
+  const reach = industry === 'coal' ? reachableFrom(state, [at]) : null;
+  const plan: { src: Source; take: number }[] = [];
+  for (const ref of explicit) {
+    const t = state.board.slots[ref.location]?.[ref.slotIndex];
+    if (
+      !t ||
+      t.flipped ||
+      t.tile.industry !== industry ||
+      ref.count <= 0 ||
+      t.resources < ref.count
+    ) {
+      throw new IllegalActionError(
+        'illegal-resource-source',
+        `illegal-resource-source: no unflipped ${industry} with ${ref.count} cube(s) at ${ref.location} slot ${ref.slotIndex}`,
+      );
+    }
+    if (reach && !reach.has(ref.location)) {
+      throw new IllegalActionError(
+        'illegal-resource-source',
+        `illegal-resource-source: ${industry} at ${ref.location} is not connected to ${at}`,
+      );
+    }
+    void player;
+    plan.push({
+      src: { location: ref.location, slotIdx: ref.slotIndex, available: t.resources },
+      take: ref.count,
+    });
+  }
+  return plan;
+}
+
 /**
  * 消耗 n 块煤（§6.1）：at 连通最近未翻面煤矿免费取，不足市场买。
+ * opts.explicit：显式来源（玩家并列任选）——按计划取用，余量市场买。
  * 市场买需 canBuyCoalFromMarket(state, at)，否则抛 'coal-not-connected'；
  * 现金不足抛 'insufficient-funds'。n <= 0 为空操作。
  */
@@ -183,19 +229,42 @@ export function consumeCoal(
   player: PlayerIndex,
   at: LocationId,
   n: number,
+  opts?: ConsumeResourceOpts,
 ): ConsumeResult {
   const flipped: FlipEvent[] = [];
   if (n <= 0) return { state, flipped };
 
-  const sources: Source[] = coalSources(state, player, at).map((s) => ({
-    location: s.location,
-    slotIdx: slotIndexOf(state, s.location, s.tile),
-    available: s.tile.resources,
-  }));
-  const freeTotal = sources.reduce((sum, s) => sum + s.available, 0);
-  const fromMarket = Math.max(0, n - freeTotal);
-
   // 前置校验（先于任何修改）
+  let plan: { src: Source; take: number }[];
+  let fromMarket: number;
+  if (opts?.explicit !== undefined) {
+    plan = planExplicit(state, player, at, 'coal', opts.explicit);
+    const freeTotal = plan.reduce((s, x) => s + x.take, 0);
+    fromMarket = n - freeTotal;
+    if (fromMarket < 0) {
+      throw new IllegalActionError(
+        'illegal-resource-source',
+        `illegal-resource-source: explicit coal sources provide ${freeTotal}, need ${n}`,
+      );
+    }
+  } else {
+    const sources: Source[] = coalSources(state, player, at).map((s) => ({
+      location: s.location,
+      slotIdx: slotIndexOf(state, s.location, s.tile),
+      available: s.tile.resources,
+    }));
+    const freeTotal = sources.reduce((sum, s) => sum + s.available, 0);
+    fromMarket = Math.max(0, n - freeTotal);
+    plan = [];
+    let need = n;
+    for (const src of sources) {
+      if (need === 0) break;
+      const take = Math.min(need, src.available);
+      plan.push({ src, take });
+      need -= take;
+    }
+  }
+
   if (fromMarket > 0 && !canBuyCoalFromMarket(state, at)) {
     throw new IllegalActionError(
       'coal-not-connected',
@@ -211,12 +280,8 @@ export function consumeCoal(
   }
 
   let next = state;
-  let need = n;
-  for (const src of sources) {
-    if (need === 0) break;
-    const take = Math.min(need, src.available);
+  for (const { src, take } of plan) {
     next = drain(next, src.location, src.slotIdx, take, flipped);
-    need -= take;
   }
   if (fromMarket > 0) {
     next = { ...next, coalMarket: Math.max(0, next.coalMarket - fromMarket) };
@@ -228,44 +293,60 @@ export function consumeCoal(
 /**
  * 消耗 n 块铁（§9.1）：任意未翻面铁厂免费取（无需连通）。
  * 规范化：LocationId 字典序首个有足够方块者供全部；无单厂足够则按字典序混源。
+ * opts.explicit：显式来源（玩家可混源任选）——按计划取用，余量市场买。
  * 不足市场买（无连通要求）；现金不足抛 'insufficient-funds'。n <= 0 为空操作。
  */
 export function consumeIron(
   state: GameState,
   player: PlayerIndex,
   n: number,
+  opts?: ConsumeResourceOpts,
 ): ConsumeResult {
   const flipped: FlipEvent[] = [];
   if (n <= 0) return { state, flipped };
 
-  const sources: Source[] = ironSources(state).map((s) => ({
-    location: s.location,
-    slotIdx: slotIndexOf(state, s.location, s.tile),
-    available: s.tile.resources,
-  }));
-  const freeTotal = sources.reduce((sum, s) => sum + s.available, 0);
-  const fromMarket = Math.max(0, n - freeTotal);
+  let plan: { src: Source; take: number }[];
+  let fromMarket: number;
+  if (opts?.explicit !== undefined) {
+    plan = planExplicit(state, player, '' as LocationId, 'iron', opts.explicit);
+    const freeTotal = plan.reduce((s, x) => s + x.take, 0);
+    fromMarket = n - freeTotal;
+    if (fromMarket < 0) {
+      throw new IllegalActionError(
+        'illegal-resource-source',
+        `illegal-resource-source: explicit iron sources provide ${freeTotal}, need ${n}`,
+      );
+    }
+  } else {
+    const sources: Source[] = ironSources(state).map((s) => ({
+      location: s.location,
+      slotIdx: slotIndexOf(state, s.location, s.tile),
+      available: s.tile.resources,
+    }));
+    const freeTotal = sources.reduce((sum, s) => sum + s.available, 0);
+    fromMarket = Math.max(0, n - freeTotal);
+    // 来源计划：有单厂足够 → 首个（字典序）足够者供全部；否则按序混源
+    plan = [];
+    const enough = sources.find((s) => s.available >= n);
+    if (enough) {
+      plan.push({ src: enough, take: n });
+    } else {
+      let need = n;
+      for (const src of sources) {
+        if (need === 0) break;
+        const take = Math.min(need, src.available);
+        plan.push({ src, take });
+        need -= take;
+      }
+    }
+  }
+
   const cost = fromMarket > 0 ? buyIronCost(state, fromMarket) : 0;
   if (cost > state.players[player]!.money) {
     throw new IllegalActionError(
       'insufficient-funds',
       `insufficient-funds: iron from market costs £${cost}, player has £${state.players[player]!.money}`,
     );
-  }
-
-  // 来源计划：有单厂足够 → 首个（字典序）足够者供全部；否则按序混源
-  const plan: { src: Source; take: number }[] = [];
-  const enough = sources.find((s) => s.available >= n);
-  if (enough) {
-    plan.push({ src: enough, take: n });
-  } else {
-    let need = n;
-    for (const src of sources) {
-      if (need === 0) break;
-      const take = Math.min(need, src.available);
-      plan.push({ src, take });
-      need -= take;
-    }
   }
 
   let next = state;
@@ -284,22 +365,47 @@ function isMerchantId(x: string): x is MerchantId {
 }
 
 /**
- * 取 1 桶商人啤酒：桶绑在板块格旁——卖货须用"收该产业(精确图标或万能)的板块格"旁的桶;
- * 多格都收时规范化消耗**最右**可用格(UI 从左填充、从右消耗)。扣桶 + 结算商人奖励
- * （vp/money/income 直接落；develop 由 Sell 层处理）。
+ * 取 1 桶商人啤酒：桶绑在板块格旁——卖货须用"收该产业(精确图标或万能)的板块格"旁的桶。
+ * tileIndex：显式指定商人位内第几格（桶位是玩家自由选择）；缺省规范化——
+ * **精确图标格优先于万能格**（各自从右取）：万能桶是全产业的稀缺灵活资源，
+ * 先消耗精确桶能为同次/后续销售保留可行性（反例：牛津 [制造(桶), 万能(桶)]，
+ * 先卖制造货用万能桶 → 随后的陶货无桶可用，合法的两块同商人多卖会被卡死）。
+ * 扣桶 + 结算商人奖励（vp/money/income 直接落；develop 由 Sell 层处理）。
  */
 function takeMerchantBarrel(
   state: GameState,
   player: PlayerIndex,
   merchantId: MerchantId,
   industry: IndustryType,
+  tileIndex?: number,
 ): { state: GameState; bonus: MerchantBonusEvent } {
   const m = state.merchants[merchantId];
   let bi = -1;
-  for (let i = m.barrels.length - 1; i >= 0; i -= 1) {
-    if (m.barrels[i] === true && (m.tiles[i] === 'any' || m.tiles[i] === industry)) {
-      bi = i;
-      break;
+  if (tileIndex !== undefined) {
+    const ok =
+      m.barrels[tileIndex] === true &&
+      (m.tiles[tileIndex] === 'any' || m.tiles[tileIndex] === industry);
+    if (!ok) {
+      throw new IllegalActionError(
+        'insufficient-beer',
+        `insufficient-beer: merchant ${merchantId} tile ${tileIndex} has no barrel for ${industry}`,
+      );
+    }
+    bi = tileIndex;
+  } else {
+    for (let i = m.barrels.length - 1; i >= 0; i -= 1) {
+      if (m.barrels[i] === true && m.tiles[i] === industry) {
+        bi = i;
+        break;
+      }
+    }
+    if (bi === -1) {
+      for (let i = m.barrels.length - 1; i >= 0; i -= 1) {
+        if (m.barrels[i] === true && m.tiles[i] === 'any') {
+          bi = i;
+          break;
+        }
+      }
     }
   }
   if (bi === -1) {
@@ -378,7 +484,7 @@ function consumeBeerExplicit(
           'illegal-beer-sources: merchant barrel requires industry context',
         );
       }
-      const r = takeMerchantBarrel(next, player, merchantId, opts.industry);
+      const r = takeMerchantBarrel(next, player, merchantId, opts.industry, src.tileIndex);
       next = r.state;
       merchantBonus = r.bonus;
       continue;

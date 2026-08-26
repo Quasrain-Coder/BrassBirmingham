@@ -3,10 +3,11 @@
  * 逐行转录自 docs/rules-reference.md §2.1–2.6（[M] 玩家面板美术 + [T][N] 三方核对）。
  *
  * 注意：
- * - 制造 IV 成本采用官方 £14 + 1 铁（TTS/npow 误作 £8，见 rules-reference §10）。
  * - 酿酒厂建成放桶数按时代而非等级，见 market.ts 的 BREWERY_BARRELS；
  *   此处 brewery 的 resourcesPlaced 恒为 0（啤酒桶不是煤/铁方块）。
  * - beerToFlip 仅对 sellable 产业有意义（印在板块右上角）；煤/铁/酿翻面不靠啤酒，恒为 0。
+ * - 制造 IV 成本 £8 + 1 铁（2026-08-26 官方面板美术复核确认；本文档早期版本
+ *   曾误记 £14，见 rules-reference §10 勘误）。
  */
 import type { IndustryType } from '../types.js';
 
@@ -93,7 +94,7 @@ const rows: TileRow[] = [
   { industry: 'manufacturer', level: 1, count: 1, costMoney: 8, costCoal: 1, beerToFlip: 1, vp: 3, incomeAdvance: 5, linkIcons: 2, railEraBuildable: false },
   { industry: 'manufacturer', level: 2, count: 2, costMoney: 10, costIron: 1, beerToFlip: 1, vp: 5, incomeAdvance: 1, linkIcons: 1 },
   { industry: 'manufacturer', level: 3, count: 1, costMoney: 12, costCoal: 2, beerToFlip: 0, vp: 4, incomeAdvance: 4, linkIcons: 0 },
-  { industry: 'manufacturer', level: 4, count: 1, costMoney: 14, costIron: 1, beerToFlip: 1, vp: 3, incomeAdvance: 6, linkIcons: 1 },
+  { industry: 'manufacturer', level: 4, count: 1, costMoney: 8, costIron: 1, beerToFlip: 1, vp: 3, incomeAdvance: 6, linkIcons: 1 },
   { industry: 'manufacturer', level: 5, count: 2, costMoney: 16, costCoal: 1, beerToFlip: 2, vp: 8, incomeAdvance: 2, linkIcons: 2 },
   { industry: 'manufacturer', level: 6, count: 1, costMoney: 20, beerToFlip: 1, vp: 7, incomeAdvance: 6, linkIcons: 1 },
   { industry: 'manufacturer', level: 7, count: 1, costMoney: 16, costCoal: 1, costIron: 1, beerToFlip: 0, vp: 9, incomeAdvance: 4, linkIcons: 0 },

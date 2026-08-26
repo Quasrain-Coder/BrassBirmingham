@@ -14,7 +14,7 @@
  *
  * 纯函数：不改入参。
  */
-import { LINK_EXTRA_ENDPOINTS, LINKS } from './data/board.js';
+import { LINK_EXTRA_ENDPOINTS, LINKS, MERCHANTS } from './data/board.js';
 import { incomeLevelAt } from './data/income.js';
 import { createRng } from './rng.js';
 import type { GameState } from './state.js';
@@ -33,8 +33,11 @@ function flippedLinkIcons(state: GameState, location: LocationId): number {
 
 /**
  * Link 计分：每条 Link，两端（含 LINK_EXTRA_ENDPOINTS 附加端点，如
- * kidderminster–worcester 边同时计 farm-south）相邻地点内已翻面板块的
- * linkIcons 之和 = VP 给 Link owner；计分后全部 Link 从版图移除。
+ * kidderminster–worcester 边同时计 farm-south）计：
+ * - 相邻**地点**内已翻面板块的 linkIcons 之和；
+ * - 相邻**商人位**各 +2（商人位板面印 2 个连接图标，实物版图目视核实 2026-08-26：
+ *   如 Warrington 横幅上方的两个六边形链环图标；brass-assistant/npow 同为 +2）。
+ * VP 给 Link owner；计分后全部 Link 从版图移除。
  */
 export function scoreEraLinks(state: GameState): GameState {
   if (state.board.links.length === 0) return state;
@@ -43,7 +46,11 @@ export function scoreEraLinks(state: GameState): GameState {
     const def = LINKS[link.linkIndex]!;
     let vp = 0;
     for (const endpoint of [def.a, def.b, ...(LINK_EXTRA_ENDPOINTS[link.linkIndex] ?? [])]) {
-      vp += flippedLinkIcons(state, endpoint);
+      if (Object.prototype.hasOwnProperty.call(MERCHANTS, endpoint)) {
+        vp += 2;
+      } else {
+        vp += flippedLinkIcons(state, endpoint);
+      }
     }
     gains.set(link.player, (gains.get(link.player) ?? 0) + vp);
   }

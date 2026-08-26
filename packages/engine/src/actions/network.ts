@@ -302,13 +302,17 @@ export function applyNetwork(
   });
 
   // 2. 逐条放置、逐条耗煤（煤源连通锚定该条放置后的端点）
+  //    action.coalSources：与 links 下标对齐的显式煤源（每项 1 块，null/缺省 = 规范化）
   let atLast: LocationId | null = null;
-  for (const i of action.links) {
+  for (const [li, i] of action.links.entries()) {
     next = withLink(next, i, player);
     const at = firstLocationEndpoint(i);
     atLast = at;
     if (next.era === 'rail') {
-      const rc = consumeCoal(next, player, at, 1);
+      const explicit = action.coalSources?.[li];
+      const rc = consumeCoal(next, player, at, 1, {
+        ...(explicit ? { explicit: [{ ...explicit, count: 1 }] } : {}),
+      });
       next = rc.state;
       events.push(...rc.flipped);
     }
