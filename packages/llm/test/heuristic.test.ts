@@ -103,7 +103,7 @@ describe('prescreen', () => {
 });
 
 describe('scoreAction components', () => {
-  it('pass scores negative (never neutral) and scout scores the scout weight', () => {
+  it('pass scores negative (never neutral) and scout scores above pass', () => {
     const s = newGame(4, 42);
     const legal = enumerateActions(s, 0);
     const pass = legal.find((a) => a.type === 'pass');
@@ -111,7 +111,12 @@ describe('scoreAction components', () => {
     expect(scoreAction(s, 0, pass!)).toBe(HEURISTIC_WEIGHTS.pass);
     expect(HEURISTIC_WEIGHTS.pass).toBeLessThan(0);
     const scout = legal.find((a) => a.type === 'scout');
-    if (scout) expect(scoreAction(s, 0, scout)).toBe(HEURISTIC_WEIGHTS.scout);
+    // scout 按所弃 3 卡的保留价值动态评分（不再是常数），但应显著优于 pass
+    if (scout) {
+      const v = scoreAction(s, 0, scout);
+      expect(Number.isFinite(v)).toBe(true);
+      expect(v).toBeGreaterThan(HEURISTIC_WEIGHTS.pass);
+    }
   });
 
   it('prefers building income-positive tiles over pass in opening', () => {
@@ -125,8 +130,9 @@ describe('scoreAction components', () => {
   });
 
   it('scores L4 cotton above L1 cotton in the rail era', () => {
-    // 方向性测试：防止比值评分系统性偏好便宜 L1
-    const base = withEra(newGame(4, 42), 'rail');
+    // 方向性测试：防止比值评分系统性偏好便宜 L1。
+    // 注意新评分对"买不起"硬折价，需给足现金让两者都可负担才比得出方向。
+    const base = withMoney(withEra(newGame(4, 42), 'rail'), 0, 60);
     const action: Action = {
       type: 'build',
       cardId: 'any',
@@ -139,14 +145,15 @@ describe('scoreAction components', () => {
     expect(l4).toBeGreaterThan(l1);
   });
 
-  it('loan is positive when cash-short, negative otherwise', () => {
+  it('loan scores higher when cash-short than when rich', () => {
+    // 新评分（brass-assistant 移植）：创业贷款峰值 + 闲置保护 vs 富裕惩罚
     const s = newGame(4, 42);
     const action: Action = { type: 'loan', cardId: 'any' };
-    expect(scoreAction(s, 0, action)).toBe(HEURISTIC_WEIGHTS.loanOtherwise);
-    const broke = withMoney(s, 0, 0);
-    expect(scoreAction(broke, 0, action)).toBe(
-      HEURISTIC_WEIGHTS.loanCashShortage,
-    );
+    const broke = scoreAction(withMoney(s, 0, 0), 0, action);
+    const rich = scoreAction(withMoney(s, 0, 60), 0, action);
+    expect(Number.isFinite(broke)).toBe(true);
+    expect(Number.isFinite(rich)).toBe(true);
+    expect(broke).toBeGreaterThan(rich);
   });
 });
 
