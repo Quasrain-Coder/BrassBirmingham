@@ -187,12 +187,14 @@ describe('audit-H 合规: 时代结束触发与轮末收入（规则书 p.6/p.7�
 });
 
 describe('audit-H 合规: Link 计分与终局（规则书 p.7）', () => {
-  it('商人位端点不提供连接图标：birmingham–oxford 只数 birmingham 侧', () => {
+  it('商人位端点固定提供 2 个连接图标：birmingham–oxford = birmingham 侧 1 + 商人位 2', () => {
+    // 2026-08-26 规则修正：商人位板面印 2 个连接图标（实物版图目视 + 官方规则书
+    // "score 1 VP for each link icon displayed in adjacent locations"），旧断言（商人位 0）有误。
     const s = newGame(4, 3);
     withTile(s, 1, 'birmingham', 'cotton', { flipped: true }); // 1 连接图标
     s.board.links.push({ linkIndex: 5, player: 0, era: 'canal' }); // birmingham–oxford
     const after = scoreEraLinks(s);
-    expect(after.players[0]!.vp).toBe(1); // oxford 商人位贡献 0
+    expect(after.players[0]!.vp).toBe(3); // birmingham 侧 1 + oxford 商人位 2
     expect(after.board.links).toEqual([]);
   });
 

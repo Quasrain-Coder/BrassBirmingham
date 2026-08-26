@@ -281,18 +281,24 @@ export function applyBuild(
   });
 
   // 2. 耗煤（建造地点连通最近源，不足市场买）→ 耗铁（全图任意源，不足市场买）
-  const rc = consumeCoal(next, player, action.location, def.costCoal);
+  //    action.coalSources/ironSources：玩家并列任选的显式来源（缺省规范化）
+  const rc = consumeCoal(next, player, action.location, def.costCoal, {
+    ...(action.coalSources !== undefined ? { explicit: action.coalSources } : {}),
+  });
   next = rc.state;
   events.push(...rc.flipped);
-  const ri = consumeIron(next, player, def.costIron);
+  const ri = consumeIron(next, player, def.costIron, {
+    ...(action.ironSources !== undefined ? { explicit: action.ironSources } : {}),
+  });
   next = ri.state;
   events.push(...ri.flipped);
 
   // 3. 面板取最低级板块放置；被覆盖板块连同资源直接移出游戏（退回供应）
   let target = resolveSlot(next, player, action.location, action.industry, def)!;
-  // 显式槽位选择（Action.slotIndex）：仅当同地**没有**可放该产业的空单图标槽时，
-  // 允许玩家在空双图标槽之间自选（规则书 p.9 单图标优先不适用双-双情形）。
-  // 其余情况（含显式的就是规范化槽位）不影响解析结果。
+  // 显式槽位选择（Action.slotIndex）：规则上"建/覆盖在哪个槽位"是玩家自由选择——
+  // ①空双图标槽间自选（仅当同地没有可放该产业的空单图标槽，p.9 单图标优先不适用
+  //   双-双情形）；②同地有多个可覆盖目标（己方更低级同产业 / 对手更低级煤铁）时，
+  // 覆盖对象槽位自选。其余情况（含显式的就是规范化槽位）不影响解析结果。
   if (action.slotIndex !== undefined && action.slotIndex !== target.slotIndex) {
     const slotDefs = LOCATIONS[action.location]!.slots;
     const placedNow = next.board.slots[action.location]!;
@@ -303,19 +309,34 @@ export function applyBuild(
         sd.industries.includes(action.industry) &&
         placedNow[i] === null,
     );
-    const legalExplicit =
+    const emptyChoice =
       target.overbuild === 'none' &&
       explicitDef !== undefined &&
       explicitDef.industries.includes(action.industry) &&
       placedNow[action.slotIndex] === null &&
       !singleIconEmpty;
-    if (!legalExplicit) {
+    const overTarget = placedNow[action.slotIndex];
+    const overbuildChoice =
+      (target.overbuild === 'own' || target.overbuild === 'opponent') &&
+      explicitDef !== undefined &&
+      explicitDef.industries.includes(action.industry) &&
+      overTarget !== null &&
+      overTarget !== undefined &&
+      overTarget.tile.industry === action.industry &&
+      overTarget.tile.level < def.level &&
+      (target.overbuild === 'own'
+        ? overTarget.player === player
+        : overTarget.player !== player);
+    if (!emptyChoice && !overbuildChoice) {
       throw new IllegalActionError(
         'illegal-build-slot',
         `illegal-build-slot: slot ${action.slotIndex} at ${action.location} is not a legal explicit choice for ${action.industry}`,
       );
     }
-    target = { slotIndex: action.slotIndex, overbuild: 'none' };
+    target = {
+      slotIndex: action.slotIndex,
+      overbuild: emptyChoice ? 'none' : target.overbuild,
+    };
   }
   const psNow = next.players[player]!;
   const tileIdx = psNow.tiles.findIndex((t) => t === def);

@@ -14,6 +14,7 @@ export type {
   MerchantBonusEvent,
   GameEvent,
   BeerSourceRef,
+  ResourceSourceRef,
   Action,
 } from './types.js';
 export {
@@ -39,10 +40,17 @@ export {
   reachableFrom,
 } from './network.js';
 export type { NetworkNode } from './network.js';
-export { applyFlip, consumeBeer, consumeCoal, consumeIron, merchantHasUsableBarrel } from './resources.js';
+export {
+  applyFlip,
+  consumeBeer,
+  consumeCoal,
+  consumeIron,
+  merchantHasUsableBarrel,
+} from './resources.js';
 export type {
   ConsumeBeerOpts,
   ConsumeBeerResult,
+  ConsumeResourceOpts,
   ConsumeResult,
 } from './resources.js';
 export { applyBuild, enumerateBuilds } from './actions/build.js';

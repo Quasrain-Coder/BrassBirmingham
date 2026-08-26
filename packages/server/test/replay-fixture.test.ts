@@ -38,10 +38,12 @@ describe('存档对局回放(wq9gs6-2p-full, 2P 78 动)', () => {
       expect(s.wildSupply.location).toBeGreaterThanOrEqual(0);
       expect(s.wildSupply.industry).toBeGreaterThanOrEqual(0);
     }
-    expect(canalEndTrack).toEqual([39, 44]);
+    // 2026-08-26 规则修正（时代末 Link 计分：相邻商人位各 +2 VP）后里程碑更新：
+    // 旧值 [39, 44] 为漏算商人位图标的错误计分。
+    expect(canalEndTrack).toEqual([41, 48]);
     expect(s.phase).toBe('game-over');
     expect(s.winner).toEqual([0]);
-    expect(s.players.map((p) => p!.vp)).toEqual([209, 174]);
+    expect(s.players.map((p) => p!.vp)).toEqual([215, 180]); // 同步 +6/+6（各 3 条挨商人位 Link）
     // 终局计分后 links 从版图移除
     expect(s.board.links).toHaveLength(0);
   });

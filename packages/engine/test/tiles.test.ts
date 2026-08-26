@@ -15,9 +15,9 @@ describe('tile definitions (rules-reference §2)', () => {
   it('29 tile defs: 4 cotton + 8 manufacturer + 5 pottery + 4 coal + 4 iron + 4 brewery', () => {
     expect(TILES).toHaveLength(29);
   });
-  it('manufacturer level 4 costs £14+1iron (official player mat)', () => {
+  it('manufacturer level 4 costs £8+1iron (official player mat, 2026-08-26 复核)', () => {
     const m4 = TILES.find((t) => t.industry === 'manufacturer' && t.level === 4)!;
-    expect(m4.costMoney).toBe(14);
+    expect(m4.costMoney).toBe(8);
     expect(m4.costIron).toBe(1);
   });
   it('pottery 1 and 3 are not developable (lightbulb)', () => {
