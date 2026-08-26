@@ -63,20 +63,25 @@ function nextLiquidation(
   player: PlayerIndex,
 ): { location: LocationId; slotIndex: number; value: number } | null {
   let best: { location: LocationId; slotIndex: number; value: number } | null = null;
+  let bestKey: [number, number, string, number] | null = null;
   for (const [location, slots] of Object.entries(state.board.slots)) {
     for (let i = 0; i < slots.length; i++) {
       const t = slots[i];
       if (!t || t.player !== player) continue;
       const value = Math.floor(t.tile.costMoney / 2);
-      if (value <= 0) continue; // £0 板块不能减少亏空，不拆
+      // 规则由玩家自选拆哪块；规范化与对拍引擎一致：
+      // 未翻面优先（翻面板块留待时代末计分）→ VP 升序 → 地点/槽位字典序
+      const key: [number, number, string, number] = [t.flipped ? 1 : 0, t.tile.vp, location, i];
       if (
-        !best ||
-        value < best.value ||
-        (value === best.value &&
-          (location < best.location ||
-            (location === best.location && i < best.slotIndex)))
+        !bestKey ||
+        key[0] < bestKey[0] ||
+        (key[0] === bestKey[0] &&
+          (key[1] < bestKey[1] ||
+            (key[1] === bestKey[1] &&
+              (key[2] < bestKey[2] || (key[2] === bestKey[2] && key[3] < bestKey[3])))))
       ) {
         best = { location, slotIndex: i, value };
+        bestKey = key;
       }
     }
   }
@@ -99,7 +104,7 @@ function liquidate(
   return withPlayer(next, player, { ...ps, money: ps.money + target.value });
 }
 
-/** 负收入：现金 → 拆板块（够付即停）→ VP 兜底（每缺 £1 扣 1 VP，可为负）。 */
+/** 负收入：现金 → 拆板块（够付即停）→ VP 兜底（每缺 £1 扣 1 VP，下限 0）。 */
 function payNegativeIncome(state: GameState, player: PlayerIndex, owed: number): GameState {
   let next = state;
   while (next.players[player]!.money < owed) {
@@ -113,7 +118,7 @@ function payNegativeIncome(state: GameState, player: PlayerIndex, owed: number):
   return withPlayer(next, player, {
     ...ps,
     money: ps.money - paid,
-    vp: ps.vp - deficit,
+    vp: Math.max(0, ps.vp - deficit),
   });
 }
 

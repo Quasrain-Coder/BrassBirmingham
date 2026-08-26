@@ -297,16 +297,16 @@ describe('round-end income', () => {
     expect(after.board.slots['worcester']![1]).not.toBeNull();
   });
 
-  it('still insufficient after liquidating everything: 1 VP per £1 missing', () => {
+  it('still insufficient after liquidating everything: 1 VP per £1 missing (floor 0)', () => {
     const s = roundEndState((st) => {
       st.players[0]!.incomeSpace = INCOME_LEVEL_SPACES(-5)[0]; // 欠 £5
       st.players[0]!.money = 1;
       withTile(st, 0, 'dudley', 'coal', 1); // 半价 floor(5/2)=2
     });
     const after = endTurnIfNeeded(s);
-    // 1 + 2 = 3 < 5 → 缺 £2 扣 2 VP，现金清零
+    // 1 + 2 = 3 < 5 → 缺 £2 扣 2 VP（下限 0，VP 轨无负格），现金清零
     expect(after.players[0]!.money).toBe(0);
-    expect(after.players[0]!.vp).toBe(-2);
+    expect(after.players[0]!.vp).toBe(0);
     expect(after.board.slots['dudley']![0]).toBeNull();
   });
 });

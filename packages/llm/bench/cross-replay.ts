@@ -389,13 +389,15 @@ function findMatch(
       const want = [IND_MAP[mv.ind1 as string]!];
       if (mv.ind2) want.push(IND_MAP[mv.ind2 as string]!);
       want.sort();
-      return (
+      const found =
         legal.find((a) => {
           if (a.type !== 'develop' || a.cardId !== cardId(mv.card_index as number)) return false;
           const got = [...a.removals].sort();
           return got.length === want.length && got.every((x, i) => x === want[i]);
-        }) ?? null
-      );
+        }) ?? null;
+      if (!found || found.type !== 'develop') return null;
+      const ironSources = theirIronToOurs(mv.iron as never);
+      return { ...found, ...(ironSources ? { ironSources } : {}) };
     }
     case 'sell': {
       const keys = mv.keys as number[];
@@ -707,7 +709,7 @@ function replay(path: string): void {
       console.log('  手牌:', JSON.stringify(state.players[player]!.hand));
       for (const [i, p] of state.players.entries()) {
         const coal = p.tiles.filter((t) => t.industry === 'coal');
-        console.log(`  P${i} coal 栈顶: ${coal[0] ? `L${coal[0].level} (余${coal.length})` : '空'}`);
+        console.log(`  P${i} coal 栈顶: ${coal[0] ? `L${coal[0].level} (余${coal.length})` : '空'} money=${p.money} incomeSpace=${p.incomeSpace} vp=${p.vp}`);
       }
       console.log('  对方 after cannock:', JSON.stringify(after.city_tiles.slice(19, 21)));
     }
@@ -780,6 +782,10 @@ function replay(path: string): void {
       console.log(`✗ step ${step}: 行动后状态分歧 (era=${state.era} round=${state.round} P${player}, ${mv.kind})`);
       console.log(`  轨迹: ${JSON.stringify(mv)}`);
       console.log(`  首个差异: ${diff}`);
+      if (process.env.DEBUG_FULL) {
+        console.log('  我方 players:', JSON.stringify((comparable(state) as { players: unknown }).players));
+        console.log('  对方 players:', JSON.stringify((theirComparable(after) as { players: unknown }).players));
+      }
       return;
     }
     prevAfter = after;

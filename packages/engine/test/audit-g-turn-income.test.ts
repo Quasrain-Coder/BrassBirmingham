@@ -113,7 +113,7 @@ describe('audit-g: 全程 Pass 打完整局（铁路时代长度 + 铁路第 1 �
 });
 
 describe('audit-g: 负收入变现边界（规则书 p.6 Take Income）', () => {
-  it('成本 £0 的板块（Pottery II）不可变现减少亏空；Link 不拆；余缺扣 VP', () => {
+  it('成本 £0 的板块（Pottery II）也会被拆（变现 £0）；Link 不拆；余缺扣 VP（下限 0）', () => {
     const s = newGame(4, 3);
     s.round = 2;
     s.actionsThisTurn = 2;
@@ -124,11 +124,11 @@ describe('audit-g: 负收入变现边界（规则书 p.6 Take Income）', () => 
     s.board.links = [{ linkIndex: 0, player: 0, era: 'canal' }]; // Link 永远不能变现
 
     const after = endTurnIfNeeded(s);
-    // 现金 £1 全付，缺 £2 → 扣 2 VP
+    // £0 板块按规范化顺序（未翻面→VP 升序）照拆但变现 £0；现金 £1 全付，缺 £2 → 扣 2 VP（下限 0）
     expect(after.players[0]!.money).toBe(0);
-    expect(after.players[0]!.vp).toBe(-2);
-    // £0 板块与 Link 均保留在场上
-    expect(after.board.slots['belper']!.some((t) => t !== null)).toBe(true);
+    expect(after.players[0]!.vp).toBe(0);
+    // £0 板块已拆出游戏；Link 保留在场上
+    expect(after.board.slots['belper']!.some((t) => t !== null)).toBe(false);
     expect(after.board.links).toHaveLength(1);
   });
 });
