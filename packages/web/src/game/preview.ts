@@ -47,12 +47,21 @@ function merchantBonusText(merchant: keyof typeof MERCHANTS): string {
   }
 }
 
-/** 建造成本分解(煤:免费源不足才按市价,需连通商人位;铁:免费源不足按市价,无需连通)。 */
-function buildCosts(state: FilteredState, player: PlayerIndex, location: LocationId, def: (typeof TILES)[number]): string[] {
+/** 建造成本分解(煤:免费源不足才按市价,需连通商人位;铁:免费源不足按市价,无需连通)。
+ *  显式来源(coalSources/ironSources)存在时按所选方案计免费量,与选择器联动。 */
+function buildCosts(
+  state: FilteredState,
+  player: PlayerIndex,
+  action: Extract<Action, { type: 'build' }>,
+  def: (typeof TILES)[number],
+): string[] {
   const gs = asGameState(state);
   const costs: string[] = [`£${def.costMoney}`];
   if (def.costCoal > 0) {
-    const free = coalSources(gs, player, location).reduce((s, x) => s + x.tile.resources, 0);
+    const free =
+      action.coalSources !== undefined
+        ? action.coalSources.reduce((s, r) => s + r.count, 0)
+        : coalSources(gs, player, action.location).reduce((s, x) => s + x.tile.resources, 0);
     const need = def.costCoal - free;
     const parts = [`煤×${def.costCoal}`];
     if (need > 0) parts.push(`市价 £${buyCoalCost(gs, need)}`);
@@ -60,7 +69,10 @@ function buildCosts(state: FilteredState, player: PlayerIndex, location: Locatio
     costs.push(parts.join('(') + ')');
   }
   if (def.costIron > 0) {
-    const free = ironSources(gs).reduce((s, x) => s + x.tile.resources, 0);
+    const free =
+      action.ironSources !== undefined
+        ? action.ironSources.reduce((s, r) => s + r.count, 0)
+        : ironSources(gs).reduce((s, x) => s + x.tile.resources, 0);
     const need = def.costIron - free;
     const parts = [`铁×${def.costIron}`];
     if (need > 0) parts.push(`市价 £${buyIronCost(gs, need)}`);
@@ -90,7 +102,7 @@ export function previewOf(action: Action, state: FilteredState, player: PlayerIn
     case 'build': {
       const def = state.players[player]!.tiles.find((t) => t.industry === action.industry);
       if (def === undefined) break;
-      costs.push(...buildCosts(state, player, action.location, def));
+      costs.push(...buildCosts(state, player, action, def));
       gains.push(...buildMarketGains(state, action.industry, action.location, def));
       break;
     }
@@ -119,7 +131,10 @@ export function previewOf(action: Action, state: FilteredState, player: PlayerIn
       break;
     }
     case 'develop': {
-      const free = ironSources(gs).reduce((s, x) => s + x.tile.resources, 0);
+      const free =
+        action.ironSources !== undefined
+          ? action.ironSources.reduce((s, r) => s + r.count, 0)
+          : ironSources(gs).reduce((s, x) => s + x.tile.resources, 0);
       const need = action.removals.length - free;
       costs.push(
         `铁×${action.removals.length}` + (need > 0 ? `(市价 £${buyIronCost(gs, need)})` : '(免费)'),
@@ -158,12 +173,18 @@ export function moneyDelta(action: Action, state: FilteredState, player: PlayerI
       if (def === undefined) return 0;
       let delta = -def.costMoney;
       if (def.costCoal > 0) {
-        const free = coalSources(gs, player, action.location).reduce((s, x) => s + x.tile.resources, 0);
+        const free =
+          action.coalSources !== undefined
+            ? action.coalSources.reduce((s, r) => s + r.count, 0)
+            : coalSources(gs, player, action.location).reduce((s, x) => s + x.tile.resources, 0);
         const need = def.costCoal - free;
         if (need > 0) delta -= buyCoalCost(gs, need);
       }
       if (def.costIron > 0) {
-        const free = ironSources(gs).reduce((s, x) => s + x.tile.resources, 0);
+        const free =
+          action.ironSources !== undefined
+            ? action.ironSources.reduce((s, r) => s + r.count, 0)
+            : ironSources(gs).reduce((s, x) => s + x.tile.resources, 0);
         const need = def.costIron - free;
         if (need > 0) delta -= buyIronCost(gs, need);
       }
@@ -194,7 +215,10 @@ export function moneyDelta(action: Action, state: FilteredState, player: PlayerI
       return delta;
     }
     case 'develop': {
-      const free = ironSources(gs).reduce((s, x) => s + x.tile.resources, 0);
+      const free =
+        action.ironSources !== undefined
+          ? action.ironSources.reduce((s, r) => s + r.count, 0)
+          : ironSources(gs).reduce((s, x) => s + x.tile.resources, 0);
       const need = action.removals.length - free;
       return need > 0 ? -buyIronCost(gs, need) : 0;
     }

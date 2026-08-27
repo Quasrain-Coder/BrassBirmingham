@@ -13,15 +13,26 @@
  * - network：双轨 links 为有序对（放置顺序），两种顺序分别枚举——点击顺序即放置顺序。
  * - sell：单块全枚举 + "可卖全集"至多一个（sales.length >= 2）。
  */
-import { LINKS, LOCATIONS, MERCHANTS, merchantHasUsableBarrel, reachableFrom } from '@brass/engine';
+import {
+  LINKS,
+  LOCATIONS,
+  MERCHANTS,
+  coalSources,
+  ironSources,
+  merchantHasUsableBarrel,
+  reachableFrom,
+} from '@brass/engine';
 import type {
   Action,
   BeerSourceRef,
   Card,
+  GameState,
   IndustryType,
   LocationId,
   MerchantId,
+  MerchantTile,
   PlayerIndex,
+  ResourceSourceRef,
 } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { SlotRef } from '../board/BoardSvg';
@@ -518,6 +529,186 @@ export function explicitBuildSlot(
 }
 
 // ---------------------------------------------------------------------------
+// 资源来源选择器(2026-08-27):并列任选的煤/铁源、商人桶格——
+// 唯一选项时自动解析(返回 null 不打扰玩家),≥2 个真实选项才给候选列表。
+// 规范化默认与 engine resources.ts 的规范化分支逐一对应。
+// ---------------------------------------------------------------------------
+
+export interface ResourceSourceOption extends SlotRef {
+  /** 该矿/厂当前余量(方块数)。 */
+  available: number;
+  /** 板块归属(取对手矿/厂会帮对手翻面进收入,选择器要标出来)。 */
+  owner: PlayerIndex;
+}
+
+export interface ResourceSourceChoice {
+  options: ResourceSourceOption[];
+  /** 规范化默认方案(缺省解析会产生的结果,玩家可在此基础上改选)。 */
+  defaultPlan: ResourceSourceRef[];
+}
+
+/** engine coalSources/ironSources 只给 {tile, location};按"每城槽位序"对齐回槽位号。 */
+function withSlotIndices(
+  state: FilteredState,
+  industry: 'coal' | 'iron',
+  raw: readonly { tile: { resources: number }; location: LocationId }[],
+): ResourceSourceOption[] {
+  const cursor = new Map<LocationId, number>();
+  return raw.map((s) => {
+    const slots = state.board.slots[s.location] ?? [];
+    let i = cursor.get(s.location) ?? 0;
+    while (
+      i < slots.length &&
+      !(slots[i] && !slots[i]!.flipped && slots[i]!.tile.industry === industry && slots[i]!.resources > 0)
+    ) {
+      i += 1;
+    }
+    cursor.set(s.location, i + 1);
+    return {
+      location: s.location,
+      slotIndex: i,
+      available: s.tile.resources,
+      owner: slots[i]?.player ?? 0,
+    };
+  });
+}
+
+/** 规范化默认(煤):按距离序逐源取尽,余量市场买——同 consumeCoal 规范化分支。 */
+export function defaultCoalSources(
+  options: readonly ResourceSourceOption[],
+  need: number,
+): ResourceSourceRef[] {
+  const out: ResourceSourceRef[] = [];
+  let left = need;
+  for (const o of options) {
+    if (left === 0) break;
+    const take = Math.min(left, o.available);
+    out.push({ location: o.location, slotIndex: o.slotIndex, count: take });
+    left -= take;
+  }
+  return out;
+}
+
+/** 规范化默认(铁):字典序首个"足够"者供全部;无单厂足够则按序混源——同 consumeIron 规范化分支。 */
+export function defaultIronSources(
+  options: readonly ResourceSourceOption[],
+  need: number,
+): ResourceSourceRef[] {
+  const enough = options.find((o) => o.available >= need);
+  if (enough !== undefined) {
+    return [{ location: enough.location, slotIndex: enough.slotIndex, count: need }];
+  }
+  return defaultCoalSources(options, need); // 按序取尽混源
+}
+
+/**
+ * build 的显式煤源选择:at 连通的可用煤矿 ≥2 才有真实选择——返回候选与规范化默认;
+ * 0 个(只能市场买)/1 个(自动取尽+市场补)返回 null,不打扰玩家、不附 coalSources。
+ */
+export function explicitCoalSources(
+  state: FilteredState,
+  seat: PlayerIndex,
+  at: LocationId,
+  need: number,
+): ResourceSourceChoice | null {
+  if (need <= 0) return null;
+  const options = withSlotIndices(
+    state,
+    'coal',
+    coalSources(state as unknown as GameState, seat, at),
+  );
+  if (options.length < 2) return null;
+  return { options, defaultPlan: defaultCoalSources(options, need) };
+}
+
+/**
+ * build/develop 的显式铁源选择:全图可用铁厂 ≥2 才有真实选择;
+ * 0 个(市场买)/1 个(自动)返回 null。
+ */
+export function explicitIronSources(state: FilteredState, need: number): ResourceSourceChoice | null {
+  if (need <= 0) return null;
+  const options = withSlotIndices(state, 'iron', ironSources(state as unknown as GameState));
+  if (options.length < 2) return null;
+  return { options, defaultPlan: defaultIronSources(options, need) };
+}
+
+/** 已消耗的一桶商人啤酒(分组卖出已收组):显式 tileIndex 精确扣,缺省按规范化扣。 */
+export interface MerchantBarrelUse {
+  industry: IndustryType;
+  tileIndex?: number;
+}
+
+/**
+ * 扣除已用桶后,该商人位对 industry 仍可用的桶格下标(升序)。
+ * 扣减与 engine takeMerchantBarrel 同语义:显式 tileIndex 精确扣;
+ * 缺省规范化扣——精确图标格优先于万能格,各自从右取。
+ */
+export function merchantBarrelOptions(
+  m: { tiles: MerchantTile[]; barrels: boolean[] },
+  industry: IndustryType,
+  uses: readonly MerchantBarrelUse[],
+): number[] {
+  const barrels = [...m.barrels];
+  for (const u of uses) {
+    let bi = -1;
+    if (u.tileIndex !== undefined) {
+      if (barrels[u.tileIndex] === true) bi = u.tileIndex;
+    } else {
+      for (let i = barrels.length - 1; i >= 0; i -= 1) {
+        if (barrels[i] === true && m.tiles[i] === u.industry) {
+          bi = i;
+          break;
+        }
+      }
+      if (bi === -1) {
+        for (let i = barrels.length - 1; i >= 0; i -= 1) {
+          if (barrels[i] === true && m.tiles[i] === 'any') {
+            bi = i;
+            break;
+          }
+        }
+      }
+    }
+    if (bi >= 0) barrels[bi] = false;
+  }
+  const out: number[] = [];
+  for (let i = 0; i < barrels.length; i += 1) {
+    if (barrels[i] === true && (m.tiles[i] === 'any' || m.tiles[i] === industry)) out.push(i);
+  }
+  return out;
+}
+
+/** 规范化默认桶格(精确图标格优先,其次万能格,各自从右取——同 takeMerchantBarrel 缺省分支)。 */
+export function defaultMerchantBarrelIndex(
+  m: { tiles: MerchantTile[]; barrels: boolean[] },
+  industry: IndustryType,
+  options: readonly number[],
+): number | undefined {
+  for (let k = options.length - 1; k >= 0; k -= 1) {
+    if (m.tiles[options[k]!] === industry) return options[k]!;
+  }
+  for (let k = options.length - 1; k >= 0; k -= 1) {
+    if (m.tiles[options[k]!] === 'any') return options[k]!;
+  }
+  return undefined;
+}
+
+/**
+ * 商人桶格显式选择:可用桶格 ≥2 才是真实选择(返回候选格与规范化默认格);
+ * 0/1 格返回 null(自动解析,不附 tileIndex)。
+ */
+export function explicitMerchantBarrel(
+  m: { tiles: MerchantTile[]; barrels: boolean[] },
+  industry: IndustryType,
+  uses: readonly MerchantBarrelUse[],
+): { options: number[]; defaultIndex: number } | null {
+  const options = merchantBarrelOptions(m, industry, uses);
+  if (options.length < 2) return null;
+  const defaultIndex = defaultMerchantBarrelIndex(m, industry, options);
+  return defaultIndex === undefined ? null : { options, defaultIndex };
+}
+
+// ---------------------------------------------------------------------------
 // Sell 分组选择器(2026-08-21):建筑 → 贸易商 → 逐桶啤酒源,一组组拼自定义 sales
 // ---------------------------------------------------------------------------
 
@@ -568,7 +759,7 @@ export interface BreweryRef extends SlotRef {
 /** 已收卖出组的啤酒占用:酒厂按槽计数,商人桶按使用记录(后续组扣减可选范围用)。 */
 export interface CommittedBeerUses {
   breweries: Map<string, number>;
-  merchantUses: { merchant: MerchantId; industry: IndustryType }[];
+  merchantUses: (MerchantBarrelUse & { merchant: MerchantId })[];
 }
 
 /** 从已收卖出组统计啤酒占用。 */
@@ -582,7 +773,13 @@ export function committedBeerFromGroups(
     const ind = state.board.slots[g.tile.location]?.[g.tile.slotIndex]?.tile.industry;
     for (const b of g.beer) {
       if (b.kind === 'merchant') {
-        if (ind !== undefined) merchantUses.push({ merchant: g.merchant, industry: ind });
+        if (ind !== undefined) {
+          merchantUses.push({
+            merchant: g.merchant,
+            industry: ind,
+            ...(b.tileIndex !== undefined ? { tileIndex: b.tileIndex } : {}),
+          });
+        }
       } else {
         const k = `${b.location}:${b.slotIndex}`;
         breweries.set(k, (breweries.get(k) ?? 0) + 1);
@@ -592,22 +789,13 @@ export function committedBeerFromGroups(
   return { breweries, merchantUses };
 }
 
-/** 商人桶扣除已占位后的剩余可用(与引擎 takeMerchantBarrel 同序:最右可用格先耗)。 */
+/** 商人桶扣除已占位后是否仍有可用(与 merchantBarrelOptions 同一份扣减语义)。 */
 export function merchantBarrelRemaining(
   m: { tiles: ('any' | 'cotton' | 'manufacturer' | 'pottery' | 'blank')[]; barrels: boolean[] },
   industry: IndustryType,
-  uses: IndustryType[],
+  uses: readonly MerchantBarrelUse[],
 ): boolean {
-  const barrels = [...m.barrels];
-  for (const u of uses) {
-    for (let i = barrels.length - 1; i >= 0; i -= 1) {
-      if (barrels[i] === true && (m.tiles[i] === 'any' || m.tiles[i] === u)) {
-        barrels[i] = false;
-        break;
-      }
-    }
-  }
-  return barrels.some((b, i) => b && (m.tiles[i] === 'any' || m.tiles[i] === industry));
+  return merchantBarrelOptions(m, industry, uses).length > 0;
 }
 
 /** 啤酒源候选:商人桶(有桶时至多 1)+ 自家酒厂(无需连通)+ 对手酒厂(须连通用酒处)。
@@ -635,12 +823,10 @@ export function beerSourcesFor(
   }
   // 商人桶按板块格绑定:须存在"收该产业(精确图标或万能)的板块格"旁的剩桶,
   // 且未被已收组占位(与引擎同序扣减)
-  const usedIndustries = (committed?.merchantUses ?? [])
-    .filter((u) => u.merchant === merchant)
-    .map((u) => u.industry);
+  const usedBarrels = (committed?.merchantUses ?? []).filter((u) => u.merchant === merchant);
   const merchantBarrel =
     merchantHasUsableBarrel(state.merchants[merchant], industry) &&
-    merchantBarrelRemaining(state.merchants[merchant], industry, usedIndustries);
+    merchantBarrelRemaining(state.merchants[merchant], industry, usedBarrels);
   return { merchantBarrel, own, opponent };
 }
 

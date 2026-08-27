@@ -5,18 +5,24 @@
  * 关键不变量：匹配函数一律返回入参数组里的**同一个对象**（toBe），绝不新构造。
  */
 import { describe, expect, it } from 'vitest';
-import { enumerateActions, newGame } from '@brass/engine';
+import { enumerateActions, newGame, tileDef } from '@brass/engine';
 import type { Action, Card, GameState, IndustryType } from '@brass/engine';
+import { filterStateFor } from '@brass/protocol';
+import type { FilteredState } from '@brass/protocol';
 import {
   actionsForCard,
   buildCandidatesAt,
   buildSlotTargets,
   describeAction,
   developOptions,
+  explicitCoalSources,
+  explicitIronSources,
+  explicitMerchantBarrel,
   extendableLinks,
   matchDevelop,
   matchNetwork,
   matchScout,
+  merchantBarrelOptions,
   normalizeRemovals,
   sellCandidatesAt,
   sellOptions,
@@ -374,5 +380,128 @@ describe('reconstructEraLog(行动日志补全)', () => {
     expect(out.map((e) => (e.action as { cardId: string }).cardId)).toEqual([
       `r1-${order[0]}`, `r1-${order[1]}`, `r1-${order[2]}`, `r1-${order[3]}`, `r2-${order[0]}`,
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 资源来源选择器(2026-08-27):唯一选项自动解析(null),≥2 个真实选项才给候选。
+// ---------------------------------------------------------------------------
+describe('explicitCoalSources / explicitIronSources(资源来源选择)', () => {
+  const withCoalFixture = (mines: { location: string; slotIndex: number; resources: number }[]): FilteredState => {
+    const s = filterStateFor(newGame(4, 42), 0);
+    const coal = tileDef('coal', 1)!;
+    for (const m of mines) {
+      s.board.slots[m.location]![m.slotIndex] = {
+        tile: coal,
+        player: 1,
+        flipped: false,
+        resources: m.resources,
+      };
+    }
+    s.board.links.push({ linkIndex: 26, player: 1, era: 'canal' }); // dudley—wolverhampton
+    return s;
+  };
+  const dudleyMine = { location: 'dudley', slotIndex: 0, resources: 1 };
+  const wolvMine = { location: 'wolverhampton', slotIndex: 1, resources: 2 };
+
+  it('连通煤矿 0 个 → null(只能市场买,不打扰)', () => {
+    const s = withCoalFixture([]);
+    expect(explicitCoalSources(s, 0, 'dudley', 1)).toBeNull();
+  });
+
+  it('连通煤矿恰好 1 个 → null(自动:该矿取尽+市场补)', () => {
+    const s = withCoalFixture([dudleyMine]);
+    expect(explicitCoalSources(s, 0, 'dudley', 1)).toBeNull();
+  });
+
+  it('连通煤矿 ≥2 个 → 候选按距离序,默认=最近优先取尽', () => {
+    const s = withCoalFixture([dudleyMine, wolvMine]);
+    const choice = explicitCoalSources(s, 0, 'dudley', 1);
+    expect(choice).not.toBeNull();
+    expect(choice!.options).toEqual([
+      { location: 'dudley', slotIndex: 0, available: 1, owner: 1 },
+      { location: 'wolverhampton', slotIndex: 1, available: 2, owner: 1 },
+    ]);
+    expect(choice!.defaultPlan).toEqual([{ location: 'dudley', slotIndex: 0, count: 1 }]);
+    // 需求超过最近矿余量 → 默认跨源取尽,余量留市场
+    const choice2 = explicitCoalSources(s, 0, 'dudley', 3);
+    expect(choice2!.defaultPlan).toEqual([
+      { location: 'dudley', slotIndex: 0, count: 1 },
+      { location: 'wolverhampton', slotIndex: 1, count: 2 },
+    ]);
+  });
+
+  const withIronFixture = (works: { slotIndex: number; resources: number }[]): FilteredState => {
+    const s = filterStateFor(newGame(4, 42), 0);
+    const iron = tileDef('iron', 1)!;
+    for (const w of works) {
+      s.board.slots['coalbrookdale']![w.slotIndex] = {
+        tile: iron,
+        player: 1,
+        flipped: false,
+        resources: w.resources,
+      };
+    }
+    return s;
+  };
+
+  it('铁厂 0/1 个 → null;≥2 个 → 候选按字典序+槽位序', () => {
+    expect(explicitIronSources(withIronFixture([]), 1)).toBeNull();
+    expect(explicitIronSources(withIronFixture([{ slotIndex: 0, resources: 2 }]), 1)).toBeNull();
+    const choice = explicitIronSources(
+      withIronFixture([
+        { slotIndex: 0, resources: 1 },
+        { slotIndex: 1, resources: 2 },
+      ]),
+      2,
+    );
+    expect(choice).not.toBeNull();
+    expect(choice!.options.map((o) => o.slotIndex)).toEqual([0, 1]);
+    // 规范化:首个"足够"者供全部(槽 1 有 2 块 ≥ 需求 2)
+    expect(choice!.defaultPlan).toEqual([{ location: 'coalbrookdale', slotIndex: 1, count: 2 }]);
+  });
+
+  it('铁:无单厂足够 → 默认按序混源', () => {
+    const choice = explicitIronSources(
+      withIronFixture([
+        { slotIndex: 0, resources: 1 },
+        { slotIndex: 1, resources: 1 },
+      ]),
+      2,
+    );
+    expect(choice!.defaultPlan).toEqual([
+      { location: 'coalbrookdale', slotIndex: 0, count: 1 },
+      { location: 'coalbrookdale', slotIndex: 1, count: 1 },
+    ]);
+  });
+
+  it('需求为 0 → null(无需选择)', () => {
+    const s = withCoalFixture([dudleyMine, wolvMine]);
+    expect(explicitCoalSources(s, 0, 'dudley', 0)).toBeNull();
+    expect(explicitIronSources(withIronFixture([{ slotIndex: 0, resources: 1 }, { slotIndex: 1, resources: 1 }]), 0)).toBeNull();
+  });
+});
+
+describe('explicitMerchantBarrel(商人桶格选择)', () => {
+  const m = { tiles: ['cotton', 'any'] as const, barrels: [true, true] };
+  const mTyped = { tiles: [...m.tiles] as ('any' | 'cotton' | 'manufacturer' | 'pottery' | 'blank')[], barrels: [...m.barrels] };
+
+  it('可用桶格 ≥2 → 候选+规范化默认(精确图标格优先)', () => {
+    const choice = explicitMerchantBarrel(mTyped, 'cotton', []);
+    expect(choice).toEqual({ options: [0, 1], defaultIndex: 0 }); // 棉花格优先于万能格
+  });
+
+  it('可用桶格仅 1 个 → null(自动,不附 tileIndex)', () => {
+    expect(explicitMerchantBarrel(mTyped, 'pottery', [])).toBeNull(); // 只有万能格收陶
+    // 已收组精确扣掉棉花格 → 只剩万能格
+    expect(explicitMerchantBarrel(mTyped, 'cotton', [{ industry: 'cotton', tileIndex: 0 }])).toBeNull();
+    // 已收组规范化扣(精确优先)→ 同样只剩万能格
+    expect(explicitMerchantBarrel(mTyped, 'cotton', [{ industry: 'cotton' }])).toBeNull();
+  });
+
+  it('规范化扣减:无精确格时才耗万能格', () => {
+    const opts = merchantBarrelOptions(mTyped, 'cotton', [{ industry: 'manufacturer' }]);
+    // 制造货用桶:无精确格 → 规范化耗万能格(格 1),剩棉花格
+    expect(opts).toEqual([0]);
   });
 });
