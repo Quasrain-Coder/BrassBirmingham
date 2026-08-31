@@ -1,7 +1,15 @@
 /**
  * jsb-v20260831：启发式 AI 调优版——基于 lm-heuristic-v20260829
- * （brass-assistant 2026-08-29 重构版移植），叠加本项目自研引导：
- * 可售板块收官窗口（按 VP/啤酒/造价加权）+ 库存队列衰减。
+ * （brass-assistant 2026-08-29 重构版移植），叠加本项目自研引导。
+ *
+ * 配置定案（C6 消融链 ×500 终验，2026-08-31：62.6% vs 母体 36.2%，平 6，
+ * 座位均分 111.4 vs 107.5）：
+ * - 有效项（相对母体的全部差异）：sell.canalEndL1Bonus 3.0（运河末 L1 清仓）、
+ *   sell.railLateVpScale 0.3（铁路末段高价值兑现）、network.railCertaintyBonus
+ *   0.7（铁路 Link 确定性溢价——低值建筑不如修高分路）。
+ * - 净负项（代码保留、默认关闭）：收官窗系列（sellWindow/resourceWindow/
+ *   breweryWindow）、库存队列衰减、流派跳级罚、对手改建定价；ownOverbuildVpLoss
+ *   与 develop.planBonus 回母体值（1.0 / 0.3）。
  * （建酒厂+出售 combo 经消融外战验证为负优化——需求信号与上游
  * breweryFlip 重复计数诱导过度建酒厂，38% 胜率，已移除。）
  * （engine/src/ai/heuristic_ai/，15 个 Rust 文件）的单文件 TS 移植。
@@ -77,7 +85,7 @@ const CFG = {
     moneyBase: 0.12,
     incomeBase: 0.25,
     flex: 0.8,
-    ownOverbuildVpLoss: 0.5,
+    ownOverbuildVpLoss: 1.0,
     // unflippedVpShare / leafIncomeScale 属 MCTS 叶评估器，未移植。
   },
   era: {
@@ -121,24 +129,30 @@ const CFG = {
     planNoMerchant: 0.15,
     planNoBeer: 0.3,
     planReady: 0.7,
-    // ── 以下为插件新增（上游无）："没动数翻面就别造"引导 ──
-    /** 收官窗口基准动数：可售板块翻面期望打满所需的时代剩余动数（造完还需 sell 动）。 */
-    sellWindowFull: 2.0,
+    // ── 以下为插件新增（上游无）。C6 消融链 ×500 终验（2026-08-31，62.6% vs
+    // 母体 36.2%）证明：收官窗/库存衰减复杂机制全是净负贡献，默认全部关闭；
+    // 有效的只有 sell/network 里三个加量常数项。代码保留供后续调参。 ──
+    /** 收官窗口基准动数：可售板块翻面期望打满所需的时代剩余动数（造完还需 sell 动）。
+     * 0=整块关闭（默认关闭：×500 消融为净负）。 */
+    sellWindowFull: 0,
     /** 窗口加权：每点需啤酒 / 每点 VP 面值 / 每 £1 造价 追加的窗口动数。 */
     sellWindowPerBeer: 1.0,
     sellWindowPerVp: 0.3,
     sellWindowPerCost: 0.1,
-    /** 库存队列衰减底数：按己方未翻面可售板块的 VP 面值（/sellQueueVpNorm）加权。 */
-    sellQueueDecay: 0.8,
+    /** 库存队列衰减底数：按己方未翻面可售板块的 VP 面值（/sellQueueVpNorm）加权。
+     * 1=无衰减（默认：×500 消融为净负）。 */
+    sellQueueDecay: 1.0,
     /** 队列衰减的 VP 归一（衰减指数 = 库存 VP 总和 / 本值）。 */
     sellQueueVpNorm: 8.0,
     /** 队列衰减的时代门控(0=关闭,全时代生效;0.6=时代进度>60%才生效——
      * 中期库存是正常产能,末段才该惩罚)。 */
-    sellQueueEraGate: 0.6,
-    /** 资源板(煤/铁)收官窗口动数（0=关闭；翻面靠全场消耗,窗口要求比可售板更宽）。 */
-    resourceWindowFull: 8.0,
-    /** 酒厂收官窗口动数（0=关闭；翻面靠全场喝酒,末轮建=桶必剩）。 */
-    breweryWindowFull: 3.0,
+    sellQueueEraGate: 0,
+    /** 资源板(煤/铁)收官窗口动数（0=关闭,默认；翻面靠全场消耗,窗口要求比可售板更宽）。 */
+    resourceWindowFull: 0,
+    /** 酒厂收官窗口动数（0=关闭,默认；翻面靠全场喝酒,末轮建=桶必剩）。
+     * 关闭后"首桶豁免"逻辑随之失效（hint 3 的酒桶留存由 railCertaintyBonus 等
+     * 间接覆盖）。 */
+    breweryWindowFull: 0,
   },
   build: {
     unaffordablePerPound: 0.3,
@@ -173,15 +187,15 @@ const CFG = {
     freeRidingThreshold: 0.5,
     freeRidingBonus: 0.8,
     planBonus: 0.5,
-    /** 流派跳级罚(0=关闭):plan 产业场上已有板块时,再建其 L1/L2 低级板的罚分
-     * (棉流:只建 1 块 L1 棉,其余研发跳级直通高级——build vs develop 的抉择砝码)。 */
-    planSkipLowPenalty: 1.5,
+    /** 流派跳级罚(0=关闭,默认：×500 消融为净负):plan 产业场上已有板块时,
+     * 再建其 L1/L2 低级板的罚分。 */
+    planSkipLowPenalty: 0,
     /** 触发流派跳级罚的最高板块等级(含)。 */
     planSkipLowMaxLevel: 2,
-    /** 改建对手煤/铁厂的拆除定价系数(翻面=全额 VP+半收入流,未翻=半 VP)。 */
-    opponentOverbuildDeny: 1.0,
+    /** 改建对手煤/铁厂的拆除定价系数(0=关闭,默认：×500 消融为净负)。 */
+    opponentOverbuildDeny: 0,
     /** 改建目标是当前 VP 领先者时的追加狙击奖。 */
-    opponentOverbuildLeaderBonus: 1.5,
+    opponentOverbuildLeaderBonus: 0,
     railLateBeerBonus: 1.2,
   },
   network: {
@@ -196,8 +210,9 @@ const CFG = {
     doubleTempoOther: 0.6,
     doubleFarmLockBonus: 0.8,
     doubleSurchargeWeight: 1.0,
-    /** 铁路 Link 每当前图标的确定性溢价（时代末必得分,对抗建筑翻面不确定性）。 */
-    railCertaintyBonus: 0.35,
+    /** 铁路 Link 每当前图标的确定性溢价（时代末必得分,对抗建筑翻面不确定性）。
+     * C6 ×500 终验有效项：0.7（hint 2：铁路低值建筑不如修高分路）。 */
+    railCertaintyBonus: 0.7,
   },
   develop: {
     railEraTile: 0.35,
@@ -210,7 +225,7 @@ const CFG = {
     ironPriceMarginalBonus: 0.5,
     ironPriceExpensivePenalty: -1.5,
     canalBonus: 0.15,
-    planBonus: 0.6,
+    planBonus: 0.3,
     buildableCardBonus: 0.3,
     ironScarcityCost: 0.6,
     secondTargetScale: 0.4,
@@ -226,9 +241,13 @@ const CFG = {
     // tileIncomeShare 在上游仅用于售卖目标排序（本插件对 engine 枚举的
     // 组合评分，用不到），urgency/baseline/stream/vpScale 如下。
     urgencyBonus: 3.0,
-    /** 运河末 L1 可售板块清仓奖励/块（未翻将被移除,纯亏;hint:运河末没翻面=亏）。 */
-    canalEndL1Bonus: 2.0,
+    /** 运河末 L1 可售板块清仓奖励/块（未翻将被移除,纯亏;hint:运河末没翻面=亏）。
+     * C6 ×500 终验有效项：3.0。 */
+    canalEndL1Bonus: 3.0,
     railLateBaselineBonus: 1.2,
+    /** 铁路末段每点待售 VP 面值的兑现奖(hint 1:终局高价值未翻=纯亏,
+     * 末段"卖掉贵的"优于"再建新的"——0=关闭)。C6 ×500 终验有效项：0.3。 */
+    railLateVpScale: 0.3,
     incomeStreamShare: 0.5,
     vpScaleFloor: 0.1,
     vpScaleSpan: 0.5,
@@ -737,6 +756,17 @@ function ownedBeerBarrels(state: GameState, pid: PlayerIndex): number {
       if (t && t.player === pid && t.tile.industry === 'brewery' && !t.flipped) {
         n += t.resources;
       }
+    }
+  }
+  return n;
+}
+
+/** 场上己方未翻面酒厂数量（hint 3：留 1 桶进铁路开局双修抢分的"在场"证据）。 */
+function ownUnflippedBreweryCount(state: GameState, pid: PlayerIndex): number {
+  let n = 0;
+  for (const slots of Object.values(state.board.slots)) {
+    for (const t of slots) {
+      if (t && t.player === pid && t.tile.industry === 'brewery' && !t.flipped) n += 1;
     }
   }
   return n;
@@ -1293,13 +1323,18 @@ function scoreBuildOp(state: GameState, ctx: EvalCtx, ind: IndustryType, loc: Lo
   }
   if (ind === 'brewery' && CFG.flip.breweryWindowFull > 0) {
     // 酒厂收官窗口:翻面靠全场喝酒,末轮建=桶必剩=白送(hint:没动数翻面就别造)。
-    const actionsLeft = Math.max(0, ctx.roundsRemaining * 2 - 1);
-    flipProb *= clamp01(actionsLeft / CFG.flip.breweryWindowFull);
+    // 但首个未翻酒厂免折价(hint 3 后半句:留 1 桶进铁路,开局双修道路抢分——
+    // 桶在铁路时代是 15 块双轨的啤酒弹药,比时代末多翻一个低级酒厂值钱)。
+    if (ownUnflippedBreweryCount(state, ctx.pid) > 0) {
+      const actionsLeft = Math.max(0, ctx.roundsRemaining * 2 - 1);
+      flipProb *= clamp01(actionsLeft / CFG.flip.breweryWindowFull);
+    }
   }
-  if (sellableInd) {
+  if (sellableInd && CFG.flip.sellWindowFull > 0) {
     // "没动数翻面就别造"（插件新增）：可售板块翻面需要造完后还有 sell 动——
     // 收官窗口按板块"身价"加权：VP 面值越高、需啤酒越多、造价越贵，
     // 要求的剩余动数窗口越宽（贵的板砸手里代价大、多酒板收官准备长）。
+    // （sellWindowFull=0 整块关闭 = 消融基线。）
     const w = CFG.flip;
     const need =
       w.sellWindowFull +
@@ -1639,7 +1674,18 @@ function scoreSellOp(state: GameState, ctx: EvalCtx, action: Extract<Action, { t
   // 时代末紧迫：运河末 1 级可售板块不翻就永久消失；铁路末卖货即收官。
   if (isEraEndgame(ctx)) p.strategic += w.urgencyBonus;
   else if (ctx.phase === 'rail-late') p.strategic += w.railLateBaselineBonus;
-  // 运河末 L1 清仓：按本行动翻面的 L1 块数加奖（除酒厂——留 1 桶进铁路开局双修抢分）。
+  // 铁路末段高价值兑现奖：终局未翻的高 VP 板块是纯亏（hint 1），
+  // 末段把贵的卖掉优先于再建新的。
+  if (ctx.phase === 'rail-late' && w.railLateVpScale > 0) {
+    let sellVp = 0;
+    for (const sale of action.sales) {
+      const placed = state.board.slots[sale.location]?.[sale.slotIndex];
+      if (placed) sellVp += placed.tile.vp;
+    }
+    p.strategic += sellVp * w.railLateVpScale;
+  }
+  // 运河末 L1 清仓：按本行动翻面的 L1 块数加奖（酒厂不可售,天然豁免——
+  // 留 1 桶进铁路开局双修抢分,见 build 的酒厂窗豁免）。
   if (isCanalPhase(ctx.phase) && isEraEndgame(ctx)) {
     let l1 = 0;
     for (const sale of action.sales) {
