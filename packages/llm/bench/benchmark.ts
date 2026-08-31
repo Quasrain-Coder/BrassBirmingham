@@ -13,6 +13,8 @@ import { HeuristicAgent } from '../src/heuristic.js';
 import { createAgent } from '../src/agents/registry.js';
 
 const GAMES = Number(process.argv[2] ?? 30);
+/** argv[3]: '4' 只跑 4p、'2' 只跑 2p（缺省两者皆跑）。 */
+const ONLY = process.argv[3];
 /** BENCH_SPEC=builtin:jsb-v20260831 时用插件跑（缺省 = HeuristicAgent 直连）。 */
 const SPEC = process.env['BENCH_SPEC'];
 
@@ -59,5 +61,5 @@ async function stats(players: 2 | 4) {
   );
 }
 
-await stats(4);
-await stats(2);
+if (ONLY !== '2') await stats(4);
+if (ONLY !== '4') await stats(2);
