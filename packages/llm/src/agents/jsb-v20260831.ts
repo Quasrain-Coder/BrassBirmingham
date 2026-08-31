@@ -1,7 +1,9 @@
 /**
  * jsb-v20260831：启发式 AI 调优版——基于 lm-heuristic-v20260829
  * （brass-assistant 2026-08-29 重构版移植），叠加本项目自研引导：
- * 可售板块收官窗口（按 VP/啤酒/造价加权）+ 库存队列衰减 + 建酒厂+出售 combo。
+ * 可售板块收官窗口（按 VP/啤酒/造价加权）+ 库存队列衰减。
+ * （建酒厂+出售 combo 经消融外战验证为负优化——需求信号与上游
+ * breweryFlip 重复计数诱导过度建酒厂，38% 胜率，已移除。）
  * （engine/src/ai/heuristic_ai/，15 个 Rust 文件）的单文件 TS 移植。
  *
  * 与上游模块一一对应的分节：
@@ -165,11 +167,6 @@ const CFG = {
     freeRidingBonus: 0.8,
     planBonus: 0.5,
     railLateBeerBonus: 1.2,
-    // ── 以下为插件新增（玩家技巧）：建酒厂+出售 combo ──
-    /** 每桶"新桶恰好供库存出售消耗"的奖励（运河 1 桶/铁路 2 桶，rail 放 2 酒卖 2 酒最赚）。 */
-    breweryComboPerMatch: 0.6,
-    /** 无库存需求时占用乡村酒厂位的罚分（该位是收官 combo 储备）。 */
-    farmBreweryReservePenalty: 0.8,
   },
   network: {
     accessPerLocationCard: 0.6,
@@ -1244,22 +1241,6 @@ function scoreBuildOp(state: GameState, ctx: EvalCtx, ind: IndustryType, loc: Lo
   if (isResource) addParts(p, marketValue(state, ctx, ind, loc, tile.resourcesPlaced));
   addParts(p, beerEconomy(state, ctx, ind, loc, tile.beerToFlip));
 
-  // 建酒厂+出售 combo（插件新增，玩家技巧）：
-  // 有未售库存时，新桶(运河1/铁路2)恰好供当回合"建酒厂+出售"消耗——
-  // 按未被现有存酒覆盖的需求桶数给奖;乡村酒厂位是"随时可建"的收官储备,
-  // 无需求时提前占用等于浪费这条 combo 路;改建自家酒厂刷新桶位时
-  // combo 奖励自然抵消改建罚分。
-  if (ind === 'brewery') {
-    const barrels = BREWERY_BARRELS[state.era];
-    const uncovered = Math.max(
-      0,
-      sellableBeerDemand(state, ctx.pid) - ownedBeerBarrels(state, ctx.pid),
-    );
-    const matched = Math.min(barrels, uncovered);
-    if (matched > 0) p.strategic += matched * CFG.build.breweryComboPerMatch;
-    const isFarm = loc === 'farm-north' || loc === 'farm-south';
-    if (isFarm && matched === 0) p.risk -= CFG.build.farmBreweryReservePenalty;
-  }
 
   // 免费搭车：建造投入从版面矿/铁厂取（消耗对手方块还帮他们翻面）。
   const ratio = resourceSourceRatio(state, ctx.pid, tile, loc);
@@ -1863,7 +1844,7 @@ const plugin: AgentPlugin = {
   meta: {
     name: 'jsb-v20260831',
     version: '2.0.0',
-    description: '启发式评分 AI 调优版（lm-0829 移植 + 收官窗口/库存衰减/酒厂 combo 自研引导）',
+    description: '启发式评分 AI 调优版（lm-0829 移植 + 收官窗口/库存衰减自研引导）',
     author: 'brass-birmingham',
   },
   create: () => {
@@ -1871,8 +1852,6 @@ const plugin: AgentPlugin = {
     // 在 create 时读取（同进程多配置扫描：每局重新 merge）。
     const tuneEnv = process.env['BRASS_TUNE_FLIP'];
     if (tuneEnv) Object.assign(CFG.flip, JSON.parse(tuneEnv));
-    const tuneBuild = process.env['BRASS_TUNE_BUILD'];
-    if (tuneBuild) Object.assign(CFG.build, JSON.parse(tuneBuild));
     // 本引擎状态无 develops_in_canal/rail 字段（上游 develop 次数护栏的输入），
     // 由实例按自身决策追踪；只统计自己的 develop 行动，语义与上游一致。
     const develops: DevelopCounts = { canal: 0, rail: 0 };
