@@ -9,6 +9,8 @@ import { createAgent } from '../src/agents/registry.js';
 const SPEC_A = process.argv[2] ?? 'builtin:lm-heuristic-v20260826';
 const SPEC_B = process.argv[3] ?? 'builtin:jsb-v20260831';
 const GAMES = Number(process.argv[4] ?? 40);
+/** argv[5]: 种子起点（并发分段用，缺省 0）。 */
+const SEED0 = Number(process.argv[5] ?? 0);
 
 async function playOne(seed: number): Promise<{ vps: number[]; specs: string[] }> {
   // 4p：A/B/A/B；奇数局交换首座位，防顺位偏差
@@ -31,7 +33,7 @@ const sum: Record<string, { vp: number; n: number; wins: number }> = {};
 for (const s of [SPEC_A, SPEC_B]) sum[s] = { vp: 0, n: 0, wins: 0 };
 const t0 = Date.now();
 for (let g = 0; g < GAMES; g++) {
-  const { vps, specs } = await playOne(g);
+  const { vps, specs } = await playOne(SEED0 + g);
   const winVp = Math.max(...vps);
   console.log(`game ${g}: ${specs.map((s, i) => `${s === SPEC_A ? 'A' : 'B'}=${vps[i]}`).join(' ')}`);
   for (let i = 0; i < 4; i++) {
