@@ -32,7 +32,7 @@ async function main(): Promise<void> {
     const client = new AnthropicClient({ apiKey: anthropicKey });
     options.aiAgentFactory = (_seat, difficulty) => new LLMAgent(client, difficulty);
   } else {
-    // 插件式 AI（agents/ 单文件注册制）：BRASS_AI_SPEC 选择，缺省 heuristic-v20260829
+    // 插件式 AI（agents/ 单文件注册制）：BRASS_AI_SPEC 选择，缺省 jsb-v20260831
     const spec = process.env['BRASS_AI_SPEC'] || DEFAULT_SPEC;
     console.warn(
       `[brass] ANTHROPIC_API_KEY 未设置：AI 座位用内置插件 ${spec}（可选：${listAgentPlugins().map((m) => `builtin:${m.name}`).join(', ')}），不产生 LLM 调用`,

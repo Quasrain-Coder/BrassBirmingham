@@ -12,7 +12,7 @@ import {
 } from '@brass/engine';
 import { createAgent } from '../src/agents/registry.js';
 
-const SPEC = process.argv[2] ?? 'builtin:heuristic-v20260829';
+const SPEC = process.argv[2] ?? 'builtin:jsb-v20260831';
 const GAMES = Number(process.argv[3] ?? 20);
 
 interface UnflippedRec {

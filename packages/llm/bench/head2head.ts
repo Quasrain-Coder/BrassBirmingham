@@ -1,13 +1,13 @@
 /**
  * 插件对抗基准：两个 AI spec 轮换座位同局对抗，输出各自人均 VP 与胜率。
  * 用法: npx vite-node bench/head2head.ts <specA> <specB> [局数=40]
- * 例: npx vite-node bench/head2head.ts builtin:heuristic-v20260826 builtin:heuristic-v20260829 40
+ * 例: npx vite-node bench/head2head.ts builtin:lm-heuristic-v20260826 builtin:jsb-v20260831 40
  */
 import { applyAction, enumerateActions, newGame } from '@brass/engine';
 import { createAgent } from '../src/agents/registry.js';
 
-const SPEC_A = process.argv[2] ?? 'builtin:heuristic-v20260826';
-const SPEC_B = process.argv[3] ?? 'builtin:heuristic-v20260829';
+const SPEC_A = process.argv[2] ?? 'builtin:lm-heuristic-v20260826';
+const SPEC_B = process.argv[3] ?? 'builtin:jsb-v20260831';
 const GAMES = Number(process.argv[4] ?? 40);
 
 async function playOne(seed: number): Promise<{ vps: number[]; specs: string[] }> {

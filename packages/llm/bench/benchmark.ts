@@ -13,7 +13,7 @@ import { HeuristicAgent } from '../src/heuristic.js';
 import { createAgent } from '../src/agents/registry.js';
 
 const GAMES = Number(process.argv[2] ?? 30);
-/** BENCH_SPEC=builtin:heuristic-v20260829 时用插件跑（缺省 = HeuristicAgent 直连）。 */
+/** BENCH_SPEC=builtin:jsb-v20260831 时用插件跑（缺省 = HeuristicAgent 直连）。 */
 const SPEC = process.env['BENCH_SPEC'];
 
 async function playOne(players: 2 | 4, seed: number): Promise<number[]> {

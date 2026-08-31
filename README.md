@@ -130,8 +130,9 @@ export default plugin;
 ```ts
 // registry.ts — one line:
 const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
-  'heuristic-v20260826': heuristicV20260826,
-  'heuristic-v20260829': heuristicV20260829,
+  'lm-heuristic-v20260826': lmV20260826,
+  'lm-heuristic-v20260829': lmV20260829,
+  'jsb-v20260831': jsbV20260831,
   'first-legal': firstLegal, // ← your line
 };
 ```
@@ -143,10 +144,11 @@ precedence when `ANTHROPIC_API_KEY` is set):
 BRASS_AI_SPEC=builtin:first-legal npm run dev -w @brass/server
 ```
 
-Built-ins ship as `heuristic-v20260826` / `heuristic-v20260829` (two
-generations of the ported brass-assistant heuristic, named by upstream
-date; `heuristic-v20260829` is the default — it beats v20260826
-70%–30% over 40 head-to-head games). An `exec:<path>`
+Built-ins: `lm-heuristic-v20260826` / `lm-heuristic-v20260829`
+(faithful ports of two generations of the Eluvk/brass-assistant
+heuristic, named by upstream date) and `jsb-v20260831` (our tuned fork
+of lm-0829 — endgame sell-window guidance + brewery-sell combo; the
+default, beating lm-0826 70%–30% over 40 head-to-head games). An `exec:<path>`
 transport for external single-file agents (Python/Rust, stdio NDJSON with
 the same payload shape) is planned next — `contract.ts` doubles as its
 protocol document.
