@@ -27,7 +27,7 @@ describe('agent plugin registry', () => {
     expect(resolveAgentPlugin('builtin:heuristic-v20260826').meta.name).toBe('heuristic-v20260826');
     expect(() => resolveAgentPlugin('builtin:nope')).toThrow(/未知 AI 插件/);
     expect(() => resolveAgentPlugin('exec:agents/foo.py')).toThrow(/尚未实现/);
-    expect(DEFAULT_SPEC).toBe('builtin:heuristic-v20260826');
+    expect(DEFAULT_SPEC).toBe('builtin:heuristic-v20260829');
   });
 
   it('createAgent 的 decide 返回 legal 集内行动（两版本相同契约）', async () => {

@@ -4,8 +4,8 @@ const BUILTIN_PLUGINS = {
     'heuristic-v20260826': heuristicV20260826,
     'heuristic-v20260829': heuristicV20260829,
 };
-/** 大厅缺省 AI（行为与插件化之前一致）。 */
-export const DEFAULT_SPEC = 'builtin:heuristic-v20260826';
+/** 大厅缺省 AI：v20260829（head2head 40 局 70% 胜率优于 v20260826，2026-08-31 切默认）。 */
+export const DEFAULT_SPEC = 'builtin:heuristic-v20260829';
 /** 已登记的内置插件清单（大厅可选列表/跑分用）。 */
 export function listAgentPlugins() {
     return Object.values(BUILTIN_PLUGINS).map((p) => p.meta);
