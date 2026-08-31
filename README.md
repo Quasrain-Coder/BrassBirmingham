@@ -91,7 +91,63 @@ npm test            # all workspaces (vitest + coverage)
 - [x] Browser multiplayer via an authoritative WebSocket server (rooms + short codes)
 - [x] Persistent game history (SQLite), replayable action logs, reconnect support
 - [x] AI seats powered by an LLM (Claude API), constrained to engine-enumerated legal moves (M3)
+- [x] Pluggable AI framework: one file per AI, two built-in heuristics (see below)
 - [ ] Post-game review report: per-move analysis with concrete alternatives and reasoning (M5)
+
+## Pluggable AI
+
+An AI is a **single-file plugin**. Contributing a new one takes two steps —
+no changes to the server or engine:
+
+1. Add one file in `packages/llm/src/agents/` that default-exports an
+   `AgentPlugin` (contract: `packages/llm/src/agents/contract.ts`).
+2. Register one line in `BUILTIN_PLUGINS` in
+   `packages/llm/src/agents/registry.ts`.
+
+The plugin receives everything it needs per decision — full `GameState`,
+its seat, the engine-enumerated legal actions, and an optional time
+budget — and returns one action from the legal set:
+
+```ts
+// packages/llm/src/agents/first-legal.ts — a minimal example plugin
+import type { AgentPlugin } from './contract.js';
+
+const plugin: AgentPlugin = {
+  meta: {
+    name: 'first-legal',
+    version: '1.0.0',
+    description: 'Toy example: always plays the first legal action',
+    author: 'you',
+  },
+  create: () => ({
+    decide: ({ legal }) => legal[0]!,
+  }),
+};
+
+export default plugin;
+```
+
+```ts
+// registry.ts — one line:
+const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
+  'heuristic-v1': heuristicV1,
+  'heuristic-v2': heuristicV2,
+  'first-legal': firstLegal, // ← your line
+};
+```
+
+Select it for AI seats with an env var (LLM path is unchanged and takes
+precedence when `ANTHROPIC_API_KEY` is set):
+
+```sh
+BRASS_AI_SPEC=builtin:first-legal npm run dev -w @brass/server
+```
+
+Built-ins ship as `heuristic-v1` / `heuristic-v2` (two generations of the
+ported brass-assistant heuristic; v1 is the default). An `exec:<path>`
+transport for external single-file agents (Python/Rust, stdio NDJSON with
+the same payload shape) is planned next — `contract.ts` doubles as its
+protocol document.
 
 ## Legal note
 
