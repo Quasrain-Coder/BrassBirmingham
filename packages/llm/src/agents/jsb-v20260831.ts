@@ -77,7 +77,7 @@ const CFG = {
     moneyBase: 0.12,
     incomeBase: 0.25,
     flex: 0.8,
-    ownOverbuildVpLoss: 1.0,
+    ownOverbuildVpLoss: 0.5,
     // unflippedVpShare / leafIncomeScale 属 MCTS 叶评估器，未移植。
   },
   era: {
@@ -132,6 +132,13 @@ const CFG = {
     sellQueueDecay: 0.8,
     /** 队列衰减的 VP 归一（衰减指数 = 库存 VP 总和 / 本值）。 */
     sellQueueVpNorm: 8.0,
+    /** 队列衰减的时代门控(0=关闭,全时代生效;0.6=时代进度>60%才生效——
+     * 中期库存是正常产能,末段才该惩罚)。 */
+    sellQueueEraGate: 0.6,
+    /** 资源板(煤/铁)收官窗口动数（0=关闭；翻面靠全场消耗,窗口要求比可售板更宽）。 */
+    resourceWindowFull: 8.0,
+    /** 酒厂收官窗口动数（0=关闭；翻面靠全场喝酒,末轮建=桶必剩）。 */
+    breweryWindowFull: 3.0,
   },
   build: {
     unaffordablePerPound: 0.3,
@@ -166,6 +173,15 @@ const CFG = {
     freeRidingThreshold: 0.5,
     freeRidingBonus: 0.8,
     planBonus: 0.5,
+    /** 流派跳级罚(0=关闭):plan 产业场上已有板块时,再建其 L1/L2 低级板的罚分
+     * (棉流:只建 1 块 L1 棉,其余研发跳级直通高级——build vs develop 的抉择砝码)。 */
+    planSkipLowPenalty: 1.5,
+    /** 触发流派跳级罚的最高板块等级(含)。 */
+    planSkipLowMaxLevel: 2,
+    /** 改建对手煤/铁厂的拆除定价系数(翻面=全额 VP+半收入流,未翻=半 VP)。 */
+    opponentOverbuildDeny: 1.0,
+    /** 改建目标是当前 VP 领先者时的追加狙击奖。 */
+    opponentOverbuildLeaderBonus: 1.5,
     railLateBeerBonus: 1.2,
   },
   network: {
@@ -180,6 +196,8 @@ const CFG = {
     doubleTempoOther: 0.6,
     doubleFarmLockBonus: 0.8,
     doubleSurchargeWeight: 1.0,
+    /** 铁路 Link 每当前图标的确定性溢价（时代末必得分,对抗建筑翻面不确定性）。 */
+    railCertaintyBonus: 0.35,
   },
   develop: {
     railEraTile: 0.35,
@@ -192,7 +210,7 @@ const CFG = {
     ironPriceMarginalBonus: 0.5,
     ironPriceExpensivePenalty: -1.5,
     canalBonus: 0.15,
-    planBonus: 0.3,
+    planBonus: 0.6,
     buildableCardBonus: 0.3,
     ironScarcityCost: 0.6,
     secondTargetScale: 0.4,
@@ -208,6 +226,8 @@ const CFG = {
     // tileIncomeShare 在上游仅用于售卖目标排序（本插件对 engine 枚举的
     // 组合评分，用不到），urgency/baseline/stream/vpScale 如下。
     urgencyBonus: 3.0,
+    /** 运河末 L1 可售板块清仓奖励/块（未翻将被移除,纯亏;hint:运河末没翻面=亏）。 */
+    canalEndL1Bonus: 2.0,
     railLateBaselineBonus: 1.2,
     incomeStreamShare: 0.5,
     vpScaleFloor: 0.1,
@@ -722,6 +742,17 @@ function ownedBeerBarrels(state: GameState, pid: PlayerIndex): number {
   return n;
 }
 
+/** 场上己方某产业的板块数（已建出的流派"在场"证据）。 */
+function countOwnTilesOnBoard(state: GameState, pid: PlayerIndex, ind: IndustryType): number {
+  let n = 0;
+  for (const slots of Object.values(state.board.slots)) {
+    for (const t of slots) {
+      if (t && t.player === pid && t.tile.industry === ind) n += 1;
+    }
+  }
+  return n;
+}
+
 /** 场上己方未翻面可售板块的 VP 面值总和（排队等收官资源的"库存"）。 */
 function ownUnflippedSellableVp(state: GameState, pid: PlayerIndex): number {
   let n = 0;
@@ -794,6 +825,57 @@ function resourceSourceRatio(
     free += Math.min(def.costIron, cubes);
   }
   return clamp01(free / needed);
+}
+
+
+/** 全场某资源方块总数（市场+所有未翻面矿余量）——引擎对手 overbuild 的合法性条件。 */
+function globalResourceCubes(state: GameState, ind: 'coal' | 'iron'): number {
+  let n = ind === 'coal' ? state.coalMarket : state.ironMarket;
+  for (const slots of Object.values(state.board.slots)) {
+    for (const t of slots) {
+      if (t && !t.flipped && t.tile.industry === ind) n += t.resources;
+    }
+  }
+  return n;
+}
+
+/**
+ * 本 build 会改建的对手煤/铁厂（引擎 resolveSlot 同款条件:全场该类方块为 0、
+ * 同产业、等级严格更低,解析序最高）。返回 null = 不构成对手改建。
+ */
+function opponentOverbuildTarget(
+  state: GameState,
+  pid: PlayerIndex,
+  industry: IndustryType,
+  loc: LocationId,
+  newTile: TileDef,
+): PlacedTile | null {
+  if (industry !== 'coal' && industry !== 'iron') return null;
+  if (globalResourceCubes(state, industry) !== 0) return null;
+  const defs = LOCATIONS[loc]?.slots ?? [];
+  const slots = state.board.slots[loc] ?? [];
+  for (let i = 0; i < defs.length; i++) {
+    if (!defs[i]!.industries.includes(industry)) continue;
+    const t = slots[i];
+    if (t && t.player !== pid && t.tile.industry === industry && t.tile.level < newTile.level) {
+      return t;
+    }
+  }
+  return null;
+}
+
+/** 当前 VP 领先者（不含 pid 自己；并列取序号最小,确定性）。 */
+function vpLeader(state: GameState, pid: PlayerIndex): PlayerIndex | null {
+  let best: PlayerIndex | null = null;
+  let bestVp = -1;
+  state.players.forEach((pl, i) => {
+    if (i === pid) return;
+    if (pl.vp > bestVp) {
+      bestVp = pl.vp;
+      best = i as PlayerIndex;
+    }
+  });
+  return best;
 }
 
 /**
@@ -1202,7 +1284,18 @@ function scoreBuildOp(state: GameState, ctx: EvalCtx, ind: IndustryType, loc: Lo
   }
 
   const sellableInd = ind === 'cotton' || ind === 'manufacturer' || ind === 'pottery';
+  const isResourceInd = ind === 'coal' || ind === 'iron';
   let flipProb = buildFlipProbability(state, ctx, ind, loc);
+  if (isResourceInd && CFG.flip.resourceWindowFull > 0) {
+    // 资源板收官窗口:翻面靠全场消耗,晚建的矿抽不干=白造(hint:铁路低值建筑不如修路)。
+    const actionsLeft = Math.max(0, ctx.roundsRemaining * 2 - 1);
+    flipProb *= clamp01(actionsLeft / CFG.flip.resourceWindowFull);
+  }
+  if (ind === 'brewery' && CFG.flip.breweryWindowFull > 0) {
+    // 酒厂收官窗口:翻面靠全场喝酒,末轮建=桶必剩=白送(hint:没动数翻面就别造)。
+    const actionsLeft = Math.max(0, ctx.roundsRemaining * 2 - 1);
+    flipProb *= clamp01(actionsLeft / CFG.flip.breweryWindowFull);
+  }
   if (sellableInd) {
     // "没动数翻面就别造"（插件新增）：可售板块翻面需要造完后还有 sell 动——
     // 收官窗口按板块"身价"加权：VP 面值越高、需啤酒越多、造价越贵，
@@ -1216,10 +1309,13 @@ function scoreBuildOp(state: GameState, ctx: EvalCtx, ind: IndustryType, loc: Lo
     const actionsLeft = Math.max(0, ctx.roundsRemaining * 2 - 1);
     flipProb *= clamp01(actionsLeft / Math.max(1, need));
     // 库存队列衰减：排队等翻面的库存按 VP 面值加权（贵库存更占收官资源）。
-    flipProb *= Math.pow(
-      w.sellQueueDecay,
-      ownUnflippedSellableVp(state, ctx.pid) / w.sellQueueVpNorm,
-    );
+    // 时代门控:eraFrac<=gate 前不衰减(中期库存是正常产能,末段才惩罚)。
+    const gate = w.sellQueueEraGate;
+    const gateFactor = gate <= 0 ? 1 : clamp01((gate - ctx.eraFrac) / gate);
+    const queueExponent =
+      (ownUnflippedSellableVp(state, ctx.pid) / w.sellQueueVpNorm) *
+      (gate <= 0 ? 1 : gateFactor);
+    flipProb *= Math.pow(w.sellQueueDecay, queueExponent);
   }
   const linkSelfValue = ownsLinkTouching(state, ctx.pid, loc)
     ? tile.linkIcons * flipProb * CFG.build.linkSelfValueShare
@@ -1250,9 +1346,30 @@ function scoreBuildOp(state: GameState, ctx: EvalCtx, ind: IndustryType, loc: Lo
   const over = overbuiltOwnTile(state, ctx.pid, ind, loc, slotIndex, tile);
   if (over) p.risk -= over.tile.vp * CFG.value.ownOverbuildVpLoss;
 
+  // 改建对手煤/铁厂（引擎规则:全场该类方块为 0 时同产业更高级可覆盖）——
+  // 定向拆除定价:翻面板=对手已得的时代末 VP 与收入流直接蒸发,未翻面板
+  // 抹掉其翻面期望与资源;目标是当前 VP 领先者时追加狙击奖。
+  const oppTarget = opponentOverbuildTarget(state, ctx.pid, ind, loc, tile);
+  if (oppTarget) {
+    const denyVp = oppTarget.flipped ? oppTarget.tile.vp : oppTarget.tile.vp * 0.5;
+    const denyIncome = oppTarget.flipped ? oppTarget.tile.incomeAdvance * 0.5 : 0;
+    p.strategic += (denyVp + denyIncome) * CFG.build.opponentOverbuildDeny;
+    if (vpLeader(state, ctx.pid) === oppTarget.player) {
+      p.strategic += CFG.build.opponentOverbuildLeaderBonus;
+    }
+  }
+
   // 计划（流派）软加成：运河早期先搭经济引擎，不急于锁定可售线。
   if (ctx.plan.count > 0 && ctx.plan.industry === ind && ctx.phase !== 'canal-early') {
     p.strategic += CFG.build.planBonus;
+    // 流派跳级:场上已有该产业板块时,再建低级板 = 重复投资(应研发跳级)。
+    if (
+      CFG.build.planSkipLowPenalty > 0 &&
+      tile.level <= CFG.build.planSkipLowMaxLevel &&
+      countOwnTilesOnBoard(state, ctx.pid, ind) > 0
+    ) {
+      p.strategic -= CFG.build.planSkipLowPenalty;
+    }
   }
 
   // 铁路末"有酒才建产业"：有酒可卖的收官建造加分。
@@ -1296,7 +1413,10 @@ function scoreNetworkLink(state: GameState, ctx: EvalCtx, linkIndex: number, cos
   const { current, future } = linkCurrentAndPotentialVps(state, linkIndex);
   // 时代权重：Rail-Early 铺的网是所有计分的载体，Link 更值钱；
   // 运河时代 networkW 仅 0.1（config.rs 照抄）。
-  const vp = (current + futureDiscount(ctx) * future) * ctx.profile.networkW;
+  let vp = (current + futureDiscount(ctx) * future) * ctx.profile.networkW;
+  // Link 确定性溢价（hint:铁路低值建筑不如修高分路——Link VP 时代末必得,
+  // 不像建筑要看翻面概率脸色;仅铁路时代,运河网反正要拆）。
+  if (!isCanalPhase(ctx.phase)) vp += current * CFG.network.railCertaintyBonus;
 
   // 探索先验：本时代头几条进空白区域的连接是溢价。
   const linksBuilt = state.board.links.filter((x) => x.player === ctx.pid).length;
@@ -1519,6 +1639,15 @@ function scoreSellOp(state: GameState, ctx: EvalCtx, action: Extract<Action, { t
   // 时代末紧迫：运河末 1 级可售板块不翻就永久消失；铁路末卖货即收官。
   if (isEraEndgame(ctx)) p.strategic += w.urgencyBonus;
   else if (ctx.phase === 'rail-late') p.strategic += w.railLateBaselineBonus;
+  // 运河末 L1 清仓：按本行动翻面的 L1 块数加奖（除酒厂——留 1 桶进铁路开局双修抢分）。
+  if (isCanalPhase(ctx.phase) && isEraEndgame(ctx)) {
+    let l1 = 0;
+    for (const sale of action.sales) {
+      const placed = state.board.slots[sale.location]?.[sale.slotIndex];
+      if (placed && placed.tile.level === 1) l1 += 1;
+    }
+    p.strategic += l1 * w.canalEndL1Bonus;
+  }
 
   return totalOf(ctx, p);
 }
@@ -1852,6 +1981,21 @@ const plugin: AgentPlugin = {
     // 在 create 时读取（同进程多配置扫描：每局重新 merge）。
     const tuneEnv = process.env['BRASS_TUNE_FLIP'];
     if (tuneEnv) Object.assign(CFG.flip, JSON.parse(tuneEnv));
+    // 全域调参（消融用）：BRASS_TUNE='{"network":{...},"sell":{...},"era":{"railLate":{...}}}'
+    const tuneAll = process.env['BRASS_TUNE'];
+    if (tuneAll) {
+      const o = JSON.parse(tuneAll) as Record<string, Record<string, unknown>>;
+      for (const [k, v] of Object.entries(o)) {
+        const sect = (CFG as unknown as Record<string, Record<string, unknown>>)[k];
+        if (sect && typeof sect === 'object') {
+          for (const [kk, vv] of Object.entries(v)) {
+            const sub = sect[kk];
+            if (sub && typeof sub === 'object') Object.assign(sub, vv);
+            else sect[kk] = vv;
+          }
+        }
+      }
+    }
     // 本引擎状态无 develops_in_canal/rail 字段（上游 develop 次数护栏的输入），
     // 由实例按自身决策追踪；只统计自己的 develop 行动，语义与上游一致。
     const develops: DevelopCounts = { canal: 0, rail: 0 };
