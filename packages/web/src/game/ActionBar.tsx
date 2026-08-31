@@ -3,9 +3,11 @@
  *
  * 核心规则：**提交的行动必须是 legalActions 中匹配到的条目本身**（draft.resolved 恒为
  * 入参数组原对象，由测试断言 toContain），绝不新构造 Action——engine 对 scout cardIds
- * 有序逐元素比较、sell 只枚举单块/全集。**唯一例外**：build 的显式槽位选择
- * （双-双图标槽自由选,bug2）会附 slotIndex 产生新对象——engine 按内容重新校验
- * （三元组合法 + illegal-build-slot 槽位规则），不依赖引用相等。
+ * 有序逐元素比较、sell 只枚举单块/全集。**例外**：build 的显式槽位选择
+ * （双-双图标槽自由选,bug2）会附 slotIndex 产生新对象；build/develop 的显式资源来源
+ * （coalSources/ironSources,候选 ≥2 才出现）与分组卖出同理——engine 按内容重新校验
+ * （三元组合法 + illegal-build-slot 槽位规则 + illegal-resource-source 来源规则），
+ * 不依赖引用相等。
  * 参数收集 = 逐步缩小 legalActions 子集：
  * - build：点棋盘槽位 → buildCandidatesAt（多产业槽歧义时列出待选）
  * - network：按放置顺序点边（双轨有序对），matchNetwork 前缀收窄；点末条撤销
@@ -16,8 +18,8 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
-import { MERCHANTS, firstLocationEndpoint, merchantHasUsableBarrel, reachableFrom } from '@brass/engine';
-import type { Action, BeerSourceRef, Card, IndustryType, LocationId, MerchantId, PlayerIndex } from '@brass/engine';
+import { MERCHANTS, buyCoalCost, buyIronCost, firstLocationEndpoint, merchantHasUsableBarrel, reachableFrom } from '@brass/engine';
+import type { Action, BeerSourceRef, Card, IndustryType, LocationId, MerchantId, PlayerIndex, ResourceSourceRef } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { BoardHighlights, SlotRef } from '../board/BoardSvg';
 import {
@@ -31,11 +33,15 @@ import {
   developDoubles,
   developOptions,
   explicitBuildSlot,
+  explicitCoalSources,
+  explicitIronSources,
+  explicitMerchantBarrel,
   extendableLinks,
   feasibleSellMerchants,
   matchDevelop,
   matchNetwork,
   matchScout,
+  merchantBarrelOptions,
   merchantBarrelRemaining,
   merchantsForTile,
   overbuildSlotTargets,
@@ -46,7 +52,7 @@ import {
   sellableTilesFor,
   targetsFor,
 } from './interactions';
-import type { BuildAction, CommittedBeerUses, SellAction } from './interactions';
+import type { BuildAction, CommittedBeerUses, ResourceSourceOption, SellAction } from './interactions';
 import { cardName, industryName, locationName, merchantName } from './display';
 import { moneyDelta, previewOf } from './preview';
 
@@ -99,6 +105,8 @@ export interface ActionDraft {
   pickSellMerchant: (id: MerchantId) => void;
   /** 切换商人桶(至多 1 桶;须先选贸易商)。 */
   toggleSellMerchantBarrel: () => void;
+  /** 商人桶多格可选时选定桶格(未选桶时 = 选该格桶)。 */
+  setSellMerchantBarrelIndex: (tileIndex: number) => void;
   /** 设定某酒厂已用桶数(0..barrels;点第 i 个桶按钮 = 用 i 桶)。 */
   setSellBreweryCount: (ref: SlotRef, count: number) => void;
   /** 组完整(建筑+贸易商+啤酒够数)时收下本组,开始下一组。 */
@@ -106,8 +114,8 @@ export interface ActionDraft {
   removeSellGroup: (i: number) => void;
   /** 图上点贸易商位(商品图案):未选建筑无效;未选贸易商=选定;不同=换;不再兼任酒桶选择。 */
   clickMerchant: (id: MerchantId) => void;
-  /** 图上点贸易商酒桶图标:选该商人的桶为啤酒来源(须先选建筑;该商人有桶才有效)。 */
-  clickMerchantBeer: (id: MerchantId) => void;
+  /** 图上点贸易商酒桶图标:选该商人该格桶为啤酒来源(须先选建筑;该格桶可用才有效)。 */
+  clickMerchantBeer: (id: MerchantId, tileIndex: number) => void;
   /** 槽位歧义（一槽多产业）时的待选 build。 */
   buildChoices: BuildAction[];
   /** 建造预览（非贴合的预览 token 盖在目标槽位，切换城市即跟随）。 */
@@ -116,6 +124,25 @@ export interface ActionDraft {
   buildIndustry: IndustryType | null;
   /** 预选/取消预选建造产业（再次点同一产业 = 取消）。 */
   pickIndustry: (ind: IndustryType) => void;
+  /** build 煤源选择(候选煤矿 ≥2 才非空;默认=规范化方案:最近优先取尽,余量市场买)。 */
+  buildCoalOptions: ResourceSourceOption[];
+  buildCoalNeed: number;
+  buildCoal: ResourceSourceRef[];
+  setBuildCoalCount: (ref: SlotRef, count: number) => void;
+  /** 恢复规范化默认方案。 */
+  resetBuildCoal: () => void;
+  /** build 铁源选择(候选铁厂 ≥2 才非空;默认=规范化:首个足够者,否则按序混源)。 */
+  buildIronOptions: ResourceSourceOption[];
+  buildIronNeed: number;
+  buildIron: ResourceSourceRef[];
+  setBuildIronCount: (ref: SlotRef, count: number) => void;
+  resetBuildIron: () => void;
+  /** develop 铁源选择(候选铁厂 ≥2 才非空;逐块铁源,removals 1 块=1 铁)。 */
+  developIronOptions: ResourceSourceOption[];
+  developIronNeed: number;
+  developIron: ResourceSourceRef[];
+  setDevelopIronCount: (ref: SlotRef, count: number) => void;
+  resetDevelopIron: () => void;
   /** 啤酒匹配线(resolved 为卖货时):啤酒来源(商人位/自有酒厂)→ 卖货地点。 */
   beerMatches: { from: LocationId | MerchantId; to: LocationId }[];
   /** 唯一匹配到的可提交行动（legalActions 原对象）。 */
@@ -152,6 +179,10 @@ export function useActionDraft({
   const [chosen, setChosen] = useState<Action | null>(null);
   /** 双轨啤酒显式酒源(选完两条路后;不可用商人桶,缺省规范化自动消耗)。 */
   const [networkBeer, setNetworkBeer] = useState<{ location: LocationId; slotIndex: number } | null>(null);
+  /** build/develop 显式资源来源(null = 无选择器或不附字段;默认同步为规范化方案)。 */
+  const [buildCoal, setBuildCoal] = useState<ResourceSourceRef[] | null>(null);
+  const [buildIron, setBuildIron] = useState<ResourceSourceRef[] | null>(null);
+  const [developIron, setDevelopIron] = useState<ResourceSourceRef[] | null>(null);
 
   const reset = (): void => {
     setPickedLinks([]);
@@ -163,6 +194,9 @@ export function useActionDraft({
     setSellGroups([]);
     setBonusDevelop(null);
     setNetworkBeer(null);
+    setBuildCoal(null);
+    setBuildIron(null);
+    setDevelopIron(null);
     setBuildChoices([]);
     setChoicesSlot(null);
     setBuildIndustry(null);
@@ -242,7 +276,7 @@ export function useActionDraft({
           merchantBarrelRemaining(
             m,
             ind,
-            committedBeer.merchantUses.filter((u) => u.merchant === mid).map((u) => u.industry),
+            committedBeer.merchantUses.filter((u) => u.merchant === mid),
           )
         ) {
           out.merchants!.push(mid as keyof typeof state.merchants);
@@ -415,17 +449,99 @@ export function useActionDraft({
     !scoutPicks.includes(selectedCard)
       ? [selectedCard, ...scoutPicks]
       : scoutPicks;
+
+  // --- build 资源来源选择器(煤/铁候选 ≥2 才出现;默认=规范化方案,玩家可逐块改选) ---
+  const buildCoalNeed =
+    chosen?.type === 'build'
+      ? (state.players[seat]?.tiles.find((t) => t.industry === chosen.industry)?.costCoal ?? 0)
+      : 0;
+  const buildIronNeed =
+    chosen?.type === 'build'
+      ? (state.players[seat]?.tiles.find((t) => t.industry === chosen.industry)?.costIron ?? 0)
+      : 0;
+  const coalChoice = useMemo(
+    () =>
+      chosen?.type === 'build'
+        ? explicitCoalSources(state, seat, chosen.location, buildCoalNeed)
+        : null,
+    [chosen, state, seat, buildCoalNeed],
+  );
+  const ironChoice = useMemo(
+    () => (chosen?.type === 'build' ? explicitIronSources(state, buildIronNeed) : null),
+    [chosen, state, buildIronNeed],
+  );
+  // 选择器出现/变化时同步默认(规范化)方案;消失(换 build/取消)时清空 → 不附字段
+  useEffect(() => setBuildCoal(coalChoice?.defaultPlan ?? null), [coalChoice]);
+  useEffect(() => setBuildIron(ironChoice?.defaultPlan ?? null), [ironChoice]);
+
+  // --- develop 铁源选择器(候选铁厂 ≥2 才出现;逐块铁源,removals 1 块=1 铁) ---
+  const developMatched = matchDevelop(candidates, developPicks);
+  const developIronNeed = developMatched?.removals.length ?? 0;
+  const developIronChoice = useMemo(
+    () => (developMatched !== null ? explicitIronSources(state, developMatched.removals.length) : null),
+    [developMatched, state],
+  );
+  useEffect(() => setDevelopIron(developIronChoice?.defaultPlan ?? null), [developIronChoice]);
+
+  /** 逐块设定某源的取用量(0=不取;夹紧:不超过该源余量与总需求余量)。 */
+  const setSourceCount = (
+    setter: (updater: (prev: ResourceSourceRef[] | null) => ResourceSourceRef[] | null) => void,
+    options: readonly ResourceSourceOption[],
+    need: number,
+    ref: SlotRef,
+    count: number,
+  ): void => {
+    setter((prev) => {
+      const others = (prev ?? []).filter(
+        (r) => !(r.location === ref.location && r.slotIndex === ref.slotIndex),
+      );
+      const othersTotal = others.reduce((s, r) => s + r.count, 0);
+      const cap = Math.max(
+        0,
+        Math.min(
+          count,
+          need - othersTotal,
+          options.find((o) => o.location === ref.location && o.slotIndex === ref.slotIndex)
+            ?.available ?? 0,
+        ),
+      );
+      return cap > 0
+        ? [...others, { location: ref.location, slotIndex: ref.slotIndex, count: cap }]
+        : others;
+    });
+  };
+  const setBuildCoalCount = (ref: SlotRef, count: number): void =>
+    setSourceCount(setBuildCoal, coalChoice?.options ?? [], buildCoalNeed, ref, count);
+  const setBuildIronCount = (ref: SlotRef, count: number): void =>
+    setSourceCount(setBuildIron, ironChoice?.options ?? [], buildIronNeed, ref, count);
+  const setDevelopIronCountFn = (ref: SlotRef, count: number): void =>
+    setSourceCount(setDevelopIron, developIronChoice?.options ?? [], developIronNeed, ref, count);
+
+  // chosen 为 build 且存在选择器时,把显式来源附进 Action(新对象;engine 按内容校验)。
+  // 候选 <2(0=只能市场/1=自动)时 choice 为 null → 不附字段,保持规范化解析。
+  const chosenResolved: Action | null = useMemo(() => {
+    if (chosen === null || chosen.type !== 'build') return chosen;
+    let out: Action = chosen;
+    if (coalChoice !== null && buildCoal !== null) out = { ...out, coalSources: buildCoal };
+    if (ironChoice !== null && buildIron !== null) out = { ...out, ironSources: buildIron };
+    return out;
+  }, [chosen, coalChoice, buildCoal, ironChoice, buildIron]);
+  const developResolved: Action | null =
+    developMatched !== null && developIronChoice !== null && developIron !== null
+      ? { ...developMatched, ironSources: developIron }
+      : developMatched;
+
   const networkResolved =
     networkMatch.exact !== null && networkBeer !== null
       ? { ...networkMatch.exact, beerSource: networkBeer }
       : networkMatch.exact;
   const resolved: Action | null =
-    chosen ??
+    chosenResolved ??
     (buildChoices.length > 0
       ? null
       : sellAction ??
         (pickedLinks.length > 0 ? networkResolved : null) ??
-        matchDevelop(candidates, developPicks) ??
+        developResolved ??
         matchScout(legalActions, hand, scoutPicksEff));
 
   /** 显式选定(choose)后的任何参数变更都使选定失效——否则一键出售 ×2 会钉死,
@@ -459,13 +575,34 @@ export function useActionDraft({
     setSellBeer((prev) => prev.filter((b) => b.kind !== 'merchant'));
   };
 
+  /** 当前组的商人桶格选择(候选 ≥2 才是真实选择;否则 null = 自动解析不附 tileIndex)。 */
+  const currentBarrelChoice = (): { options: number[]; defaultIndex: number } | null => {
+    if (sellMerchant === null || sellTile === null) return null;
+    const ind = state.board.slots[sellTile.location]?.[sellTile.slotIndex]?.tile.industry;
+    if (ind === undefined) return null;
+    return explicitMerchantBarrel(
+      state.merchants[sellMerchant],
+      ind,
+      committedBeer.merchantUses.filter((u) => u.merchant === sellMerchant),
+    );
+  };
+
   const toggleSellMerchantBarrel = (): void => {
     clearChosen();
+    const choice = currentBarrelChoice();
     setSellBeer((prev) =>
       prev.some((b) => b.kind === 'merchant')
         ? prev.filter((b) => b.kind !== 'merchant')
-        : [...prev, { kind: 'merchant' }],
+        : [...prev, choice !== null ? { kind: 'merchant', tileIndex: choice.defaultIndex } : { kind: 'merchant' }],
     );
+  };
+
+  const setSellMerchantBarrelIndex = (tileIndex: number): void => {
+    clearChosen();
+    setSellBeer((prev) => [
+      ...prev.filter((b) => b.kind !== 'merchant'),
+      { kind: 'merchant', tileIndex },
+    ]);
   };
 
   const setSellBreweryCount = (ref: SlotRef, count: number): void => {
@@ -505,14 +642,37 @@ export function useActionDraft({
     pickSellMerchant(id);
   };
 
-  const clickMerchantBeer = (id: MerchantId): void => {
+  const clickMerchantBeer = (id: MerchantId, tileIndex: number): void => {
     if (!candidates.some((a) => a.type === 'sell')) return;
     if (sellTile === null) return; // 顺序约束:先选建筑,否则无效
     const ind = state.board.slots[sellTile.location]?.[sellTile.slotIndex]?.tile.industry;
-    // 桶按板块格绑定:该商人"收当前板块产业的板块格"旁无剩桶,点了无效
-    if (ind === undefined || !merchantHasUsableBarrel(state.merchants[id], ind)) return;
-    if (sellMerchant !== id) pickSellMerchant(id); // 顺带切到该商人
-    toggleSellMerchantBarrel(); // 选/取消该商人的桶(与酒行按钮同状态)
+    if (ind === undefined) return;
+    const m = state.merchants[id];
+    // 桶按板块格绑定:点的这格桶须"收当前板块产业(精确图标或万能)"且未被已收组占位
+    const usable = merchantBarrelOptions(
+      m,
+      ind,
+      committedBeer.merchantUses.filter((u) => u.merchant === id),
+    );
+    if (!usable.includes(tileIndex)) return;
+    clearChosen();
+    if (sellMerchant !== id) setSellMerchant(id); // 顺带切到该商人
+    setSellBeer((prev) => {
+      const base = sellMerchant === id ? prev : prev.filter((b) => b.kind !== 'merchant');
+      const entry = base.find((b) => b.kind === 'merchant');
+      // 再点同一格 = 取消该桶(无 tileIndex 的旧选择等价于唯一可用格)
+      const curIdx =
+        entry !== undefined && entry.kind === 'merchant'
+          ? (entry.tileIndex ?? (usable.length === 1 ? usable[0] : undefined))
+          : undefined;
+      if (entry !== undefined && curIdx === tileIndex) {
+        return base.filter((b) => b.kind !== 'merchant');
+      }
+      return [
+        ...base.filter((b) => b.kind !== 'merchant'),
+        usable.length >= 2 ? { kind: 'merchant', tileIndex } : { kind: 'merchant' },
+      ];
+    });
   };
 
   const clickSlot = (location: LocationId, slotIndex: number, forceBuild = false): void => {
@@ -734,6 +894,7 @@ export function useActionDraft({
     pickSellTile,
     pickSellMerchant,
     toggleSellMerchantBarrel,
+    setSellMerchantBarrelIndex,
     setSellBreweryCount,
     commitSellGroup,
     removeSellGroup,
@@ -743,6 +904,21 @@ export function useActionDraft({
     buildPreview,
     buildIndustry,
     pickIndustry,
+    buildCoalOptions: coalChoice?.options ?? [],
+    buildCoalNeed,
+    buildCoal: buildCoal ?? [],
+    setBuildCoalCount,
+    resetBuildCoal: () => setBuildCoal(coalChoice?.defaultPlan ?? null),
+    buildIronOptions: ironChoice?.options ?? [],
+    buildIronNeed,
+    buildIron: buildIron ?? [],
+    setBuildIronCount,
+    resetBuildIron: () => setBuildIron(ironChoice?.defaultPlan ?? null),
+    developIronOptions: developIronChoice?.options ?? [],
+    developIronNeed,
+    developIron: developIron ?? [],
+    setDevelopIronCount: setDevelopIronCountFn,
+    resetDevelopIron: () => setDevelopIron(developIronChoice?.defaultPlan ?? null),
     beerMatches,
     resolved,
     clickSlot,
@@ -998,6 +1174,8 @@ export function ActionBar({
           )}
         </div>
 
+        <ResourceSourceDetails draft={draft} state={state} seat={seat} />
+
         <SellDetails draft={draft} state={state} seat={seat} />
 
         <div className={`action-choices${draft.scoutAvailable ? '' : ' row-disabled'}`} data-testid="scout-options">
@@ -1195,17 +1373,47 @@ export function SellDetails({
                   {draft.sellTile !== null && draft.sellMerchant !== null && curBeerSources !== null && curNeed > 0 ? (
                     <div className="action-choices">
                       <span>酒（还需 {curNeed - draft.sellBeer.length}）：</span>
-                      {curBeerSources.merchantBarrel ? (
-                        <button
-                          type="button"
-                          data-testid="sell-beer-merchant"
-                          className={draft.sellBeer.some((b) => b.kind === 'merchant') ? 'selected' : undefined}
-                          disabled={!draft.sellBeer.some((b) => b.kind === 'merchant') && draft.sellBeer.length >= curNeed}
-                          onClick={() => draft.toggleSellMerchantBarrel()}
-                        >
-                          {merchantName(draft.sellMerchant)}桶
-                        </button>
-                      ) : null}
+                      {(() => {
+                        // 商人桶:多格可选(候选 ≥2)时逐格给选择(规范化默认=精确图标格优先);
+                        // 只有一格时保持单按钮,自动解析不打扰
+                        const m = state.merchants[draft.sellMerchant!];
+                        const ind = curPlaced!.tile.industry;
+                        const choice = explicitMerchantBarrel(
+                          m,
+                          ind,
+                          draft.committedBeer.merchantUses.filter((u) => u.merchant === draft.sellMerchant),
+                        );
+                        if (choice === null) {
+                          return curBeerSources.merchantBarrel ? (
+                            <button
+                              type="button"
+                              data-testid="sell-beer-merchant"
+                              className={draft.sellBeer.some((b) => b.kind === 'merchant') ? 'selected' : undefined}
+                              disabled={!draft.sellBeer.some((b) => b.kind === 'merchant') && draft.sellBeer.length >= curNeed}
+                              onClick={() => draft.toggleSellMerchantBarrel()}
+                            >
+                              {merchantName(draft.sellMerchant)}桶
+                            </button>
+                          ) : null;
+                        }
+                        const hasBarrel = draft.sellBeer.some((b) => b.kind === 'merchant');
+                        return choice.options.map((ti) => {
+                          const sel = draft.sellBeer.some((b) => b.kind === 'merchant' && b.tileIndex === ti);
+                          return (
+                            <button
+                              key={ti}
+                              type="button"
+                              data-testid={`sell-beer-merchant-${ti}`}
+                              className={sel ? 'selected' : undefined}
+                              disabled={!hasBarrel && draft.sellBeer.length >= curNeed}
+                              onClick={() => (sel ? draft.toggleSellMerchantBarrel() : draft.setSellMerchantBarrelIndex(ti))}
+                            >
+                              {merchantName(draft.sellMerchant!)}桶·
+                              {m.tiles[ti] === 'any' ? '万能' : industryName(m.tiles[ti] as IndustryType)}格
+                            </button>
+                          );
+                        });
+                      })()}
                       {[
                         ...curBeerSources.own.map((b) => ({ ...b, own: true })),
                         ...curBeerSources.opponent.map((b) => ({ ...b, own: false })),
@@ -1274,4 +1482,84 @@ export function SellDetails({
               ) : null}
             </>
           );
+}
+
+const CUBE_NUM = ['①', '②', '③', '④', '⑤'];
+
+/**
+ * 资源来源选择器(经典 ActionBar 与宽屏 TopActionBar 共用):
+ * build 煤/铁、develop 铁——候选源 ≥2 才出现(0=只能市场/1=自动解析不打扰)。
+ * 默认选中规范化方案(煤最近优先取尽/铁首个足够者);逐块改选,余量市场买。
+ */
+export function ResourceSourceDetails({
+  draft,
+  state,
+  seat,
+}: {
+  draft: ActionDraft;
+  state: FilteredState;
+  seat: PlayerIndex;
+}): ReactElement | null {
+  const gs = state as unknown as import('@brass/engine').GameState;
+  const renderRow = (
+    testid: string,
+    kind: 'coal' | 'iron',
+    need: number,
+    options: ResourceSourceOption[],
+    picked: ResourceSourceRef[],
+    onSet: (ref: SlotRef, count: number) => void,
+    onAuto: () => void,
+  ): ReactElement => {
+    const taken = picked.reduce((s, r) => s + r.count, 0);
+    const market = Math.max(0, need - taken);
+    const marketCost = market > 0 ? (kind === 'coal' ? buyCoalCost(gs, market) : buyIronCost(gs, market)) : 0;
+    return (
+      <div className="action-choices" data-testid={testid} key={testid}>
+        <span>{kind === 'coal' ? '煤' : '铁'}来源（需 {need}）：</span>
+        {options.map((o) => {
+          const cur =
+            picked.find((r) => r.location === o.location && r.slotIndex === o.slotIndex)?.count ?? 0;
+          return Array.from({ length: o.available }, (_, i) => (
+            <button
+              key={`${o.location}:${o.slotIndex}:${i}`}
+              type="button"
+              data-testid={`${testid}-${o.location}-${o.slotIndex}-${i}`}
+              className={cur > i ? 'selected' : undefined}
+              title={`${o.owner === seat ? '自家' : '对手'}${kind === 'coal' ? '煤矿' : '铁厂'}·取 ${i + 1} 块(再点取消)`}
+              onClick={() => onSet(o, cur === i + 1 ? i : i + 1)}
+            >
+              {o.owner === seat ? '自家' : '对手'}·{locationName(o.location)}
+              {CUBE_NUM[i] ?? `${i + 1}`}
+            </button>
+          ));
+        })}
+        <span className="action-row-hint">
+          {market > 0
+            ? `市场补 ${market} 块 £${marketCost}${kind === 'coal' ? '（须连通商人位）' : ''}`
+            : '全部免费'}
+        </span>
+        <button type="button" className="btn-ghost" data-testid={`${testid}-auto`} onClick={onAuto}>
+          恢复自动
+        </button>
+      </div>
+    );
+  };
+  const rows: ReactElement[] = [];
+  if (draft.buildCoalOptions.length > 0) {
+    rows.push(
+      renderRow('build-coal-sources', 'coal', draft.buildCoalNeed, draft.buildCoalOptions, draft.buildCoal, draft.setBuildCoalCount, draft.resetBuildCoal),
+    );
+  }
+  if (draft.buildIronOptions.length > 0) {
+    rows.push(
+      renderRow('build-iron-sources', 'iron', draft.buildIronNeed, draft.buildIronOptions, draft.buildIron, draft.setBuildIronCount, draft.resetBuildIron),
+    );
+  }
+  if (draft.developIronOptions.length > 0) {
+    rows.push(
+      renderRow('develop-iron-sources', 'iron', draft.developIronNeed, draft.developIronOptions, draft.developIron, draft.setDevelopIronCount, draft.resetDevelopIron),
+    );
+  }
+  if (rows.length === 0) return null;
+  return <>{rows}</>;
 }

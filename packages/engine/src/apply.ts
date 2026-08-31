@@ -66,7 +66,8 @@ function saleKey(s: Sale): string {
  * 规范化：build 剥离 slotIndex 与 coalSources/ironSources（apply-only 的显式
  * 槽位/资源来源选择,枚举从不产出——合法性由 applyBuild 的 illegal-build-slot /
  * illegal-resource-source 另行校验）；network 剥离 beerFromOpponentBrewery /
- * beerSource / coalSources（同前例）；sell 的 sales 排序（顺序无关）并剥离
+ * beerSource / coalSources（同前例）；develop 剥离 ironSources（同前例）；
+ * sell 的 sales 排序（顺序无关）并剥离
  * beerSources（apply-only 的显式啤酒来源）；其余行动原样（scout cardIds 顺序有语义）。
  */
 function normalizeAction(action: Action): Action {
@@ -81,6 +82,10 @@ function normalizeAction(action: Action): Action {
   }
   if (action.type === 'build') {
     const { slotIndex: _i1, coalSources: _i2, ironSources: _i3, ...rest } = action;
+    return rest;
+  }
+  if (action.type === 'develop') {
+    const { ironSources: _i1, ...rest } = action;
     return rest;
   }
   if (action.type !== 'sell') return action;

@@ -101,7 +101,7 @@ export interface BoardSvgProps {
   /** 点贸易商位商品图案(卖出流:选贸易商;顺序约束由 ActionDraft 裁决)。 */
   onMerchantClick?: ((merchant: MerchantId) => void) | undefined;
   /** 点贸易商上侧酒桶图标(卖出流:选该商人的桶为啤酒来源)。 */
-  onMerchantBeerClick?: ((merchant: MerchantId) => void) | undefined;
+  onMerchantBeerClick?: ((merchant: MerchantId, tileIndex: number) => void) | undefined;
 }
 
 function playerColor(player: PlayerIndex): string {
@@ -672,7 +672,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                       height={r.h}
                       fill="transparent"
                       style={onMerchantBeerClick && filled ? { cursor: 'pointer' } : undefined}
-                      onClick={onMerchantBeerClick && filled ? () => onMerchantBeerClick(id) : undefined}
+                      onClick={onMerchantBeerClick && filled ? () => onMerchantBeerClick(id, bi) : undefined}
                     />
                   </g>
                 );

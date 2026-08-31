@@ -10,7 +10,7 @@ import type { ReactElement } from 'react';
 import type { Action, Card, PlayerIndex } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { ActionDraft } from './ActionBar';
-import { SellDetails } from './ActionBar';
+import { SellDetails, ResourceSourceDetails } from './ActionBar';
 import { buildActionLabel } from './interactions';
 import { cardName, describeAction, industryName, locationName } from './display';
 import { moneyDelta, previewOf } from './preview';
@@ -295,6 +295,9 @@ export function TopActionBar({
       ) : null}
 
       {active === 'sell' ? <SellDetails draft={draft} state={state} seat={seat} /> : null}
+
+      {/* 资源来源选择器(build 煤/铁、develop 铁;候选 ≥2 才出现,与底部 ActionBar 同款) */}
+      <ResourceSourceDetails draft={draft} state={state} seat={seat} />
 
       {active === 'scout' ? (
         <div className="action-choices top-detail-row" data-testid="scout-options">

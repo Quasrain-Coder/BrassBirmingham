@@ -99,6 +99,99 @@ describe('useActionDraft', () => {
     expect(f.legal).toContain(result.current.resolved);
   });
 
+  it('build 煤源 ≥2 → resolved 附显式 coalSources(默认=规范化),可改选;唯一源不附字段', () => {
+    const game = newGame(4, 42);
+    const coal = tileDef('coal', 1)!;
+    // wolverhampton 槽 1(双图标煤槽,1 块)+ dudley 槽 0(单煤槽,2 块),link 26 连通
+    game.board.slots['wolverhampton']![1] = { tile: coal, player: 1, flipped: false, resources: 1 };
+    game.board.slots['dudley']![0] = { tile: coal, player: 1, flipped: false, resources: 2 };
+    game.board.links.push({ linkIndex: 26, player: 1, era: 'canal' });
+    const f: Fixture = {
+      game,
+      state: filterStateFor(game, 0),
+      legal: [],
+      hand: game.players[0]!.hand,
+    };
+    // manufacturer L1 需 1 煤;wolverhampton 槽 0 印 [manufacturer] 且为空
+    const legal: Action[] = [
+      { type: 'build', cardId: 'c1', industry: 'manufacturer', location: 'wolverhampton' },
+    ];
+    const { result } = renderDraft(f, 'c1', legal);
+    act(() => result.current.clickSlot('wolverhampton', 0));
+    // 两个连通煤矿 → 选择器出现,默认取最近的 wolverhampton 矿
+    expect(result.current.buildCoalOptions.length).toBe(2);
+    expect(result.current.buildCoal).toEqual([{ location: 'wolverhampton', slotIndex: 1, count: 1 }]);
+    expect(result.current.resolved).toMatchObject({
+      type: 'build',
+      coalSources: [{ location: 'wolverhampton', slotIndex: 1, count: 1 }],
+    });
+    // 改选:先取消 wolverhampton 矿,再取 dudley 矿
+    act(() => result.current.setBuildCoalCount({ location: 'wolverhampton', slotIndex: 1 }, 0));
+    act(() => result.current.setBuildCoalCount({ location: 'dudley', slotIndex: 0 }, 1));
+    expect(result.current.resolved).toMatchObject({
+      coalSources: [{ location: 'dudley', slotIndex: 0, count: 1 }],
+    });
+    // 恢复自动 → 回到规范化默认
+    act(() => result.current.resetBuildCoal());
+    expect(result.current.resolved).toMatchObject({
+      coalSources: [{ location: 'wolverhampton', slotIndex: 1, count: 1 }],
+    });
+  });
+
+  it('build 煤源恰好 1 个 → 不出现选择器,resolved 为 legalActions 原对象(不附字段)', () => {
+    const game = newGame(4, 42);
+    const coal = tileDef('coal', 1)!;
+    game.board.slots['wolverhampton']![1] = { tile: coal, player: 1, flipped: false, resources: 2 };
+    const f: Fixture = {
+      game,
+      state: filterStateFor(game, 0),
+      legal: [],
+      hand: game.players[0]!.hand,
+    };
+    const legal: Action[] = [
+      { type: 'build', cardId: 'c1', industry: 'manufacturer', location: 'wolverhampton' },
+    ];
+    const { result } = renderDraft(f, 'c1', legal);
+    act(() => result.current.clickSlot('wolverhampton', 0));
+    expect(result.current.buildCoalOptions).toEqual([]);
+    expect(result.current.resolved).toBe(legal[0]); // 原对象,未附 coalSources
+  });
+
+  it('develop 铁厂 ≥2 → resolved 附显式 ironSources;唯一铁厂 → 原对象不附字段', () => {
+    const game = newGame(4, 42);
+    const iron = tileDef('iron', 1)!;
+    game.board.slots['coalbrookdale']![0] = { tile: iron, player: 1, flipped: false, resources: 1 };
+    game.board.slots['coalbrookdale']![1] = { tile: iron, player: 1, flipped: false, resources: 2 };
+    const f: Fixture = {
+      game,
+      state: filterStateFor(game, 0),
+      legal: [],
+      hand: game.players[0]!.hand,
+    };
+    const legal: Action[] = [{ type: 'develop', cardId: 'c1', removals: ['cotton'] }];
+    const { result } = renderDraft(f, 'c1', legal);
+    act(() => result.current.toggleDevelop('cotton'));
+    // 两个铁厂 → 选择器出现,默认取首个足够者(槽 0 有 1 块 ≥ 需求 1)
+    expect(result.current.developIronOptions.length).toBe(2);
+    expect(result.current.resolved).toMatchObject({
+      type: 'develop',
+      ironSources: [{ location: 'coalbrookdale', slotIndex: 0, count: 1 }],
+    });
+    // 改选另一铁厂(需 2 块铁?需求 1,先清槽 0 再取槽 1)
+    act(() => result.current.setDevelopIronCount({ location: 'coalbrookdale', slotIndex: 0 }, 0));
+    act(() => result.current.setDevelopIronCount({ location: 'coalbrookdale', slotIndex: 1 }, 1));
+    expect(result.current.resolved).toMatchObject({
+      ironSources: [{ location: 'coalbrookdale', slotIndex: 1, count: 1 }],
+    });
+    // 只剩 1 个铁厂:清空槽 1 的板块重来 → 不附字段
+    game.board.slots['coalbrookdale']![1] = null;
+    const f2: Fixture = { game, state: filterStateFor(game, 0), legal: [], hand: game.players[0]!.hand };
+    const { result: r2 } = renderDraft(f2, 'c1', legal);
+    act(() => r2.current.toggleDevelop('cotton'));
+    expect(r2.current.developIronOptions).toEqual([]);
+    expect(r2.current.resolved).toBe(legal[0]);
+  });
+
   it('network 序列：无效点击忽略、逐条收窄、双轨有序、点末条撤销', () => {
     const f = freshFixture();
     const legal: Action[] = [
@@ -434,10 +527,26 @@ function draftFixture(overrides: Partial<ActionDraft> = {}): ActionDraft {
     removeSellGroup: () => {},
     clickMerchant: () => {},
     clickMerchantBeer: () => {},
+    setSellMerchantBarrelIndex: () => {},
     buildChoices: [],
     buildPreview: null,
     buildIndustry: null,
     pickIndustry: () => {},
+    buildCoalOptions: [],
+    buildCoalNeed: 0,
+    buildCoal: [],
+    setBuildCoalCount: () => {},
+    resetBuildCoal: () => {},
+    buildIronOptions: [],
+    buildIronNeed: 0,
+    buildIron: [],
+    setBuildIronCount: () => {},
+    resetBuildIron: () => {},
+    developIronOptions: [],
+    developIronNeed: 0,
+    developIron: [],
+    setDevelopIronCount: () => {},
+    resetDevelopIron: () => {},
     beerMatches: [],
     resolved: null,
     clickSlot: () => {},

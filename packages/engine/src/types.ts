@@ -75,7 +75,9 @@ export type Action =
   // coalSources(可选):逐条铁路的显式煤源(下标与 links 对齐;每项 1 块煤;
   // 缺省/null = 规范化解析含市场买)。
   | { type: 'network'; cardId: string; links: number[]; beerFromOpponentBrewery?: LocationId; beerSource?: { location: LocationId; slotIndex: number }; coalSources?: ({ location: LocationId; slotIndex: number } | null)[] } // links = LINKS 下标，len 1|2
-  | { type: 'develop'; cardId: string; removals: IndustryType[] } // len 1|2
+  // ironSources(可选):逐块研发的显式铁源(并列任选的自由选择,同 build);
+  // 缺省 = 规范化解析(单厂足够取字典序首个,否则按序混源,不足市场买)。
+  | { type: 'develop'; cardId: string; removals: IndustryType[]; ironSources?: ResourceSourceRef[] } // len 1|2
   // beerSources(可选):逐桶显式指定啤酒来源,长度须等于该板块 beerToFlip;
   // 缺省 = consumeBeer 自动解析(商人桶→自家酒厂→对手酒厂)。applySell 按组合式
   // 校验接受任意合法 sales 组合(不限于枚举集)。

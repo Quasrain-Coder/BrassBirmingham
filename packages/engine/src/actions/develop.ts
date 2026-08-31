@@ -17,7 +17,7 @@ import { buyIronCost } from '../market.js';
 import { ironSources } from '../network.js';
 import { consumeIron } from '../resources.js';
 import type { GameState, PlayerState } from '../state.js';
-import type { Action, GameEvent, IndustryType, PlayerIndex } from '../types.js';
+import type { Action, GameEvent, IndustryType, PlayerIndex, ResourceSourceRef } from '../types.js';
 
 /** 产业规范化顺序（removals 排序与枚举顺序，确定性）。 */
 const INDUSTRY_ORDER: IndustryType[] = ['cotton', 'manufacturer', 'pottery', 'coal', 'iron', 'brewery'];
@@ -112,6 +112,16 @@ export function applyDevelop(
 
   const events: GameEvent[] = [];
   let next = state;
+  // 显式铁源(可选):展开为逐块 count=1 的队列,每移除 1 块消耗队列中 1 单位;
+  // 缺省 consumeIron 规范化解析。显式合计超出需求由 planExplicit 拒绝。
+  const explicitQueue: ResourceSourceRef[] = [];
+  if (action.ironSources !== undefined) {
+    for (const ref of action.ironSources) {
+      for (let i = 0; i < ref.count; i++) {
+        explicitQueue.push({ location: ref.location, slotIndex: ref.slotIndex, count: 1 });
+      }
+    }
+  }
   for (const industry of action.removals) {
     // 逐块判定：移除后重新算该产业当前最低级（栈顶）
     const psNow = next.players[player]!;
@@ -122,7 +132,8 @@ export function applyDevelop(
       tiles: [...psNow.tiles.slice(0, idx), ...psNow.tiles.slice(idx + 1)],
     };
     next = { ...next, players };
-    const ri = consumeIron(next, player, 1);
+    const explicit = action.ironSources !== undefined ? explicitQueue.splice(0, 1) : undefined;
+    const ri = consumeIron(next, player, 1, explicit !== undefined ? { explicit } : undefined);
     next = ri.state;
     events.push(...ri.flipped);
   }
