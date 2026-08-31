@@ -2,7 +2,7 @@
  * 插件注册表：spec 字符串 → AgentPlugin。
  *
  * 贡献新 AI 的两步（不许动其他文件）：
- * 1. 本目录新增单文件插件（默认导出 AgentPlugin，见 contract.ts 与 heuristic-v1.ts）；
+ * 1. 本目录新增单文件插件（默认导出 AgentPlugin，见 contract.ts 与 heuristic-v20260826.ts）；
  * 2. 在 BUILTIN_PLUGINS 加一行登记。
  *
  * spec 格式：`builtin:<name>`（本目录内置）；`exec:<path>`（外部进程插件，
@@ -11,16 +11,16 @@
 import type { DecidingAgent, Decision } from '../decision.js';
 import type { Action, GameState, PlayerIndex } from '@brass/engine';
 import type { AgentContext, AgentPlugin } from './contract.js';
-import heuristicV1 from './heuristic-v1.js';
-import heuristicV2 from './heuristic-v2.js';
+import heuristicV20260826 from './heuristic-v20260826.js';
+import heuristicV20260829 from './heuristic-v20260829.js';
 
 const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
-  'heuristic-v1': heuristicV1,
-  'heuristic-v2': heuristicV2,
+  'heuristic-v20260826': heuristicV20260826,
+  'heuristic-v20260829': heuristicV20260829,
 };
 
 /** 大厅缺省 AI（行为与插件化之前一致）。 */
-export const DEFAULT_SPEC = 'builtin:heuristic-v1';
+export const DEFAULT_SPEC = 'builtin:heuristic-v20260826';
 
 /** 已登记的内置插件清单（大厅可选列表/跑分用）。 */
 export function listAgentPlugins(): AgentPlugin['meta'][] {

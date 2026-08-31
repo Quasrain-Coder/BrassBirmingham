@@ -130,8 +130,8 @@ export default plugin;
 ```ts
 // registry.ts — one line:
 const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
-  'heuristic-v1': heuristicV1,
-  'heuristic-v2': heuristicV2,
+  'heuristic-v20260826': heuristicV20260826,
+  'heuristic-v20260829': heuristicV20260829,
   'first-legal': firstLegal, // ← your line
 };
 ```
@@ -143,8 +143,9 @@ precedence when `ANTHROPIC_API_KEY` is set):
 BRASS_AI_SPEC=builtin:first-legal npm run dev -w @brass/server
 ```
 
-Built-ins ship as `heuristic-v1` / `heuristic-v2` (two generations of the
-ported brass-assistant heuristic; v1 is the default). An `exec:<path>`
+Built-ins ship as `heuristic-v20260826` / `heuristic-v20260829` (two
+generations of the ported brass-assistant heuristic, named by upstream
+date; `heuristic-v20260826` is the default). An `exec:<path>`
 transport for external single-file agents (Python/Rust, stdio NDJSON with
 the same payload shape) is planned next — `contract.ts` doubles as its
 protocol document.

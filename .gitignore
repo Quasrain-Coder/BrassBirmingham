@@ -19,3 +19,9 @@ packages/web/public/assets/raw/
 # 不入库。迭代结论沉淀在 bench/docs/ITERATION.md；如需留档基线数据，写
 # 汇总（分析后的指标/结论）而非原始 trace 日志。
 packages/llm/bench/out/
+
+# tsc 构建产物（vite-node/vitest 直接跑 TS 源码，编译输出不入库）
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+packages/*/test/**/*.js
+packages/*/test/**/*.d.ts

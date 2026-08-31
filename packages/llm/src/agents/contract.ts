@@ -17,7 +17,7 @@ import type { Action, GameState, PlayerIndex } from '@brass/engine';
 
 /** 插件元数据：大厅/日志/跑分展示用。 */
 export interface AgentPluginMeta {
-  /** 唯一 id（registry 登记键，如 'heuristic-v1'）。 */
+  /** 唯一 id（registry 登记键，如 'heuristic-v20260829'）。 */
   name: string;
   version: string;
   description: string;
