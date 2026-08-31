@@ -117,6 +117,11 @@ const CFG = {
     planNoMerchant: 0.15,
     planNoBeer: 0.3,
     planReady: 0.7,
+    // ── 以下为插件新增（上游无）："没动数翻面就别造"引导 ──
+    /** 可售板块翻面期望打满所需的时代剩余动数（造完还需 sell 动+啤酒余量）。 */
+    sellWindowFull: 6.0,
+    /** 场上每多一块己方未翻面可售板块（排队等 sell 动/啤酒），新建造的翻面期望衰减系数。 */
+    sellQueueDecay: 0.8,
   },
   build: {
     unaffordablePerPound: 0.3,
@@ -707,6 +712,17 @@ function ownedBeerBarrels(state: GameState, pid: PlayerIndex): number {
   return n;
 }
 
+/** 场上己方未翻面可售板块数（排队等 sell 动与啤酒的"库存"）。 */
+function ownUnflippedSellables(state: GameState, pid: PlayerIndex): number {
+  let n = 0;
+  for (const slots of Object.values(state.board.slots)) {
+    for (const t of slots) {
+      if (t && t.player === pid && !t.flipped && t.tile.sellable) n += 1;
+    }
+  }
+  return n;
+}
+
 /** 自己全部未翻面可售板块翻面所需啤酒总量。 */
 function sellableBeerDemand(state: GameState, pid: PlayerIndex): number {
   let n = 0;
@@ -1175,7 +1191,15 @@ function scoreBuildOp(state: GameState, ctx: EvalCtx, ind: IndustryType, loc: Lo
     return -(cost.cash - cash) * CFG.build.unaffordablePerPound;
   }
 
-  const flipProb = buildFlipProbability(state, ctx, ind, loc);
+  const sellableInd = ind === 'cotton' || ind === 'manufacturer' || ind === 'pottery';
+  let flipProb = buildFlipProbability(state, ctx, ind, loc);
+  if (sellableInd) {
+    // "没动数翻面就别造"（插件新增）：可售板块翻面需要造完后还有 sell 动——
+    // 时代剩余动数窗口越窄，翻面期望越低；场上排队等翻面的库存越多越贬值。
+    const actionsLeft = Math.max(0, ctx.roundsRemaining * 2 - 1);
+    flipProb *= clamp01(actionsLeft / CFG.flip.sellWindowFull);
+    flipProb *= Math.pow(CFG.flip.sellQueueDecay, ownUnflippedSellables(state, ctx.pid));
+  }
   const linkSelfValue = ownsLinkTouching(state, ctx.pid, loc)
     ? tile.linkIcons * flipProb * CFG.build.linkSelfValueShare
     : 0;

@@ -33,6 +33,7 @@ const t0 = Date.now();
 for (let g = 0; g < GAMES; g++) {
   const { vps, specs } = await playOne(g);
   const winVp = Math.max(...vps);
+  console.log(`game ${g}: ${specs.map((s, i) => `${s.includes('0826') ? 'A' : 'B'}=${vps[i]}`).join(' ')}`);
   for (let i = 0; i < 4; i++) {
     const s = sum[specs[i]!]!;
     s.vp += vps[i]!;
