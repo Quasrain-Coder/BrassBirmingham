@@ -14,15 +14,17 @@ import type { AgentContext, AgentPlugin } from './contract.js';
 import lmV20260826 from './lm-heuristic-v20260826.js';
 import lmV20260829 from './lm-heuristic-v20260829.js';
 import jsbV20260831 from './jsb-v20260831.js';
+import jsbV20260901 from './jsb-v20260901.js';
 
 const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'lm-heuristic-v20260826': lmV20260826,
   'lm-heuristic-v20260829': lmV20260829,
   'jsb-v20260831': jsbV20260831,
+  'jsb-v20260901': jsbV20260901,
 };
 
-/** 大厅缺省 AI：jsb-v20260831（lm-0829 调优版；head2head 70% 胜率优于 lm-0826，2026-08-31 切默认）。 */
-export const DEFAULT_SPEC = 'builtin:jsb-v20260831';
+/** 大厅缺省 AI：jsb-v20260901（0831 迭代：运河 L2+ 双计分修正等，vs 0831 63-70%、vs lm-0829 77%，2026-09-01 切默认）。 */
+export const DEFAULT_SPEC = 'builtin:jsb-v20260901';
 
 /** 已登记的内置插件清单（大厅可选列表/跑分用）。 */
 export function listAgentPlugins(): AgentPlugin['meta'][] {
