@@ -10,29 +10,38 @@ import {
   type Action,
 } from '@brass/engine';
 import { HeuristicAgent } from '../src/heuristic.js';
+import { createAgent } from '../src/agents/registry.js';
 
 const GAMES = Number(process.argv[2] ?? 30);
+/** argv[3]: '4' 只跑 4p、'2' 只跑 2p（缺省两者皆跑）。 */
+const ONLY = process.argv[3];
+/** BENCH_SPEC=builtin:jsb-v20260831 时用插件跑（缺省 = HeuristicAgent 直连）。 */
+const SPEC = process.env['BENCH_SPEC'];
 
-function playOne(players: 2 | 4, seed: number): number[] {
-  const agents = Array.from({ length: players }, () => new HeuristicAgent());
+async function playOne(players: 2 | 4, seed: number): Promise<number[]> {
+  const agents = SPEC
+    ? Array.from({ length: players }, (_, seat) => createAgent(SPEC, { seat }))
+    : Array.from({ length: players }, () => new HeuristicAgent());
   let state = newGame(players, seed);
   let steps = 0;
   while (state.phase !== 'game-over') {
     const player = state.turnOrder[state.currentPlayerIdx]!;
     const legal = enumerateActions(state, player);
     if (legal.length === 0) throw new Error(`no legal at ${steps}`);
-    const a: Action = agents[player]!.chooseAction(state, legal);
+    const a: Action = SPEC
+      ? (await agents[player]!.decide(state, player, legal)).action
+      : (agents[player] as HeuristicAgent).chooseAction(state, legal);
     state = applyAction(state, a);
     if (++steps > 100_000) throw new Error('runaway');
   }
   return state.players.map((p) => p.vp);
 }
 
-function stats(players: 2 | 4) {
+async function stats(players: 2 | 4) {
   const t0 = Date.now();
   const all: number[][] = [];
   for (let g = 0; g < GAMES; g++) {
-    all.push(playOne(players, g));
+    all.push(await playOne(players, g));
     if ((g + 1) % 10 === 0) {
       const flat = all.flat();
       const avg = flat.reduce((s, v) => s + v, 0) / flat.length;
@@ -52,5 +61,5 @@ function stats(players: 2 | 4) {
   );
 }
 
-stats(4);
-stats(2);
+if (ONLY !== '2') await stats(4);
+if (ONLY !== '4') await stats(2);

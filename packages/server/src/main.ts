@@ -7,7 +7,7 @@
  */
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { AnthropicClient, HeuristicAgent, LLMAgent } from '@brass/llm';
+import { AnthropicClient, LLMAgent, DEFAULT_SPEC, agentFactoryFromSpec, listAgentPlugins } from '@brass/llm';
 import { createGameServer, type GameServerOptions } from './ws.js';
 
 async function main(): Promise<void> {
@@ -32,10 +32,12 @@ async function main(): Promise<void> {
     const client = new AnthropicClient({ apiKey: anthropicKey });
     options.aiAgentFactory = (_seat, difficulty) => new LLMAgent(client, difficulty);
   } else {
+    // 插件式 AI（agents/ 单文件注册制）：BRASS_AI_SPEC 选择，缺省 jsb-v20260831
+    const spec = process.env['BRASS_AI_SPEC'] || DEFAULT_SPEC;
     console.warn(
-      '[brass] ANTHROPIC_API_KEY 未设置：AI 座位降级为内置启发式（HeuristicAgent），不产生 LLM 调用',
+      `[brass] ANTHROPIC_API_KEY 未设置：AI 座位用内置插件 ${spec}（可选：${listAgentPlugins().map((m) => `builtin:${m.name}`).join(', ')}），不产生 LLM 调用`,
     );
-    options.aiAgentFactory = () => new HeuristicAgent();
+    options.aiAgentFactory = agentFactoryFromSpec(spec);
   }
   const server = await createGameServer(options);
   console.log(
