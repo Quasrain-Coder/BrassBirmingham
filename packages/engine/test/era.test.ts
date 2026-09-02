@@ -250,7 +250,8 @@ describe('finalScore (rail era end → game over)', () => {
     // player 0：2(板块) + 4(板块) + 3(Link) = 9 > player 1 的 3
     expect(after.players[0]!.vp).toBe(9);
     expect(after.winner).toEqual([0]);
-    expect(after.board.links).toEqual([]);
+    // 终局 Link 计分后保留在版图上（游戏结束展示/回放用；运河末才移除）
+    expect(after.board.links).toHaveLength(1);
   });
 });
 

@@ -23,6 +23,7 @@
 import { useSyncExternalStore } from 'react';
 import { PROTOCOL_VERSION } from '@brass/protocol';
 import type {
+  AgentPluginMeta,
   ClientMessage,
   DraftPreview,
   FilteredState,
@@ -219,6 +220,10 @@ export interface GameStoreState {
   resetNotice: { seat: PlayerIndex; n: number } | null;
   /** 回看模式:导入的对局记录 + 当前步数(已应用行动数)与视角座位;null=不在回看。 */
   review: { record: GameRecord; step: number; viewSeat: PlayerIndex } | null;
+  /** 可用 AI 插件清单（list_agent_plugins 拉取；大厅 AI 席位下拉用）。 */
+  agentPlugins: AgentPluginMeta[];
+  /** 服务器默认 AI spec（agent_plugins 应答携带；大厅下拉默认选中）。 */
+  defaultAISpec: string | null;
 }
 
 export const LOG_CAPACITY = 100;
@@ -245,6 +250,8 @@ const INITIAL_STATE: GameStoreState = {
   remoteDrafts: {},
   resetNotice: null,
   review: null,
+  agentPlugins: [],
+  defaultAISpec: null,
 };
 
 export interface GameStoreOptions {
@@ -311,6 +318,11 @@ export class GameStore {
 
   createRoom(nickname: string, config: RoomConfig): void {
     this.send({ type: 'create_room', protocolVersion: PROTOCOL_VERSION, nickname, config });
+  }
+
+  /** 拉取可用 AI 插件清单（大厅 AI 席位下拉用；应答进 state.agentPlugins）。 */
+  listAgentPlugins(): void {
+    this.send({ type: 'list_agent_plugins', protocolVersion: PROTOCOL_VERSION });
   }
 
   joinRoom(code: string, nickname: string): void {
@@ -733,6 +745,9 @@ export class GameStore {
         break;
       }
       case 'pong':
+        break;
+      case 'agent_plugins':
+        this.patch({ agentPlugins: msg.plugins, defaultAISpec: msg.defaultSpec });
         break;
     }
   }

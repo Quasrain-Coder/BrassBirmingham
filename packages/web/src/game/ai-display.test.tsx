@@ -146,6 +146,54 @@ describe('<Lobby> AI 座位配置', () => {
       config: { playerCount: 4, seed: expect.any(Number) },
     });
   });
+
+  it('选 AI 版本 → create_room 帧带 specs；清单未加载时回退不带 specs', () => {
+    const { ws } = renderConnectedLobby();
+    // 选 2 个 AI → 触发插件清单请求
+    fireEvent.change(screen.getByTestId('create-ai-count'), { target: { value: '2' } });
+    expect(ws.lastSent()).toEqual({ type: 'list_agent_plugins', protocolVersion: PROTOCOL_VERSION });
+    // 清单未加载时提交 → 不带 specs（回退服务器默认插件）
+    fireEvent.click(screen.getByTestId('create-submit'));
+    expect(ws.lastSent()).toEqual({
+      type: 'create_room',
+      protocolVersion: PROTOCOL_VERSION,
+      nickname: '甲',
+      config: { playerCount: 4, seed: expect.any(Number), aiSeats: { count: 2, difficulty: 'normal' } },
+    });
+    // 服务端应答清单后重开一张表：下拉出现且默认选中服务器默认插件
+    act(() =>
+      ws.emit({
+        type: 'agent_plugins',
+        protocolVersion: PROTOCOL_VERSION,
+        plugins: [
+          { name: 'jsb-v20260903', version: '2.0.0', description: 'x' },
+          { name: 'lm-heuristic-v20260829', version: '2.0.0', description: 'y' },
+        ],
+        defaultSpec: 'builtin:jsb-v20260903',
+      }),
+    );
+    const sel0 = screen.getByTestId('create-ai-spec-0') as HTMLSelectElement;
+    const sel1 = screen.getByTestId('create-ai-spec-1') as HTMLSelectElement;
+    expect(sel0.value).toBe('builtin:jsb-v20260903');
+    expect(sel1.value).toBe('builtin:jsb-v20260903');
+    // 第二席位改选 lm-0829 → create_room 帧带 specs
+    fireEvent.change(sel1, { target: { value: 'builtin:lm-heuristic-v20260829' } });
+    fireEvent.click(screen.getByTestId('create-submit'));
+    expect(ws.lastSent()).toEqual({
+      type: 'create_room',
+      protocolVersion: PROTOCOL_VERSION,
+      nickname: '甲',
+      config: {
+        playerCount: 4,
+        seed: expect.any(Number),
+        aiSeats: {
+          count: 2,
+          difficulty: 'normal',
+          specs: ['builtin:jsb-v20260903', 'builtin:lm-heuristic-v20260829'],
+        },
+      },
+    });
+  });
 });
 
 describe('<RoomView> AI 徽章', () => {

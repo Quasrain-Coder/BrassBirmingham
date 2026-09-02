@@ -19,6 +19,8 @@ describe('agent plugin registry', () => {
     expect(names).toContain('lm-heuristic-v20260829');
     expect(names).toContain('jsb-v20260831');
     expect(names).toContain('jsb-v20260901');
+    expect(names).toContain('jsb-v20260902a');
+    expect(names).toContain('jsb-v20260902b');
     for (const m of metas) {
       expect(m.version).toBeTruthy();
       expect(m.description).toBeTruthy();
@@ -29,7 +31,7 @@ describe('agent plugin registry', () => {
     expect(resolveAgentPlugin('builtin:lm-heuristic-v20260826').meta.name).toBe('lm-heuristic-v20260826');
     expect(() => resolveAgentPlugin('builtin:nope')).toThrow(/未知 AI 插件/);
     expect(() => resolveAgentPlugin('exec:agents/foo.py')).toThrow(/尚未实现/);
-    expect(DEFAULT_SPEC).toBe('builtin:jsb-v20260901');
+    expect(DEFAULT_SPEC).toBe('builtin:jsb-v20260902b');
   });
 
   it('createAgent 的 decide 返回 legal 集内行动（两版本相同契约）', async () => {
