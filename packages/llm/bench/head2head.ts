@@ -12,9 +12,12 @@ const GAMES = Number(process.argv[4] ?? 40);
 /** argv[5]: 种子起点（并发分段用，缺省 0）。 */
 const SEED0 = Number(process.argv[5] ?? 0);
 
-async function playOne(seed: number): Promise<{ vps: number[]; specs: string[] }> {
-  // 4p：A/B/A/B；奇数局交换首座位，防顺位偏差
-  const specs = seed % 2 === 0 ? [SPEC_A, SPEC_B, SPEC_A, SPEC_B] : [SPEC_B, SPEC_A, SPEC_B, SPEC_A];
+const PAIRED = process.env['PAIRED'] === '1';
+
+async function playOne(seed: number, swap: boolean): Promise<{ vps: number[]; specs: string[] }> {
+  // 4p：A/B/A/B；swap 或（非配对模式下）奇数局交换首座位，防顺位偏差
+  const swapped = PAIRED ? swap : seed % 2 === 1;
+  const specs = !swapped ? [SPEC_A, SPEC_B, SPEC_A, SPEC_B] : [SPEC_B, SPEC_A, SPEC_B, SPEC_A];
   const agents = specs.map((spec, seat) => createAgent(spec, { seat }));
   let state = newGame(4, seed);
   let steps = 0;
@@ -32,20 +35,26 @@ async function playOne(seed: number): Promise<{ vps: number[]; specs: string[] }
 const sum: Record<string, { vp: number; n: number; wins: number }> = {};
 for (const s of [SPEC_A, SPEC_B]) sum[s] = { vp: 0, n: 0, wins: 0 };
 const t0 = Date.now();
+let total = 0;
 for (let g = 0; g < GAMES; g++) {
-  const { vps, specs } = await playOne(SEED0 + g);
-  const winVp = Math.max(...vps);
-  console.log(`game ${g}: ${specs.map((s, i) => `${s === SPEC_A ? 'A' : 'B'}=${vps[i]}`).join(' ')}`);
-  for (let i = 0; i < 4; i++) {
-    const s = sum[specs[i]!]!;
-    s.vp += vps[i]!;
-    s.n += 1;
-    if (vps[i] === winVp) s.wins += 1;
+  // PAIRED=1：同一种子跑 ABAB+BABA 两局完全配对，座位优势精确对消（同代码必 50%）
+  const swaps = PAIRED ? [false, true] : [false]; // 非配对时 playOne 按种子奇偶自定
+  for (const swap of swaps) {
+    const { vps, specs } = await playOne(SEED0 + g, swap);
+    total += 1;
+    const winVp = Math.max(...vps);
+    console.log(`game ${g}${PAIRED ? (swap ? '· swapped' : '· mirror') : ''}: ${specs.map((s, i) => `${s === SPEC_A ? 'A' : 'B'}=${vps[i]}`).join(' ')}`);
+    for (let i = 0; i < 4; i++) {
+      const s = sum[specs[i]!]!;
+      s.vp += vps[i]!;
+      s.n += 1;
+      if (vps[i] === winVp) s.wins += 1;
+    }
   }
   if ((g + 1) % 10 === 0) {
     console.log(`[${g + 1}/${GAMES}] ${((Date.now() - t0) / 1000).toFixed(0)}s`);
   }
 }
 for (const [spec, s] of Object.entries(sum)) {
-  console.log(`${spec}: 人均 ${(s.vp / s.n).toFixed(1)} | 胜率 ${((s.wins / GAMES) * 100).toFixed(0)}% (${s.wins}/${GAMES})`);
+  console.log(`${spec}: 人均 ${(s.vp / s.n).toFixed(1)} | 胜率 ${((s.wins / total) * 100).toFixed(0)}% (${s.wins}/${total})`);
 }
