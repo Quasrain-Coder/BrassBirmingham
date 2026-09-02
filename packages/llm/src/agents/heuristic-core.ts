@@ -374,6 +374,9 @@ const BASE_CFG = {
     /** 次动也用局面叶甄选的权重（0=关闭，默认待消融）：次动候选按
      * "行动分 + weight×本值×行动后局面"重排，次动决策同样获得局势评判。 */
     secondActionEval: 0,
+    /** 未翻面板按真实 flipProb 折算（0=固定 share 粗估；1=精确概率，
+     * 默认待消融）——叶评估与建造评分共享同一翻面模型，叶值逼近短程模拟。 */
+    realFlipProb: 0,
   },
   guardrails: {
     banBuildLv1Brewery: true,
@@ -2127,13 +2130,21 @@ function evaluatePosition(state: GameState, pid: PlayerIndex): number {
   const p = state.players[pid]!;
   const phase = eraPhase(state);
   const profile = eraProfileOf(phase, clamp01(roundsRemaining(state) / ERA_ROUNDS));
+  // realFlipProb=1 时未翻面板按真实 flipProb 折算（叶评估从粗估升级为
+  // 与建造评分同款的精确概率——"从仅 mcts 叶再拓展"：叶值逼近短程模拟）。
+  const leafCtx = w.realFlipProb > 0 ? getCtx(state, pid) : null;
   let flipped = 0;
   let unflipped = 0;
-  for (const slots of Object.values(state.board.slots)) {
+  for (const [loc, slots] of Object.entries(state.board.slots)) {
     for (const t of slots) {
       if (!t || t.player !== pid) continue;
-      if (t.flipped) flipped += t.tile.vp * eraScoreMult(state, t.tile);
-      else unflipped += t.tile.vp * w.unflippedVpShare * eraScoreMult(state, t.tile);
+      if (t.flipped) {
+        flipped += t.tile.vp * eraScoreMult(state, t.tile);
+      } else if (leafCtx) {
+        unflipped += t.tile.vp * flipProbability(state, leafCtx, t.tile.industry, loc as LocationId) * eraScoreMult(state, t.tile);
+      } else {
+        unflipped += t.tile.vp * w.unflippedVpShare * eraScoreMult(state, t.tile);
+      }
     }
   }
   let linkVp = 0;
