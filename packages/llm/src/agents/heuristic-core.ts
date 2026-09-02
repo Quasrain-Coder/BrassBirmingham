@@ -262,6 +262,10 @@ const BASE_CFG = {
     /** 批量出售奖/块（0=关闭）：一次卖 N 块只花 1 动，高手 meta 是攒 2-3 块
      * 一次卖（动作≈5 VP 机会成本）。S3 栈 ×100-200 终验有效：1.5（3.0 过调）。 */
     batchBonus: 1.5,
+    /** 库存积压紧迫奖/块（0=关闭，默认待消融）：己方每块未翻可售板块
+     * 给出售行动加战略分——动作才是瓶颈、翻面才是兑现（审计：全场每局
+     * ~17 VP 面值造了卖不掉，主因是卖动在行动竞争中输给建动）。 */
+    inventoryUrgency: 0,
   },
   loan: {
     amount: 30,
@@ -1817,6 +1821,9 @@ function scoreSellOp(state: GameState, ctx: EvalCtx, action: Extract<Action, { t
   else if (ctx.phase === 'rail-late') p.strategic += w.railLateBaselineBonus;
   // 批量出售奖：多块一卖摊薄动作机会成本（高手 meta：攒 2-3 块一次卖）。
   if (w.batchBonus > 0) p.strategic += (action.sales.length - 1) * w.batchBonus;
+  // 库存积压紧迫：未翻可售板块越多，卖动越紧迫——动作才是瓶颈、翻面才是
+  // 兑现（终局审计：全场每局 ~17 VP 面值造了卖不掉，主因是卖动输给建动）。
+  if (w.inventoryUrgency > 0) p.strategic += ownUnflippedSellableCount(state, ctx.pid) * w.inventoryUrgency;
   // 铁路末段高价值兑现奖：终局未翻的高 VP 板块是纯亏（hint 1），
   // 末段把贵的卖掉优先于再建新的。
   if (ctx.phase === 'rail-late' && w.railLateVpScale > 0) {
