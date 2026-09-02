@@ -6,6 +6,13 @@
  * 每个版本 = createHeuristicPlugin({ meta, overrides }) 的小文件
  * （overrides 即该版本相对 BASE_CFG 的"配置即差异"）。
  *
+ * 设计约定（供新版本作者）：
+ * - 共享"轮子"都在本文件：盘面解析/翻面概率/局面估值/2-ply 前瞻，
+ *   权重全部经 CFG（含 overrides）传入——读者看版本文件即可知道
+ *   该版改了哪些参数、引入了什么机制；
+ * - 版本想引入共享决策之外的特殊处理时，import { buildAgent } 自行
+ *   组合 decide（在共享决策前后加自己的逻辑），特殊代码留在版本文件里。
+ *
  * 行为等价性由 bench/fingerprint.ts 逐局 VP 序列对比保证（重构前后
  * 4 个版本 × 8 局全部逐字节一致，见 bench/docs/2026-09-02-refactor.md）。
  */
@@ -333,6 +340,10 @@ const BASE_CFG = {
     opponentResponseWeight: 0,
     /** 仅对前 K 个首动候选评估对手回应（成本 ≈ 每候选一次全量打分）。 */
     opponentResponseK: 2,
+    /** 四连动（yo-yo）前瞻权重（0=关闭，默认待消融）：本轮我是最后行动者
+     * 且本回合结束后锁定下轮先手（spent 最低）时，追加评估下轮最佳两动——
+     * 末位少花 → 首位连动 4 次，高手常规武器（顺位规则：spent 升序稳定重排）。 */
+    fourActionWeight: 0,
   },
   /** 局面估值叶（上游 MCTS 叶评估器 evaluate_position 移植）：2-ply 前瞻的
    * 叶子从"只看现金惩罚"升级为完整局面评估，等效延展决策视野。
@@ -389,8 +400,13 @@ function deepMerge(base: AnyObj, over: AnyObj): AnyObj {
   return out;
 }
 
-/** 以一份冻结的 CFG 构建一个独立 agent 实例（全部评分函数闭包于 CFG）。 */
-function buildAgent(CFG: Cfg, meta: AgentPlugin['meta']): { decide: (args: { state: GameState; seat: PlayerIndex; legal: Action[] }) => Action } {
+/**
+ * 以一份冻结的 CFG 构建一个独立 agent 实例（全部评分函数闭包于 CFG）。
+ * 开放给版本文件做自定义组合：某版本想在共享决策之上加自己的特殊处理
+ * （额外打分项、决策前/后加工）时，直接 import 本函数包一层 decide 即可，
+ * 不必复制核心逻辑（见 createHeuristicPlugin 的用法）。
+ */
+export function buildAgent(CFG: Cfg, meta: AgentPlugin['meta']): { decide: (args: { state: GameState; seat: PlayerIndex; legal: Action[] }) => Action } {
 
 /** 一时代轮数（context.rs ERA_ROUNDS，仅用于把"时代剩余"归一到 0..1）。 */
 const ERA_ROUNDS = 8.0;
@@ -2189,6 +2205,21 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
     // 局面估值叶（weight=0 关闭）：行动分之外的局势评判，将决策范围进一步延伸到未翻开牌、
     // Link、收入流和手牌，但不止于此。
     if (CFG.leaf.weight > 0) value += CFG.leaf.weight * evaluatePosition(endState, pid);
+    // 四连动（yo-yo）前瞻：本回合打完轮次已推进且下轮由我先手（spent 最低
+    // 锁定）→ 追加评估下轮最佳行动的先手价值（此时全场机会未被对手抢走，
+    // endState 上的贪心分即"先挑"价值）。少花钱保先手的候选自然被该奖青睐。
+    if (
+      CFG.lookahead.fourActionWeight > 0 &&
+      endState.phase !== 'game-over' &&
+      endState.round !== state.round &&
+      endState.turnOrder[endState.currentPlayerIdx] === pid &&
+      roundsRemaining(endState) > 0
+    ) {
+      const nextCtx = getCtx(endState, pid);
+      const nextScored = scoreLegal(endState, nextCtx, enumerateActions(endState, pid), develops, 0);
+      const nextBest = nextScored[0];
+      if (nextBest && nextBest.score > 0) value += CFG.lookahead.fourActionWeight * nextBest.score;
+    }
     // 对手回应（MaxN，opponentResponseWeight=0 关闭）：我方回合结束后，
     // 下一位对手按自身贪心打出的最佳行动是其局面增益——从己方价值中扣减
     // （4 人非零和按 MaxN 各自最大化，上游 mcts-stage3 同款建模）。
