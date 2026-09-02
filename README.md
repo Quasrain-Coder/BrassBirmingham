@@ -134,7 +134,8 @@ const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'lm-heuristic-v20260829': lmV20260829,
   'jsb-v20260831': jsbV20260831,
   'jsb-v20260901': jsbV20260901,
-  'jsb-v20260902': jsbV20260902,
+  'jsb-v20260902a': jsbV20260902a,
+  'jsb-v20260902b': jsbV20260902b,
   'first-legal': firstLegal, // ← your line
 };
 ```
@@ -151,9 +152,10 @@ Built-ins: `lm-heuristic-v20260826` / `lm-heuristic-v20260829`
 heuristic, named by upstream date), `jsb-v20260831` (our tuned fork
 of lm-0829 — endgame sell-window guidance + brewery-sell combo),
 `jsb-v20260901` (canal-era L2+ double-scoring correction,
-flip-precision fixes and sell-batching guidance) and `jsb-v20260902`
-(the default — MCTS-style position evaluator as the 2-ply leaf;
-beats jsb-0901 71.5% and lm-0829 84% over paired head-to-head games).
+flip-precision fixes and sell-batching guidance), `jsb-v20260902a`
+(MCTS-style position evaluator as the 2-ply leaf) and `jsb-v20260902b`
+(the default — same-day iteration adding yo-yo 4-action lookahead;
+beats jsb-0901 66.6% over 500 paired head-to-head games).
 An `exec:<path>`
 transport for external single-file agents (Python/Rust, stdio NDJSON with
 the same payload shape) is planned next — `contract.ts` doubles as its

@@ -1,5 +1,5 @@
 /**
- * jsb-v20260903：启发式 AI 调优版——基于 jsb-v20260902 继续迭代。
+ * jsb-v20260902b：启发式 AI 调优版——基于 jsb-v20260902a 继续迭代。
  *
  * 配置定案（2026-09-02，PAIRED 完全配对基准；相对 jsb-v20260901）：
  * - **yo-yo 四连动前瞻**（lookahead.fourActionWeight 0.5）：本轮我是最后
@@ -11,14 +11,14 @@
  * 内战 4p×100 人均 **112.5**（0902：112.0）。
  * 迭代全史见 bench/docs/2026-09-02-jsb0902-optimization.md。
  *
- * 本文件为 heuristic-core 的配置壳——本版 = 0902 定案 + 四连动权重；
+ * 本文件为 heuristic-core 的配置壳——本版 = 0902a 定案 + 四连动权重；
  * 核心逻辑见 ./heuristic-core.ts。
  */
 import { createHeuristicPlugin } from './heuristic-core.js';
 
 export default createHeuristicPlugin({
   meta: {
-    name: 'jsb-v20260903',
+    name: 'jsb-v20260902b',
     version: '2.0.0',
     description: '启发式评分 AI 调优版（0902 迭代：yo-yo 四连动前瞻，末位保先手连打）',
     author: 'brass-birmingham',

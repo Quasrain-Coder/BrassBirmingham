@@ -1,5 +1,5 @@
 /**
- * jsb-v20260902：启发式 AI 调优版——基于 jsb-v20260901 继续迭代
+ * jsb-v20260902a：启发式 AI 调优版——基于 jsb-v20260901 继续迭代
  * （brass-assistant 2026-08-29 重构版移植），叠加本项目自研引导。
  *
  * 配置定案（2026-09-02，PAIRED 完全配对基准；相对 jsb-v20260901）：
@@ -20,7 +20,7 @@ import { createHeuristicPlugin } from './heuristic-core.js';
 
 export default createHeuristicPlugin({
   meta: {
-    name: 'jsb-v20260902',
+    name: 'jsb-v20260902a',
     version: '2.0.0',
     description: '启发式评分 AI 调优版（0901 迭代：MCTS 局面估值叶移植，2-ply 视野延展）',
     author: 'brass-birmingham',

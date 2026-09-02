@@ -154,7 +154,7 @@ describe('RoomManager AI 座位', () => {
     const rm = new RoomManager();
     expect(() =>
       rm.createRoom(
-        { playerCount: 4, aiSeats: { count: 2, difficulty: 'normal', specs: ['builtin:jsb-v20260903'] } },
+        { playerCount: 4, aiSeats: { count: 2, difficulty: 'normal', specs: ['builtin:jsb-v20260902b'] } },
         'a',
       ),
     ).toThrowError(/specs 长度须等于 count/);
@@ -172,7 +172,7 @@ describe('RoomManager AI 座位', () => {
           aiSeats: {
             count: 2,
             difficulty: 'normal',
-            specs: ['builtin:jsb-v20260903', 'builtin:lm-heuristic-v20260829'],
+            specs: ['builtin:jsb-v20260902b', 'builtin:lm-heuristic-v20260829'],
           },
         },
         'a',
@@ -188,19 +188,19 @@ describe('RoomManager AI 座位', () => {
         aiSeats: {
           count: 3,
           difficulty: 'easy',
-          specs: ['builtin:jsb-v20260903', 'builtin:jsb-v20260901', 'builtin:lm-heuristic-v20260826'],
+          specs: ['builtin:jsb-v20260902b', 'builtin:jsb-v20260901', 'builtin:lm-heuristic-v20260826'],
         },
       },
       'alice',
     );
     rm.startGame(token);
-    expect(room.seats[1]?.nickname).toBe('AI-1（jsb-v20260903）');
+    expect(room.seats[1]?.nickname).toBe('AI-1（jsb-v20260902b）');
     expect(room.seats[2]?.nickname).toBe('AI-2（jsb-v20260901）');
     expect(room.seats[3]?.nickname).toBe('AI-3（lm-heuristic-v20260826）');
     // toRoomState 广播同样带 specs（大厅展示 AI 配置）
     const state = toRoomState(room);
     expect(state.config.aiSeats?.specs).toEqual([
-      'builtin:jsb-v20260903',
+      'builtin:jsb-v20260902b',
       'builtin:jsb-v20260901',
       'builtin:lm-heuristic-v20260826',
     ]);
