@@ -16,6 +16,7 @@ import lmV20260829 from './lm-heuristic-v20260829.js';
 import jsbV20260831 from './jsb-v20260831.js';
 import jsbV20260901 from './jsb-v20260901.js';
 import jsbV20260902 from './jsb-v20260902.js';
+import jsbV20260903 from './jsb-v20260903.js';
 
 const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'lm-heuristic-v20260826': lmV20260826,
@@ -23,10 +24,11 @@ const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'jsb-v20260831': jsbV20260831,
   'jsb-v20260901': jsbV20260901,
   'jsb-v20260902': jsbV20260902,
+  'jsb-v20260903': jsbV20260903,
 };
 
-/** 大厅缺省 AI：jsb-v20260902（0901 迭代：局面估值叶，vs 0901 71.5%、vs lm-0829 84%，2026-09-02 切默认）。 */
-export const DEFAULT_SPEC = 'builtin:jsb-v20260902';
+/** 大厅缺省 AI：jsb-v20260903（0902 迭代：yo-yo 四连动前瞻，vs 0901 74%，2026-09-02 切默认）。 */
+export const DEFAULT_SPEC = 'builtin:jsb-v20260903';
 
 /** 已登记的内置插件清单（大厅可选列表/跑分用）。 */
 export function listAgentPlugins(): AgentPlugin['meta'][] {
