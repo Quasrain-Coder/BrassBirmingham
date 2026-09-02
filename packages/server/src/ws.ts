@@ -34,7 +34,7 @@ import { PROTOCOL_VERSION } from '@brass/protocol';
 import type { ClientMessage, DraftPreview, GameRecord, ServerMessage } from '@brass/protocol';
 import { applyAction, enumerateActions, newGame } from '@brass/engine';
 import type { Action, PlayerIndex } from '@brass/engine';
-import { HeuristicAgent, type DecidingAgent, type Difficulty } from '@brass/llm';
+import { HeuristicAgent, agentFactoryFromSpec, listAgentPlugins, DEFAULT_SPEC, type DecidingAgent, type Difficulty } from '@brass/llm';
 import { RoomError, RoomManager, toRoomState, type Room, type Seat } from './rooms.js';
 import { GameSession, SessionError, type SessionSeat } from './session.js';
 import { findGameById, findSeatByToken, listActions, listSeats, openDb, type Db } from './db/repo.js';
@@ -322,7 +322,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     for (const s of room.seats) {
       if (s === null) throw new Error('unreachable: startGame 校验后仍有空座位');
       seats.push({ seat: s.seat, nickname: s.nickname, token: s.token, isAI: s.isAI });
-      if (s.isAI) agents.set(s.seat, makeAgent(s.seat, difficulty));
+      if (s.isAI) agents.set(s.seat, makeAgent(s.seat, difficulty, specOfAISeat(room.config, s.seat, room.seats)));
     }
     if (room.seed === null) throw new Error('unreachable: startGame 后 seed 未落地');
     // seats（含 token）随开局落库；roomCode 传真实房间码
@@ -350,10 +350,28 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
     void driveAI(entry);
   }
 
-  /** AI agent 构造：注入缝优先，缺省 HeuristicAgent（key 缺失降级路径同此）。 */
-  function makeAgent(seat: PlayerIndex, difficulty: Difficulty): DecidingAgent {
+  /** AI agent 构造：指定插件 spec 优先（大厅按席位选择），注入缝其次，缺省 HeuristicAgent。 */
+  function makeAgent(seat: PlayerIndex, difficulty: Difficulty, spec?: string): DecidingAgent {
+    if (spec !== undefined) return agentFactoryFromSpec(spec)(seat, difficulty);
     if (options.aiAgentFactory !== undefined) return options.aiAgentFactory(seat, difficulty);
     return new HeuristicAgent();
+  }
+
+  /** 第 n 个 AI 席位（按座位序数）对应的插件 spec（aiSeats.specs，缺省 undefined）。 */
+  function specOfAISeat(
+    config: { aiSeats?: { specs?: string[] } },
+    seat: PlayerIndex,
+    seats: readonly ({ isAI: boolean; seat: PlayerIndex } | null)[],
+  ): string | undefined {
+    const specs = config.aiSeats?.specs;
+    if (specs === undefined) return undefined;
+    let n = 0;
+    for (const s of seats) {
+      if (s === null || !s.isAI) continue;
+      n += 1;
+      if (s.seat === seat) return specs[n - 1];
+    }
+    return undefined;
   }
 
   /**
@@ -380,7 +398,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         connected: s.isAI, // AI 恒在线；真人等 resume 置 true
         isAI: s.isAI,
       };
-      if (s.isAI) agents.set(s.seat as PlayerIndex, makeAgent(s.seat as PlayerIndex, difficulty));
+      if (s.isAI) agents.set(s.seat as PlayerIndex, makeAgent(s.seat as PlayerIndex, difficulty, specOfAISeat(game.config, s.seat as PlayerIndex, roomSeats)));
       else tokenSeats.set(s.token, s.seat as PlayerIndex);
     }
     const room: Room = {
@@ -806,6 +824,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         break;
       case 'ping':
         send(conn, { type: 'pong', protocolVersion: PROTOCOL_VERSION });
+        break;
+      case 'list_agent_plugins':
+        send(conn, { type: 'agent_plugins', protocolVersion: PROTOCOL_VERSION, plugins: listAgentPlugins(), defaultSpec: DEFAULT_SPEC });
         break;
       default:
         sendError(conn, 'unknown-message', `未知消息类型: ${String((msg as { type: unknown }).type)}`);

@@ -150,6 +150,62 @@ describe('RoomManager AI 座位', () => {
     expect(rm.findByToken(token)?.seat.seat).toBe(0);
   });
 
+  it('aiSeats.specs 校验：长度不等于 count / 未知 spec 拒绝（invalid-config）', () => {
+    const rm = new RoomManager();
+    expect(() =>
+      rm.createRoom(
+        { playerCount: 4, aiSeats: { count: 2, difficulty: 'normal', specs: ['builtin:jsb-v20260903'] } },
+        'a',
+      ),
+    ).toThrowError(/specs 长度须等于 count/);
+    expect(() =>
+      rm.createRoom(
+        { playerCount: 4, aiSeats: { count: 1, difficulty: 'normal', specs: ['builtin:no-such-agent'] } },
+        'a',
+      ),
+    ).toThrowError(/未知 AI 插件 spec/);
+    // 合法：每席位各自指定版本
+    expect(() =>
+      rm.createRoom(
+        {
+          playerCount: 4,
+          aiSeats: {
+            count: 2,
+            difficulty: 'normal',
+            specs: ['builtin:jsb-v20260903', 'builtin:lm-heuristic-v20260829'],
+          },
+        },
+        'a',
+      ),
+    ).not.toThrow();
+  });
+
+  it('AI 昵称插件版本后缀：指定 specs 时昵称带插件短名', () => {
+    const rm = new RoomManager();
+    const { room, token } = rm.createRoom(
+      {
+        playerCount: 4,
+        aiSeats: {
+          count: 3,
+          difficulty: 'easy',
+          specs: ['builtin:jsb-v20260903', 'builtin:jsb-v20260901', 'builtin:lm-heuristic-v20260826'],
+        },
+      },
+      'alice',
+    );
+    rm.startGame(token);
+    expect(room.seats[1]?.nickname).toBe('AI-1（jsb-v20260903）');
+    expect(room.seats[2]?.nickname).toBe('AI-2（jsb-v20260901）');
+    expect(room.seats[3]?.nickname).toBe('AI-3（lm-heuristic-v20260826）');
+    // toRoomState 广播同样带 specs（大厅展示 AI 配置）
+    const state = toRoomState(room);
+    expect(state.config.aiSeats?.specs).toEqual([
+      'builtin:jsb-v20260903',
+      'builtin:jsb-v20260901',
+      'builtin:lm-heuristic-v20260826',
+    ]);
+  });
+
   it('toRoomState：config 含 aiSeats（仍不含 seed），AI 座位 isAI=true', () => {
     const rm = new RoomManager();
     const { room, token } = rm.createRoom(

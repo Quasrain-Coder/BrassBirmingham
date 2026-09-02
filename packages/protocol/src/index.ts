@@ -17,12 +17,17 @@ export { filterStateFor } from './filter.js';
 
 // 房间配置与大厅
 export type AIDifficulty = 'easy' | 'normal' | 'hard';
-/** AI 座位配置：count 合法域 1..playerCount-1（createRoom 校验，非法回 'invalid-config'）。 */
-export interface AISeatConfig { count: number; difficulty: AIDifficulty }
+/** AI 座位配置：count 合法域 1..playerCount-1（createRoom 校验，非法回 'invalid-config'）。
+ * specs：每个 AI 席位各自指定的插件 spec（如 'builtin:jsb-v20260903'），
+ * 长度须等于 count；缺省 = 全部用服务器默认插件。 */
+export interface AISeatConfig { count: number; difficulty: AIDifficulty; specs?: string[] }
 export interface RoomConfig { playerCount: 2|3|4; seed?: number; aiSeats?: AISeatConfig }
 export interface SeatInfo { seat: PlayerIndex; nickname: string; isAI: boolean; connected: boolean }
 export interface RoomState { code: string; config: RoomConfig; customSeed: boolean; seats: (SeatInfo|null)[]; started: boolean }
 // customSeed：client 供 seed 时 true（公开标记，大厅可展示"房主指定了种子"）；广播 config 不含 seed 值。
+
+/** AI 插件元信息（list_agent_plugins 的应答载荷，与 llm agents/contract.ts 的 meta 对齐）。 */
+export interface AgentPluginMeta { name: string; version: string; description: string; author?: string }
 
 // 下行
 export type ServerMessage =
@@ -35,6 +40,7 @@ export type ServerMessage =
   | { type: 'ai_thinking'; protocolVersion: number; seat: PlayerIndex; thinking: boolean } // AI 决策中指示（true→false 成对）
   | { type: 'game_over'; protocolVersion: number; winner: PlayerIndex[]; finalScores: number[] } // finalScores = 终局 state.players[].vp 按座位序
   | { type: 'export_data'; protocolVersion: number; record: GameRecord } // export_game 的应答:整局记录(开局到当前进度)
+  | { type: 'agent_plugins'; protocolVersion: number; plugins: AgentPluginMeta[]; defaultSpec: string } // list_agent_plugins 的应答:可用 AI 插件清单(大厅下拉用) + 服务器默认 spec
   | { type: 'error'; protocolVersion: number; code: string; message: string }
   | { type: 'pong'; protocolVersion: number };
 
@@ -79,5 +85,6 @@ export type ClientMessage =
   | { type: 'draft_update'; protocolVersion: number; token: string; draft: DraftPreview | null } // 暂存预览同步(null=清除);服务器广播 player_draft 给同房其他人
   | { type: 'leave'; protocolVersion: number; token: string } // 主动退出：清座位索引 + 广播 + 断开本连接（对局继续）
   | { type: 'export_game'; protocolVersion: number; token: string } // 导出当前对局记录(服务器从库读出整局行动日志)
+  | { type: 'list_agent_plugins'; protocolVersion: number } // 查询可用 AI 插件清单(大厅下拉用,无需 token)
   | { type: 'import_game'; protocolVersion: number; record: GameRecord; seat: PlayerIndex; nickname: string } // 从记录的某个前缀开新局:seat=导入者座位(其余座位开放加入),actions 须为从开局起的前缀
   | { type: 'ping'; protocolVersion: number };

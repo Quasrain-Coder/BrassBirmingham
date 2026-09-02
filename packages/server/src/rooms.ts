@@ -16,6 +16,7 @@
 import { randomBytes } from 'node:crypto';
 import type { PlayerIndex } from '@brass/engine';
 import type { AIDifficulty, RoomConfig, RoomState } from '@brass/protocol';
+import { resolveAgentPlugin } from '@brass/llm';
 
 export type RoomErrorCode =
   | 'room-full'
@@ -80,7 +81,11 @@ export function toRoomState(room: Room): RoomState {
       room.config.aiSeats !== undefined
         ? {
             playerCount: room.config.playerCount,
-            aiSeats: { count: room.config.aiSeats.count, difficulty: room.config.aiSeats.difficulty },
+            aiSeats: {
+              count: room.config.aiSeats.count,
+              difficulty: room.config.aiSeats.difficulty,
+              ...(room.config.aiSeats.specs !== undefined ? { specs: room.config.aiSeats.specs } : {}),
+            },
           }
         : { playerCount: room.config.playerCount },
     customSeed: room.customSeed,
@@ -177,7 +182,8 @@ export class RoomManager {
         n += 1;
         room.seats[i] = {
           seat: i as PlayerIndex,
-          nickname: `AI-${n}（${DIFFICULTY_LABEL[aiConfig.difficulty]}）`,
+          // 指定了插件版本时昵称带插件短名（否则沿用难度标签）。
+          nickname: `AI-${n}（${aiConfig.specs?.[n - 1]?.replace(/^builtin:/, '') ?? DIFFICULTY_LABEL[aiConfig.difficulty]}）`,
           token: generateToken(), // 伪造 token：不进 tokenIndex
           connected: true,
           isAI: true,
@@ -271,7 +277,7 @@ const DIFFICULTY_LABEL: Record<AIDifficulty, string> = {
 const AI_DIFFICULTIES: ReadonlySet<string> = new Set(['easy', 'normal', 'hard']);
 
 function validateAISeats(
-  aiSeats: { count: number; difficulty: string },
+  aiSeats: { count: number; difficulty: string; specs?: string[] },
   playerCount: number,
 ): void {
   if (!Number.isInteger(aiSeats.count) || aiSeats.count < 1 || aiSeats.count > playerCount - 1) {
@@ -285,6 +291,22 @@ function validateAISeats(
       'invalid-config',
       `aiSeats.difficulty 须为 easy/normal/hard，收到 ${String(aiSeats.difficulty)}`,
     );
+  }
+  // specs：每个 AI 席位指定插件版本（长度须等于 count，且均为已注册 spec）。
+  if (aiSeats.specs !== undefined) {
+    if (!Array.isArray(aiSeats.specs) || aiSeats.specs.length !== aiSeats.count) {
+      throw new RoomError(
+        'invalid-config',
+        `aiSeats.specs 长度须等于 count（${aiSeats.count}），收到 ${Array.isArray(aiSeats.specs) ? aiSeats.specs.length : '非数组'}`,
+      );
+    }
+    for (const spec of aiSeats.specs) {
+      try {
+        resolveAgentPlugin(spec);
+      } catch {
+        throw new RoomError('invalid-config', `未知 AI 插件 spec：${String(spec)}`);
+      }
+    }
   }
 }
 

@@ -118,9 +118,27 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
   const [seedCode, setSeedCode] = useState<{ code: string; seed: number }>(randomSeedCode);
   const [aiCount, setAiCount] = useState('0');
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('normal');
+  const [aiSpecs, setAiSpecs] = useState<string[]>([]);
   const [joinNick, setJoinNick] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const importFileRef = useRef<HTMLInputElement>(null);
+
+  // 打开 AI 选项后才拉取插件清单（懒加载，不打搅其他流程）。
+  useEffect(() => {
+    if (connected && aiCount !== '0') store.listAgentPlugins();
+  }, [connected, aiCount, store]);
+
+  // AI 席位数/插件清单变化：按席位补齐 spec 数组（默认选中服务器默认插件；
+  // 清单未加载时留下的空串在清单到达后一并替换）。
+  useEffect(() => {
+    const n = Number(aiCount);
+    setAiSpecs((prev) => {
+      const fallback = s.defaultAISpec ?? (s.agentPlugins[0] ? `builtin:${s.agentPlugins[0].name}` : '');
+      const next = prev.slice(0, n).map((v) => (v === '' ? fallback : v));
+      while (next.length < n) next.push(fallback);
+      return next;
+    });
+  }, [aiCount, s.agentPlugins, s.defaultAISpec]);
 
   const onCreate = (e: FormEvent): void => {
     e.preventDefault();
@@ -132,7 +150,13 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
     const ai = Number(aiCount);
     // 合法域 0..playerCount-1（选项已 clamp，这里再守一道）
     if (Number.isInteger(ai) && ai >= 1 && ai <= config.playerCount - 1) {
-      config.aiSeats = { count: ai, difficulty: aiDifficulty };
+      config.aiSeats = {
+        count: ai,
+        difficulty: aiDifficulty,
+        // 插件清单未加载完成时不下发 specs（回退服务器默认插件）；
+        // 空 spec 会被服务端校验拒绝（resolveAgentPlugin 抛错 → invalid-config）。
+        ...(aiSpecs.length === ai && aiSpecs.every((v) => v !== '') ? { specs: aiSpecs } : {}),
+      };
     }
     store.createRoom(nickname, config);
   };
@@ -225,6 +249,28 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
               </Field>
             ) : null}
           </div>
+          {aiCount !== '0' ? (
+            <Field label="AI 版本">
+              <div className="ai-spec-list">
+                {Array.from({ length: Number(aiCount) }, (_, i) => (
+                  <select
+                    key={i}
+                    data-testid={`create-ai-spec-${i}`}
+                    value={aiSpecs[i] ?? ''}
+                    onChange={(e) =>
+                      setAiSpecs((prev) => prev.map((v, j) => (j === i ? e.target.value : v)))
+                    }
+                  >
+                    {s.agentPlugins.map((p) => (
+                      <option key={p.name} value={`builtin:${p.name}`}>
+                        AI-{i + 1}：{p.name}
+                      </option>
+                    ))}
+                  </select>
+                ))}
+              </div>
+            </Field>
+          ) : null}
           <Field label="种子">
             <div className="seed-reroll">
               <code className="seed-code" data-testid="seed-code">
