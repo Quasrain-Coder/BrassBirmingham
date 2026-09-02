@@ -134,6 +134,7 @@ const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'lm-heuristic-v20260829': lmV20260829,
   'jsb-v20260831': jsbV20260831,
   'jsb-v20260901': jsbV20260901,
+  'jsb-v20260902': jsbV20260902,
   'first-legal': firstLegal, // ← your line
 };
 ```
@@ -148,10 +149,12 @@ BRASS_AI_SPEC=builtin:first-legal npm run dev -w @brass/server
 Built-ins: `lm-heuristic-v20260826` / `lm-heuristic-v20260829`
 (faithful ports of two generations of the Eluvk/brass-assistant
 heuristic, named by upstream date), `jsb-v20260831` (our tuned fork
-of lm-0829 — endgame sell-window guidance + brewery-sell combo) and
-`jsb-v20260901` (the default — canal-era L2+ double-scoring correction,
-flip-precision fixes and sell-batching guidance; beats jsb-0831 63%–70%
-and lm-0829 77% over paired head-to-head games). An `exec:<path>`
+of lm-0829 — endgame sell-window guidance + brewery-sell combo),
+`jsb-v20260901` (canal-era L2+ double-scoring correction,
+flip-precision fixes and sell-batching guidance) and `jsb-v20260902`
+(the default — MCTS-style position evaluator as the 2-ply leaf;
+beats jsb-0901 71.5% and lm-0829 84% over paired head-to-head games).
+An `exec:<path>`
 transport for external single-file agents (Python/Rust, stdio NDJSON with
 the same payload shape) is planned next — `contract.ts` doubles as its
 protocol document.
