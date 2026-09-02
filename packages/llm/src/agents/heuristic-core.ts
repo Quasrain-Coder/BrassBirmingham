@@ -344,6 +344,9 @@ const BASE_CFG = {
      * 且本回合结束后锁定下轮先手（spent 最低）时，追加评估下轮最佳两动——
      * 末位少花 → 首位连动 4 次，高手常规武器（顺位规则：spent 升序稳定重排）。 */
     fourActionWeight: 0,
+    /** 下轮第二动计入比例（0=只评下轮首动）：完整的四连动 = 本轮 2 动 +
+     * 下轮 2 动，第二动按本系数折算（<1 体现深度不确定性）。 */
+    fourActionSecondShare: 0,
   },
   /** 局面估值叶（上游 MCTS 叶评估器 evaluate_position 移植）：2-ply 前瞻的
    * 叶子从"只看现金惩罚"升级为完整局面评估，等效延展决策视野。
@@ -2218,7 +2221,25 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
       const nextCtx = getCtx(endState, pid);
       const nextScored = scoreLegal(endState, nextCtx, enumerateActions(endState, pid), develops, 0);
       const nextBest = nextScored[0];
-      if (nextBest && nextBest.score > 0) value += CFG.lookahead.fourActionWeight * nextBest.score;
+      if (nextBest && nextBest.score > 0) {
+        value += CFG.lookahead.fourActionWeight * nextBest.score;
+        // 完整四连动：下轮第二动也按系数计入（先手连打两动的全部价值）。
+        if (CFG.lookahead.fourActionSecondShare > 0) {
+          try {
+            const s3 = applyAction(endState, nextBest.action);
+            if (s3.phase !== 'game-over' && s3.turnOrder[s3.currentPlayerIdx] === pid) {
+              const s3Ctx = getCtx(s3, pid);
+              const thirdScored = scoreLegal(s3, s3Ctx, enumerateActions(s3, pid), develops, 0);
+              const thirdBest = thirdScored[0];
+              if (thirdBest && thirdBest.score > 0) {
+                value += CFG.lookahead.fourActionWeight * CFG.lookahead.fourActionSecondShare * thirdBest.score;
+              }
+            }
+          } catch {
+            // 仿真失败则只计首动。
+          }
+        }
+      }
     }
     // 对手回应（MaxN，opponentResponseWeight=0 关闭）：我方回合结束后，
     // 下一位对手按自身贪心打出的最佳行动是其局面增益——从己方价值中扣减
