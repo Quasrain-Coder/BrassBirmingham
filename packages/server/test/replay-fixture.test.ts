@@ -44,7 +44,7 @@ describe('存档对局回放(wq9gs6-2p-full, 2P 78 动)', () => {
     expect(s.phase).toBe('game-over');
     expect(s.winner).toEqual([0]);
     expect(s.players.map((p) => p!.vp)).toEqual([215, 180]); // 同步 +6/+6（各 3 条挨商人位 Link）
-    // 终局计分后 links 从版图移除
-    expect(s.board.links).toHaveLength(0);
+    // 终局计分后 links 保留在版图上（游戏结束展示/回放用；运河末才移除）
+    expect(s.board.links.length).toBeGreaterThan(0);
   });
 });

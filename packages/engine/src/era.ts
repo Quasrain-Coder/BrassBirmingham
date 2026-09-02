@@ -38,8 +38,10 @@ function flippedLinkIcons(state: GameState, location: LocationId): number {
  * - 相邻**商人位**各 +2（商人位板面印 2 个连接图标，实物版图目视核实 2026-08-26：
  *   如 Warrington 横幅上方的两个六边形链环图标；brass-assistant/npow 同为 +2）。
  * VP 给 Link owner；计分后全部 Link 从版图移除。
+ * @param clear 是否计分后移除 Link（运河末清算 = true，规则要求；终局 = false，
+ * 游戏结束版图应保留建成状态供展示/回放——此前一律 true 导致终局帧铁路全消失）。
  */
-export function scoreEraLinks(state: GameState): GameState {
+export function scoreEraLinks(state: GameState, clear = true): GameState {
   if (state.board.links.length === 0) return state;
   const gains = new Map<PlayerIndex, number>();
   for (const link of state.board.links) {
@@ -57,7 +59,7 @@ export function scoreEraLinks(state: GameState): GameState {
   return {
     ...state,
     players: state.players.map((p, i) => ({ ...p, vp: p.vp + (gains.get(i) ?? 0) })),
-    board: { ...state.board, links: [] },
+    board: { ...state.board, links: clear ? [] : state.board.links },
   };
 }
 
@@ -146,9 +148,10 @@ function determineWinners(state: GameState): PlayerIndex[] {
 /**
  * 终局（铁路时代末）：Link 计分 → 翻面产业计分 → phase='game-over' 并判定 winner。
  * 不做运河末步骤（1 级板块移除/啤酒补满/重洗重抽均不适用）。
+ * Link 计分后**不移除**（clear=false）：游戏结束版图保留建成状态供展示/回放。
  */
 export function finalScore(state: GameState): GameState {
-  let next = scoreEraLinks(state);
+  let next = scoreEraLinks(state, false);
   next = scoreFlippedIndustries(next);
   return {
     ...next,
