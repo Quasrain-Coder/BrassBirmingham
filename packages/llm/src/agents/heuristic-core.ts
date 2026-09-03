@@ -134,6 +134,24 @@ const BASE_CFG = {
      * 扣掉本建造动）已少于己方未翻可售板块数（含本块）时，新可售板块必砸
      * 手里 → flipProb 压到 floor。防末动建可售板块无卖动可跟的纯废动。 */
     sellActionWindow: 1,
+    /** 2 桶板块的自有酒折扣（1=不变，默认待消融）：beerToFlip=2 的板块
+     * （制造 L5/陶 L3/L5）在自有酒桶 <2 时 flipProb 乘本值——建造时点的
+     * 连通酒估计（含商人酒/对手酒）到卖出时点常已被喝走，只有自有酒桶
+     * 是可靠弹药（0903 审计：制造 L5 仍 0.76/局未翻的头号漏项）。 */
+    ownBeer2Discount: 1.0,
+    /** 可售板块自有酒门槛惩罚（0=关闭，默认待消融）：铁路时代建可售板块，
+     * 若自有酒桶 < beerToFlip 且手上没有酒厂牌可造桶，视为大概率砸手里
+     * （真人回放：AI 建 L5 制造厂仅 1 自有桶,翻面需 2,终局未翻=£16 纯亏）。 */
+    railSellableNoOwnBeerPenalty: 0,
+    /** 酒厂牌豁免的最高 beerToFlip（默认 1）：beerToFlip ≤ 本值时手上有酒厂牌
+     * 即可豁免自有酒门槛（造 1 桶容易兑现）；beerToFlip ≥ 2 的板块
+     * （制造 L5/陶 L3/L5）不再豁免——必须自有酒桶 ≥2，防止"带张酒厂牌就敢
+     * 建 L5 却永远造不出第二桶"（0903 败局复盘：P0 带 1 桶+酒厂牌建 L5 未翻）。 */
+    railSellableNoOwnBeerCardExemptMaxLevel: 1,
+    /** 孤岛煤无法翻面时的惩罚系数（1=不变，默认待消融）：非连通商人位的
+     * 孤岛煤且市场吃不下全部方块时 flipProb 乘本值——利克煤终局未翻的教训
+     * （hint 1：小连通块里煤无法翻面，给一个很大的惩罚）。 */
+    isolatedCoalUnflippableMult: 1.0,
     // ── 以下为插件新增（上游无）。C6 消融链 ×500 终验（2026-08-31，62.6% vs
     // 母体 36.2%）证明：收官窗/库存衰减复杂机制全是净负贡献，默认全部关闭；
     // 有效的只有 sell/network 里三个加量常数项。代码保留供后续调参。 ──
@@ -202,6 +220,46 @@ const BASE_CFG = {
     /** 改建目标是当前 VP 领先者时的追加狙击奖。 */
     opponentOverbuildLeaderBonus: 0,
     railLateBeerBonus: 1.2,
+    /** 棉花流冲刺奖（2026-09-03 用户 hint，0=关闭）：铁路时代建 L3+ 棉且
+     * 自有酒桶时的方向性加值（铁路再冲 3-4 张 L3/L4 棉，配自酒卖）。 */
+    cottonRushBonus: 0,
+    /** 运河后期 L1 建造惩罚（0=关闭，默认待消融）：运河进度 <35% 时建 L1
+     * 板块的风险扣分——L1 未翻在运河末被移除=纯亏（审计：全场每局 ~0.6 块
+     * L1 建了没翻，含棉 L1/煤 L1/制造 L1）。 */
+    canalLateL1Penalty: 0,
+    /** 铁路中后期造煤惩罚（0=关闭，默认待消融）：铁路进度 <本门限时，
+     * 煤矿建造的风险扣分——真人回放显示 AI 铁路时代场均 4-5 座煤（真人 ~1），
+     * 同期连接普遍 4-8 VP 而煤仅 2-4 VP，无脑造煤是明确的负优化。 */
+    railCoalLatePenalty: 0,
+    /** 造煤惩罚的铁路进度门限（eraFrac 低于此值 = 中后期）。 */
+    railCoalLateGate: 0.5,
+    /** 运河末首桶留存奖（0=关闭，默认待消融）：运河收官时若场上还没有自己的
+     * 未翻酒厂，建酒厂的额外奖励——铁路开局双轨（£15+2煤+1啤酒）的弹药，
+     * 运河末留 1 桶比多翻一个低级酒厂值钱（hint 4 前半）。 */
+    canalEndBeerReserveBonus: 0,
+    /** 近商城市 L2 建造奖（0=关闭，默认待消融）：运河后期在近商城市
+     * （德比/伯明翰/科尔布鲁克代尔/斯托克）建 L2+ 板块的额外奖励——
+     * 这些城市离贸易商近，铁路时代从它们开始连接抢分（hint 4 后半推论）。 */
+    canalEndL2NearMerchantBonus: 0,
+    /** 德比 L2 建造奖（0=关闭，默认待消融）：德比周围路分稳定最高，
+     * 运河后期在德比建 L2+ 板块的额外奖励（hint 4 补充：德比稳定很高）。 */
+    canalEndL2DerbyBonus: 0,
+    /** 近商城市（非德比）按贸易商可收产业种类的每类奖励（0=关闭，默认待消融）：
+     * 伯明翰/科尔布鲁克代尔/斯托克的权重与附近贸易商能卖的种类挂钩——
+     * 卖的种类越多，这附近未来的建筑越多，权重相应提升（hint 4 补充）。 */
+    canalEndL2NearMerchantPerDiversity: 0,
+    /** 酒厂售卖支持奖（0=关闭，默认待消融）：铁路时代若场上有未翻可售板块
+     * 且自有酒桶不足，建酒厂的额外奖励——"造酒厂桶给卖货供弹"的组合
+     * （hint 3 后半：每次造出酒桶会给 2 个桶，造两个建筑再一起造酒桶+卖出）。 */
+    railBrewerySellSupportBonus: 0,
+    /** 同城已有己方 Link 数 × 本值（0=关闭，默认待消融）：在一个城市连了好
+     * 几条路后，在此城造建筑的额外连通度分（hint 2 后半：更应倾向于在
+     * 高连通城市建造——连通度分吃得多）。 */
+    cityLinkBonus: 0,
+    /** 铁路时代高价值可售板块建造奖（0=关闭，默认待消融）：L3+ 棉/陶/制造
+     * 的额外奖励——真人回放显示人类靠高价值可售板块批量卖出（棉 L3/L4、
+     * 陶 L1，单次 10-21 VP）拉开分差，AI 则偏向可靠翻面的低价值煤铁。 */
+    railHighLevelSellableBonus: 0,
   },
   network: {
     accessPerLocationCard: 0.6,
@@ -218,6 +276,10 @@ const BASE_CFG = {
     /** 铁路 Link 每当前图标的确定性溢价（时代末必得分,对抗建筑翻面不确定性）。
      * C6 ×500 终验有效项：0.7（hint 2：铁路低值建筑不如修高分路）。 */
     railCertaintyBonus: 0.7,
+    /** 对手翻面分享惩罚（0=关闭，默认待消融）：我铺的连接让对手在该城的
+     * 未翻板块得以卖出翻面时，按对手未翻 VP 面值 × 本值从我的 Link 分中
+     * 扣减——基础设施白送对手翻面是隐性亏损（对手建模第一项）。 */
+    opponentFlipSharePenalty: 0,
   },
   develop: {
     railEraTile: 0.35,
@@ -240,6 +302,23 @@ const BASE_CFG = {
     canalCountLimit: 4.0,
     railCountLimit: 1.0,
     overLimitSteepness: 2.0,
+    /** 研发方向引导（2026-09-03 用户复盘 hint，0=关闭）：各产业各级研发的方向性
+     * 加值（仅运河时代）——棉花流研发 L1×2+L2×2 冲 L3；酒厂 L1 必研发；
+     * 陶瓷 L2 冲 L3；制造 L3/L4 适合研发（L5 反而配合 Link 吃分）。 */
+    dirCottonL1: 0,
+    dirCottonL2: 0,
+    dirBreweryL1: 0,
+    dirPotteryL2: 0,
+    dirManuL34: 0,
+    /** 解锁板块实际价值系数（0=关闭）：研发解锁出 L3+ 可售板块且该产业可售时，
+     * 按其 VP 面值 × 本系数追加——棉花流冲 L3/陶瓷冲 L3/制造冲 L5 的精确引导，
+     * 只对真实解锁出的高价值板块生效（避免无差别灌水）。 */
+    unlockSellableVpScale: 0,
+    /** 解锁板块真实建造分系数（0=关闭，默认待消融）：研发目标加值 =
+     * 解锁出的板块的 scoreBuildOp（含 flipProb/商人/啤酒校验）× 本系数——
+     * 研发只在"解锁出的板块确实值得建"时升值（棉花冲 L3 的精确版：
+     * 不是无脑灌研发，而是解锁 L3 且 L3 真能建能卖时才推）。 */
+    unlockBuildValueScale: 0,
   },
   sell: {
     developBonusValue: 0.5,
@@ -266,6 +345,10 @@ const BASE_CFG = {
      * 给出售行动加战略分——动作才是瓶颈、翻面才是兑现（审计：全场每局
      * ~17 VP 面值造了卖不掉，主因是卖动在行动竞争中输给建动）。 */
     inventoryUrgency: 0,
+    /** 用掉商人最后一桶的狙击奖（0=关闭，默认待消融）：卖出时若用掉某商人
+     * 最后一桶且对手有该商人可收的未翻板块，按对手未翻 VP 面值 × 本值
+     * 奖励——让对手 12-20 VP 的卖出流产（对手建模第二项，高手常规武器）。 */
+    denyLastBarrelBonus: 0,
   },
   loan: {
     amount: 30,
@@ -342,6 +425,17 @@ const BASE_CFG = {
     /** 对手回应（MaxN）扣减权重（0=关闭，默认待消融）：我方回合结束后，
      * 下一位对手贪心最佳行动的分数从己方价值中扣减（4 人非零和各自最大化）。 */
     opponentResponseWeight: 0,
+    /** 推演复核局数（0=关闭，默认待消融）：对价值前 rolloutTopK 名候选各跑
+     * K 局随机推演到终局，均分显著更优者改选（最后一块结构拼图：
+     * 用模拟代替静态估值裁决顶部候选）。 */
+    rolloutK: 0,
+    /** 推演复核的候选数（取价值前 N 名）。 */
+    rolloutTopK: 2,
+    /** 改选所需的最小均分优势（防噪声误判）。 */
+    rolloutMargin: 3.0,
+    /** 仅当两个候选的价值差小于该阈值时，才触发推演（将模拟次数只用于候选价值接近的情况，
+     * 它们才是真正的难决策；差距明显的交给启发式）。 */
+    rolloutDeltaThreshold: 2.0,
     /** 仅对前 K 个首动候选评估对手回应（成本 ≈ 每候选一次全量打分）。 */
     opponentResponseK: 2,
     /** 四连动（yo-yo）前瞻权重（0=关闭，默认待消融）：本轮我是最后行动者
@@ -422,6 +516,15 @@ export function buildAgent(CFG: Cfg, meta: AgentPlugin['meta']): { decide: (args
 const ERA_ROUNDS = 8.0;
 
 const MERCHANT_IDS = Object.keys(MERCHANTS) as MerchantId[];
+
+/** 近商城市（hint 4：德比/伯明翰/科尔布鲁克代尔/斯托克——离贸易商近，
+ * 铁路时代从它们开始连接抢分，运河时代在上面留 L2 建筑的需求应调高）。 */
+const NEAR_MERCHANT_CITIES: ReadonlySet<string> = new Set([
+  'derby',
+  'birmingham',
+  'coalbrookdale',
+  'stoke-on-trent',
+]);
 
 function isMerchantNode(x: string): x is MerchantId {
   return Object.prototype.hasOwnProperty.call(MERCHANTS, x);
@@ -879,6 +982,33 @@ function ownUnflippedBreweryCount(state: GameState, pid: PlayerIndex): number {
   return n;
 }
 
+/** 手上是否有可造酒厂的牌（酒厂产业牌或百搭产业牌）。 */
+function hasBreweryCardInHand(state: GameState, pid: PlayerIndex): boolean {
+  return state.players[pid]!.hand.some(
+    (c) => (c.kind === 'industry' && c.industries.includes('brewery')) || c.kind === 'wild-industry',
+  );
+}
+
+/** 该城市附近（连通可达）贸易商可收的产业种类数（棉/制造/陶；'any' 按 3 种计）。 */
+function merchantDiversityFor(state: GameState, loc: LocationId): number {
+  const reach = reachableFrom(state, [loc]);
+  const kinds = new Set<IndustryType>();
+  for (const id of MERCHANT_IDS) {
+    if (!reach.has(id)) continue;
+    for (const t of state.merchants[id].tiles) {
+      if (t === 'blank') continue;
+      if (t === 'any') {
+        kinds.add('cotton');
+        kinds.add('manufacturer');
+        kinds.add('pottery');
+      } else {
+        kinds.add(t);
+      }
+    }
+  }
+  return kinds.size;
+}
+
 /** 场上己方某产业的板块数（已建出的流派"在场"证据）。 */
 function countOwnTilesOnBoard(state: GameState, pid: PlayerIndex, ind: IndustryType): number {
   let n = 0;
@@ -896,6 +1026,29 @@ function ownUnflippedSellableVp(state: GameState, pid: PlayerIndex): number {
   for (const slots of Object.values(state.board.slots)) {
     for (const t of slots) {
       if (t && t.player === pid && !t.flipped && t.tile.sellable) n += t.tile.vp;
+    }
+  }
+  return n;
+}
+
+/** 某城市对手（非 pid）未翻面板块的 VP 面值总和（基础设施白送对手翻面的隐性亏损口径）。 */
+function opponentsUnflippedVpAt(state: GameState, pid: PlayerIndex, loc: NetworkNode): number {
+  if (isMerchantNode(loc)) return 0;
+  let n = 0;
+  for (const t of state.board.slots[loc] ?? []) {
+    if (t && t.player !== pid && !t.flipped) n += t.tile.vp;
+  }
+  return n;
+}
+
+/** 对手（非 pid）未翻可售板块中某商人可收的 VP 面值总和（狙击该商人最后一桶的价值口径）。 */
+function opponentsUnflippedSellableVpFor(state: GameState, pid: PlayerIndex, merchant: MerchantId): number {
+  let n = 0;
+  for (const slots of Object.values(state.board.slots)) {
+    for (const t of slots) {
+      if (t && t.player !== pid && !t.flipped && t.tile.sellable && merchantAccepts(state, merchant, t.tile.industry)) {
+        n += t.tile.vp;
+      }
     }
   }
   return n;
@@ -945,6 +1098,17 @@ function ownsLinkTouching(state: GameState, pid: PlayerIndex, loc: LocationId): 
     const l = LINKS[bl.linkIndex]!;
     return l.a === loc || l.b === loc;
   });
+}
+
+/** 玩家触及 loc（a/b 端点）的己方 Link 数。 */
+function ownLinksToCity(state: GameState, pid: PlayerIndex, loc: LocationId): number {
+  let n = 0;
+  for (const bl of state.board.links) {
+    if (bl.player !== pid) continue;
+    const l = LINKS[bl.linkIndex]!;
+    if (l.a === loc || l.b === loc) n += 1;
+  }
+  return n;
 }
 
 /** 手里有能建 ind 的产业卡 / wild 产业卡。 */
@@ -1130,12 +1294,16 @@ function resourceFlip(
 
   if (isCoal && !canSell) {
     const heatPrice = coalPrice(state);
+    const sale = simulateMarketSale(state, isCoal, cubes);
+    // 孤岛煤且市场吃不下全部方块 → 大概率砸手里（hint 1：非连通贸易商的小
+    // 连通块里煤无法翻面，给一个很大的惩罚——利克煤终局未翻的教训）。
+    const unflippableMult = sale.flips ? 1 : w.isolatedCoalUnflippableMult;
     if (isCanalPhase(ctx.phase)) {
       const heat = priceHeat(heatPrice, w.islandCoalCanalPriceBase, w.islandCoalCanalPriceSpan);
-      return Math.min(w.islandCoalCanalCap, w.islandCoalCanalBase + w.islandCoalCanalHeatBonus * heat);
+      return Math.min(w.islandCoalCanalCap, w.islandCoalCanalBase + w.islandCoalCanalHeatBonus * heat) * unflippableMult;
     }
     const heat = priceHeat(heatPrice, w.islandCoalRailPriceBase, w.islandCoalRailPriceSpan);
-    return Math.min(w.islandCoalRailCap, w.islandCoalRailBase + w.islandCoalRailHeatBonus * heat);
+    return Math.min(w.islandCoalRailCap, w.islandCoalRailBase + w.islandCoalRailHeatBonus * heat) * unflippableMult;
   }
 
   const sale = simulateMarketSale(state, isCoal, cubes);
@@ -1193,6 +1361,11 @@ function sellableFlip(
     // beerToFlip（制造 L5/陶 L3/L5 需 2 桶，beer_economy 里才用真实桶数）。
     const need = w.realBeerNeed > 0 ? (nextTile(state, ctx.pid, ind)?.beerToFlip ?? 1) : 1;
     b += beerAvailable(state, loc, ctx.pid, need) ? w.sellableMerchantWithBeer : w.sellableMerchantOnly;
+    // 2 桶板块的自有酒折扣：自有酒桶 <2 时 flipProb 打折——连通酒估计
+    // 到卖出时点常已被喝走，只有自有酒桶是可靠弹药。
+    if (need >= 2 && w.ownBeer2Discount < 1 && ownedBeerBarrels(state, ctx.pid) < 2) {
+      b *= w.ownBeer2Discount;
+    }
   } else {
     b += w.sellableNoMerchant;
   }
@@ -1528,6 +1701,80 @@ function scoreBuildOp(state: GameState, ctx: EvalCtx, ind: IndustryType, loc: Lo
   // 覆盖己方板块 = 放弃其时代末 VP。
   const over = overbuiltOwnTile(state, ctx.pid, ind, loc, slotIndex, tile);
   if (over) p.risk -= over.tile.vp * CFG.value.ownOverbuildVpLoss;
+  // 运河后期 L1 建造惩罚：运河进度 <35% 时建 L1 板块，未翻在运河末被移除=纯亏。
+  if (CFG.build.canalLateL1Penalty > 0 && tile.level === 1 && state.era === 'canal' && ctx.eraFrac < 0.35) {
+    p.risk -= CFG.build.canalLateL1Penalty;
+  }
+  // 酒厂售卖支持奖：铁路时代若场上有未翻可售板块且自有酒桶不足，建酒厂
+  // 额外奖励——"造酒厂桶给卖货供弹"的组合（铁路造酒厂给 2 个桶）。
+  if (
+    CFG.build.railBrewerySellSupportBonus > 0 &&
+    ind === 'brewery' &&
+    state.era === 'rail' &&
+    ownUnflippedSellableCount(state, ctx.pid) > 0 &&
+    ownedBeerBarrels(state, ctx.pid) < 2
+  ) {
+    p.strategic += CFG.build.railBrewerySellSupportBonus;
+  }
+  // 同城已有己方 Link 数 × 奖励：在一个城市连了好几条路后，在此城造建筑
+  // 的额外连通度分（更应倾向于在高连通城市建造）。
+  if (CFG.build.cityLinkBonus > 0) {
+    p.strategic += ownLinksToCity(state, ctx.pid, loc) * CFG.build.cityLinkBonus;
+  }
+  // 铁路时代高价值可售板块建造奖：L3+ 棉/陶/制造的额外奖励——人类靠这些
+  // 板块批量卖出拉开分差（棉 L3/L4、陶 L1，单次 10-21 VP）。
+  if (
+    CFG.build.railHighLevelSellableBonus > 0 &&
+    sellableInd &&
+    tile.level >= 3 &&
+    state.era === 'rail'
+  ) {
+    p.strategic += CFG.build.railHighLevelSellableBonus;
+  }
+  // 运河末首桶留存奖：运河收官时若还没有自己的未翻酒厂，建酒厂额外奖励
+  // （铁路开局双轨的啤酒弹药，运河末留 1 桶比多翻一个低级酒厂值钱）。
+  if (
+    CFG.build.canalEndBeerReserveBonus > 0 &&
+    ind === 'brewery' &&
+    isCanalPhase(ctx.phase) &&
+    isEraEndgame(ctx) &&
+    ownUnflippedBreweryCount(state, ctx.pid) === 0
+  ) {
+    p.strategic += CFG.build.canalEndBeerReserveBonus;
+  }
+  // 近商城市 L2 建造奖：运河后期在近商城市建 L2+ 板块，为铁路开局连接抢分。
+  // 德比按固定高奖（周围路分稳定最高）；伯明翰/科尔布鲁克代尔/斯托克按
+  // 附近贸易商可收产业种类加权（卖的种类越多,这附近未来建筑越多）。
+  if (tile.level >= 2 && isCanalPhase(ctx.phase) && NEAR_MERCHANT_CITIES.has(loc)) {
+    if (loc === 'derby' && CFG.build.canalEndL2DerbyBonus > 0) {
+      p.strategic += CFG.build.canalEndL2DerbyBonus;
+    } else if (CFG.build.canalEndL2NearMerchantPerDiversity > 0) {
+      p.strategic += merchantDiversityFor(state, loc) * CFG.build.canalEndL2NearMerchantPerDiversity;
+    }
+  }
+  // 铁路中后期造煤惩罚：同期连接普遍 4-8 VP 而煤仅 2-4 VP，无脑造煤是负优化。
+  if (
+    CFG.build.railCoalLatePenalty > 0 &&
+    ind === 'coal' &&
+    state.era === 'rail' &&
+    ctx.eraFrac < CFG.build.railCoalLateGate
+  ) {
+    p.risk -= CFG.build.railCoalLatePenalty;
+  }
+  // 可售板块自有酒门槛（hint 3）：铁路时代建可售板块，若自有酒桶不足以翻面
+  // 且手上没有酒厂牌可造桶，视为大概率砸手里——贸易商桶只有 1 个、
+  // 铁路时代不可能从其他玩家手里获得桶，自有酒桶是唯一可靠弹药。
+  // 酒厂牌豁免仅限 beerToFlip=1（造 1 桶容易兑现）；≥2 桶必须自有酒桶 ≥2。
+  if (
+    CFG.flip.railSellableNoOwnBeerPenalty > 0 &&
+    sellableInd &&
+    state.era === 'rail' &&
+    ownedBeerBarrels(state, ctx.pid) < tile.beerToFlip &&
+    (tile.beerToFlip > CFG.flip.railSellableNoOwnBeerCardExemptMaxLevel ||
+      !hasBreweryCardInHand(state, ctx.pid))
+  ) {
+    p.risk -= CFG.flip.railSellableNoOwnBeerPenalty;
+  }
 
   // 改建对手煤/铁厂（引擎规则:全场该类方块为 0 时同产业更高级可覆盖）——
   // 定向拆除定价:翻面板=对手已得的时代末 VP 与收入流直接蒸发,未翻面板
@@ -1560,6 +1807,16 @@ function scoreBuildOp(state: GameState, ctx: EvalCtx, ind: IndustryType, loc: Lo
   if (ctx.phase === 'rail-late' && sellable) {
     const beerOk = countBeerSources(state, loc, ctx.pid) > 0 || beerBarrelReachable(state, loc);
     if (beerOk) p.strategic += CFG.build.railLateBeerBonus;
+  }
+  // 棉花流冲刺：铁路时代建 L3+ 棉且自有酒桶（铁路再冲 3-4 张 L3/L4 配自酒卖）。
+  if (
+    CFG.build.cottonRushBonus > 0 &&
+    ind === 'cotton' &&
+    tile.level >= 3 &&
+    !isCanalPhase(ctx.phase) &&
+    ownedBeerBarrels(state, ctx.pid) > 0
+  ) {
+    p.strategic += CFG.build.cottonRushBonus;
   }
 
   return totalOf(ctx, p);
@@ -1600,6 +1857,13 @@ function scoreNetworkLink(state: GameState, ctx: EvalCtx, linkIndex: number, cos
   // Link 确定性溢价（hint:铁路低值建筑不如修高分路——Link VP 时代末必得,
   // 不像建筑要看翻面概率脸色;仅铁路时代,运河网反正要拆）。
   if (!isCanalPhase(ctx.phase)) vp += current * CFG.network.railCertaintyBonus;
+  // 对手翻面分享惩罚：我铺的连接让对手在该城的未翻板块得以卖出翻面时，
+  // 按对手未翻 VP 面值 × 系数从我的 Link 分中扣减——基础设施白送对手
+  // 翻面是隐性亏损（对手建模第一项）。
+  if (w.opponentFlipSharePenalty > 0) {
+    vp -= opponentsUnflippedVpAt(state, ctx.pid, a) * w.opponentFlipSharePenalty;
+    vp -= opponentsUnflippedVpAt(state, ctx.pid, b) * w.opponentFlipSharePenalty;
+  }
 
   // 探索先验：本时代头几条进空白区域的连接是溢价。
   const linksBuilt = state.board.links.filter((x) => x.player === ctx.pid).length;
@@ -1716,9 +1980,41 @@ function developTargetValue(
     }
   }
   if (isCanalPhase(ctx.phase)) v += w.canalBonus;
+  // 研发方向引导（用户 hint）：棉花流 L1/L2、酒厂 L1、陶瓷 L2、制造 L3/L4。
+  // 仅在产业可售（商人收 + 有啤酒路径）时引导——避免在该产业已死的局里误推。
+  if (isCanalPhase(ctx.phase) && developDirectionViable(state, ctx, ind)) {
+    if (ind === 'cotton' && removed.level === 1) v += w.dirCottonL1;
+    else if (ind === 'cotton' && removed.level === 2) v += w.dirCottonL2;
+    else if (ind === 'brewery' && removed.level === 1) v += w.dirBreweryL1;
+    else if (ind === 'pottery' && removed.level === 2) v += w.dirPotteryL2;
+    else if (ind === 'manufacturer' && (removed.level === 3 || removed.level === 4)) v += w.dirManuL34;
+    // 解锁板块实际价值：解锁出 L3+ 可售板块且产业可售时按 VP 面值追加
+    // （棉花流冲 L3/陶瓷冲 L3/制造冲 L5 的精确引导，只对真实高价值解锁生效）。
+    if (unlocked && unlocked.sellable && unlocked.level >= 3) {
+      v += unlocked.vp * w.unlockSellableVpScale;
+    }
+  }
+  // 解锁板块真实建造分：解锁出的板块确实值得建（scoreBuildOp 含 flipProb/
+  // 商人/啤酒校验）时，研发才升值——棉花冲 L3 的精确版。
+  if (w.unlockBuildValueScale > 0 && unlocked) {
+    const loc = ctx.targets.find((t) => t.industry === unlocked.industry)?.location;
+    if (loc !== undefined) {
+      const buildScore = scoreBuildOp(state, ctx, unlocked.industry, loc);
+      if (buildScore > 0) v += buildScore * w.unlockBuildValueScale;
+    }
+  }
   if (ctx.plan.industry === ind) v += w.planBonus;
   if (hasBuildableCard(state, ctx.pid, ind)) v += w.buildableCardBonus;
   return v - developGuardrailPenalty(ind, removed.level);
+}
+
+/** 研发方向引导的可行性门：仅当玩家已用一块 L1 棉花/陶瓷板块"投石问路"
+ * （场上已有该产业板块，翻过或没翻过）且该产业仍可售时才引导——
+ * 用户流派范式是"先建 L1 确认能卖，再研发整个栈"，避免过早投入
+ * （E4r 教训：C1-C3 可行性未明就灌研发，沉没成本拖垮全盘）。 */
+function developDirectionViable(state: GameState, ctx: EvalCtx, ind: IndustryType): boolean {
+  if (countOwnTilesOnBoard(state, ctx.pid, ind) === 0) return false;
+  return MERCHANT_IDS.some((id) => merchantAccepts(state, id, ind));
 }
 
 /** score_develop_plans：对一个合法 develop 行动（removals 1|2）评分。 */
@@ -1811,6 +2107,16 @@ function scoreSellOp(state: GameState, ctx: EvalCtx, action: Extract<Action, { t
     p.vp += placed.tile.vp * eraScoreMult(state, placed.tile);
     p.income += placed.tile.incomeAdvance;
     if (sale.useMerchantBeer) addParts(p, merchantBonusParts(state, sale.merchant));
+    // 用掉商人最后一桶的狙击奖：让对手该商人可收的未翻板块卖出流产
+    // （对手建模：高手常规武器——抢先用掉商人最后一桶可让对手 12-20 VP 的
+    // 卖出流产）。
+    if (sale.useMerchantBeer && w.denyLastBarrelBonus > 0) {
+      const m = state.merchants[sale.merchant];
+      const barrelsLeft = m.barrels.filter((b, i) => b && m.tiles[i] !== 'blank').length;
+      if (barrelsLeft === 1) {
+        p.strategic += opponentsUnflippedSellableVpFor(state, ctx.pid, sale.merchant) * w.denyLastBarrelBonus;
+      }
+    }
   }
 
   // 翻面推进收入 = 持续性现金流，显式加计。
@@ -2168,6 +2474,22 @@ function evaluatePosition(state: GameState, pid: PlayerIndex): number {
   );
 }
 
+/** 随机推演到终局（LCG 种子保证确定性），返回 pid 座位的终局 VP。 */
+function randomRollout(state: GameState, pid: PlayerIndex, rngSeed: number): number {
+  let s = state;
+  let seed = rngSeed >>> 0;
+  const rand = (): number => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 0x100000000);
+  let steps = 0;
+  while (s.phase !== 'game-over') {
+    const player = s.turnOrder[s.currentPlayerIdx]!;
+    const legal = enumerateActions(s, player);
+    if (legal.length === 0) break;
+    s = applyAction(s, legal[Math.floor(rand() * legal.length)]!);
+    if (++steps > 100_000) break;
+  }
+  return s.players[pid]!.vp;
+}
+
 /** choose_action：首动候选 × 次动最优的确定性前瞻，返回 legal 中的最佳行动。 */
 function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], develops: DevelopCounts): Action {
   const ctx = getCtx(state, pid);
@@ -2176,6 +2498,7 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
   const firstCandidates = topPerType(scored, CFG.lookahead.firstActionK);
 
   let best: { action: Action; value: number } | null = null;
+  const ranked: { action: Action; value: number }[] = [];
   for (const c1 of firstCandidates) {
     let s1: GameState;
     try {
@@ -2275,6 +2598,52 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
       }
     }
     if (!best || value > best.value) best = { action: c1.action, value };
+    ranked.push({ action: c1.action, value });
+  }
+
+  // 推演复核（rolloutK>0）：对价值前 rolloutTopK 名各跑 K 局随机推演到终局，
+  // 若次名均分显著超过榜首（>rolloutMargin），改选次名。
+  // 仅在两个候选的价值接近（< rolloutDeltaThreshold）时触发，将模拟次数留给真正的难决策。
+  if (
+    CFG.lookahead.rolloutK > 0 &&
+    ranked.length >= 2 &&
+    ranked[0]!.value - ranked[1]!.value < CFG.lookahead.rolloutDeltaThreshold
+  ) {
+    ranked.sort((a, b) => b.value - a.value);
+    const top = ranked.slice(0, Math.max(2, CFG.lookahead.rolloutTopK));
+    let bestRoll = -1;
+    let bestIdx = 0;
+    for (let i = 0; i < top.length; i++) {
+      let sum = 0;
+      for (let k = 0; k < CFG.lookahead.rolloutK; k++) {
+        try {
+          const s1 = applyAction(state, top[i]!.action);
+          sum += randomRollout(s1, pid, 0x9e3779b9 ^ (i * 0x10001 + k));
+        } catch {
+          sum += 0;
+        }
+      }
+      const mean = sum / CFG.lookahead.rolloutK;
+      if (mean > bestRoll) {
+        bestRoll = mean;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx > 0 && bestRoll > 0) {
+      const topMean = (() => {
+        let sum = 0;
+        for (let k = 0; k < CFG.lookahead.rolloutK; k++) {
+          try {
+            const s1 = applyAction(state, top[0]!.action);
+            sum += randomRollout(s1, pid, 0x9e3779b9 ^ k);
+          } catch {
+            sum += 0;
+          }
+        }
+        return sum / CFG.lookahead.rolloutK;
+      })();
+      if (bestRoll > topMean + CFG.lookahead.rolloutMargin) best = { action: top[bestIdx]!.action, value: bestRoll };
+    }
   }
 
   // 兜底（上游 pass_decision 语义：无候选时也有 pass=0 在 scored 里）。
