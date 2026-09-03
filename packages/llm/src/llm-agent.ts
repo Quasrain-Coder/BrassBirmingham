@@ -146,7 +146,9 @@ export class LLMAgent implements DecidingAgent {
       // 只有 DeepSeek-V4-Flash 没有 claude-sonnet-4-5）。
       model: process.env['BRASS_AI_MODEL'] ?? cfg.model,
       maxTokens: cfg.maxTokens,
-      timeoutMs: cfg.timeoutMs,
+      // BRASS_AI_TIMEOUT_MS 覆盖单请求超时（慢思考模型如 k3 用——默认 8s 对带
+      // thinking 的模型太紧，会大面积降级到启发式）。
+      timeoutMs: Number(process.env['BRASS_AI_TIMEOUT_MS'] ?? cfg.timeoutMs),
     };
     const usage = { input: 0, output: 0 };
 
