@@ -264,6 +264,9 @@ function describeBuild(
   const gains = [`${def.vp}VP`, `${def.incomeAdvance}收入`];
   if (def.linkIcons > 0) gains.push(`${def.linkIcons}Link`);
 
+  // 翻面时机按产业区分——酿酒厂建成放桶不翻面（桶耗尽才翻），消费类板块卖出才翻，
+  // 不写清楚 LLM 会误以为建成即拿翻面收益（v3 bench 实测：开局连建酒厂导致收入卡 0）
+  let flipLabel = '翻面';
   let extra = '';
   if (def.industry === 'iron') {
     const r = marketSellRevenue(IRON_MARKET_PRICES, state.ironMarket, def.resourcesPlaced);
@@ -275,13 +278,16 @@ function describeBuild(
     const r = marketSellRevenue(COAL_MARKET_PRICES, state.coalMarket, def.resourcesPlaced);
     if (r.sold > 0) extra = `；建成即卖市场≈£${r.revenue}`;
   } else if (def.industry === 'brewery') {
+    flipLabel = '桶耗尽才翻面（建成当下不给）';
     extra = `；建成放${BREWERY_BARRELS[state.era]}桶`;
+  } else {
+    flipLabel = '卖出才翻面（建成当下不给）';
   }
 
   return (
     `在${where}建${def.level}级${INDUSTRY_CN[def.industry]}` +
     `（${cost.join('+')}${notes.length > 0 ? `，${notes.join('，')}` : ''}）` +
-    `：翻面${gains.join('+')}${extra}`
+    `：${flipLabel}${gains.join('+')}${extra}`
   );
 }
 
@@ -378,7 +384,7 @@ function describeLoan(state: GameState, player: PlayerIndex): string {
   // 让描述显式带出"贷款会把收入打负=慢性扣VP"的后果，压过模型对 £30 的贪欲。
   const warning =
     after < 0
-      ? `【警告：贷后收入${after}为负，轮末按等级扣现金（不足拆板块/扣VP）；仅当本回合能翻面转正（酒厂/铁厂/煤矿）时才是强手，否则别选】`
+      ? `【警告：贷后收入${after}为负，轮末按等级扣现金（不足拆板块/扣VP）；仅当本回合能翻面转正（铁厂/煤矿建成即翻）时才是强手，否则别选】`
       : cur < 0
         ? `【已在负收入，仅在能立即转正时考虑】`
         : '';
@@ -421,7 +427,7 @@ export const SYSTEM_PROMPT = [
   '目标：胜利分(VP)最高者胜。VP 主要来自翻面的产业板块与翻面板块上 Link 图标所连的已建 Link；收入轨决定每轮发工资。',
   '规则要点：',
   '- 每回合从候选中选 1 个行动。build 建板块（耗 £，可能耗煤/铁）；network 铺路扩连通（运河 £3/条；铁路 £5/条，或双轨 £15+1 啤酒，每条约耗 1 煤）；sell 卖货（棉纺/制造/陶瓷板块须连通对应图标的商人板块，耗啤酒翻面）；develop 研发（耗铁移除面板低级板块，解锁更高级）；loan 贷款 £30、收入退 3 级；scout 弃 3 张换 2 张 Wild 卡；pass 跳过。',
-  '- 翻面是核心：煤/铁/酿酒厂资源耗尽自动翻面；棉纺/制造/陶瓷靠 sell 翻面。翻面给 VP、收入前进与 Link 图标。',
+  '- 翻面是核心：煤/铁厂的资源块耗尽自动翻面（建成时资源自动卖给缺货市场，常当场翻面回血）；酿酒厂建成不翻面，啤酒桶被铺路/卖货消耗尽才翻；棉纺/制造/陶瓷靠 sell 翻面。翻面给 VP、收入前进与 Link 图标。',
   '- 连通：建造/卖货所需煤、啤酒沿已建 Link（任何玩家的）可达即免费取，不足按市场价买；从市场买煤必须连通商人位，买铁不需要连通。',
   '- 时代：运河时代后进入铁路时代（运河末清算）；1 级板块（除陶瓷）铁路时代不可建，且运河时代末移除。',
   '策略要点：',
@@ -429,7 +435,7 @@ export const SYSTEM_PROMPT = [
   '- 卖出是得分引擎：已建消费类板块（棉纺/制造/陶瓷）能卖（连通对应商人图标 + 啤酒够）时，卖出通常优于继续建新板块——翻面给高 VP+收入+Link 图标。建消费板块前先确认卖货路径。',
   '- 避免空过：pass 是最后手段。现金少时，卖出（不需要现金）、铺 £3 运河 / £5 铁路、研发、搜寻几乎总有一件可做。',
   '经验法则（jsb-v20260902b 启发式 4 人自对局 100 局 + 冠军轨迹复盘提炼，见 packages/llm/bench/docs/2026-09-03-jsb0902b-lessons.md）：',
-  '- 开局：尽早研发拆 1 级酿酒厂解锁 2 级酒厂（£7 翻面 5VP+5 收入+2Link）；第一批运河优先连通商人位（再谈造货）。',
+  '- 开局先造血再投资：优先建铁厂/煤矿（建成资源自动卖市场，当场拿现金+收入+翻面 VP）和连通商人位的运河，有现金引擎后再建酿酒厂（延迟投资）。研发拆 1 级酿酒厂解锁 2 级酒厂仍应尽早（占研发位）。',
   '- 铁厂/煤矿是现金流引擎而非计分器：建成就近卖市场回血，现金回流支撑酒厂/棉纺连建；铁优先留给陶瓷厂翻面。',
   '- 高价板块（陶瓷/高级棉纺/制造厂）先确认卖货路径再建：已连通接收该类型的商人且商人还有啤酒额度，否则先铺路。',
   '- 贷款是开局标准动作不是禁区：启动现金撑不起酒厂/铁厂连建，运河时代前 4 轮内贷 1-2 次款是强打法的标志——只要翻面路径明确（酒厂 +5 / 铁厂 +3 / 煤矿 +4 收入），即使暂入负收入也会立刻转正回本。终局（收入已无需经营）贷款 ≈ 免费 £30。真正要避免的只有一种：收入已为负且没有当回合转正手段时再贷。',
