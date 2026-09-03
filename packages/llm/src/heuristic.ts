@@ -109,6 +109,8 @@ export function scoreAction(
  * 直接移出候选集。轻度负贷（-1）保留——冠军轨迹显示开局 2→-1 贷款当回合
  * 翻酒厂/铁厂转正才是最强打法（2026-09-03 bench：剔除后 LLM 现金枯竭陷入
  * pass 死亡螺旋，人均 28.5 VP vs 启发式 113.3）。
+ * **枯竭逃生口**：现金 <£10 且收入 0 时贷款是唯一解锁手段（不贷则永远
+ * £0/轮、整局锁死，v4 bench 实测 LLM 单局 0 VP），此时一律放行。
  *
  * **类型配额**：去重/消毒后再为每种行动类型各保留该类最高分 1 个，剩余名额
  * 再按分数填满。k 小于类型数时只保留分数最高的前 k 类。输出恒按分数降序。
@@ -119,12 +121,14 @@ export function prescreen(
   legal: Action[],
   k: number,
 ): Action[] {
-  // 0. 深度负贷剔除：贷后收入 ≤-2 永不进 LLM 候选；轻度负贷（-1）保留。
+  // 0. 深度负贷剔除：贷后收入 ≤-2 原则上不进候选；但现金枯竭（<£10）时
+  // 贷款是唯一逃生口（不贷=永久锁死），一律放行。
   const ps = state.players[player];
   const curLevel = ps ? incomeLevelAt(ps.incomeSpace) : 0;
+  const broke = ps !== undefined && ps.money < 10;
   const filtered = legal.filter((a) => {
     if (a.type !== 'loan') return true;
-    return curLevel - 3 >= -1;
+    return curLevel - 3 >= -1 || broke;
   });
   // 1. cardId 去重：稳定序列化（去 cardId）为 key，每种选择只留最高分代表。
   const seen = new Set<string>();
