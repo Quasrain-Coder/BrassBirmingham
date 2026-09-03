@@ -26,7 +26,7 @@ import {
 } from '@brass/engine';
 import type { ClaudeClient } from './client.js';
 import type { DecidingAgent, Decision } from './decision.js';
-import { HeuristicAgent, prescreen } from './heuristic.js';
+import { HeuristicAgent, prescreen, scoreAction } from './heuristic.js';
 import { buildDecisionPrompt, describeAction } from './summarize.js';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
@@ -127,9 +127,14 @@ export class LLMAgent implements DecidingAgent {
     }
     const cfg = DIFFICULTY[this.difficulty];
     const candidates = prescreen(state, player, legal, cfg.topK);
+    // BRASS_AI_SHOW_SCORES=1：候选描述附启发式快评分（bench A/B 用）——
+    // 让 LLM 对齐数值信号，解决文字 prompt 无法逾越的计算差距。
+    const showScores = process.env['BRASS_AI_SHOW_SCORES'] === '1';
     const described = candidates.map((action) => ({
       action,
-      description: describeAction(state, player, action),
+      description:
+        describeAction(state, player, action) +
+        (showScores ? `｜快评${scoreAction(state, player, action).toFixed(1)}` : ''),
     }));
     const { system, user } = buildDecisionPrompt(state, player, described);
     // systemExtra（bench 策略变体注入缝）拼在静态 system 尾部——前缀不变，
