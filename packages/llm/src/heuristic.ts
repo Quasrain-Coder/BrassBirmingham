@@ -105,8 +105,10 @@ export function scoreAction(
  * **cardId 去重**：legal 里大量行动仅 cardId 不同——先按"除 cardId 外的行动
  * 签名"去重，每种选择只留最高分代表（scoreAction 含弃牌扣分，代表即最优弃牌）。
  *
- * **自杀贷款剔除**：贷款会让收入等级退 3 级；贷后收入为负 = 每轮从 VP 扣钱，
- * 是破产螺旋的唯一来源。这类贷款直接移出候选集。
+ * **深度负贷剔除**：贷款会让收入等级退 3 级；贷后收入 ≤-2 会陷入破产螺旋，
+ * 直接移出候选集。轻度负贷（-1）保留——冠军轨迹显示开局 2→-1 贷款当回合
+ * 翻酒厂/铁厂转正才是最强打法（2026-09-03 bench：剔除后 LLM 现金枯竭陷入
+ * pass 死亡螺旋，人均 28.5 VP vs 启发式 113.3）。
  *
  * **类型配额**：去重/消毒后再为每种行动类型各保留该类最高分 1 个，剩余名额
  * 再按分数填满。k 小于类型数时只保留分数最高的前 k 类。输出恒按分数降序。
@@ -117,12 +119,12 @@ export function prescreen(
   legal: Action[],
   k: number,
 ): Action[] {
-  // 0. 自杀贷款剔除：贷后收入 < 0 的贷款永不进 LLM 候选。
+  // 0. 深度负贷剔除：贷后收入 ≤-2 永不进 LLM 候选；轻度负贷（-1）保留。
   const ps = state.players[player];
   const curLevel = ps ? incomeLevelAt(ps.incomeSpace) : 0;
   const filtered = legal.filter((a) => {
     if (a.type !== 'loan') return true;
-    return curLevel - 3 >= 0;
+    return curLevel - 3 >= -1;
   });
   // 1. cardId 去重：稳定序列化（去 cardId）为 key，每种选择只留最高分代表。
   const seen = new Set<string>();
