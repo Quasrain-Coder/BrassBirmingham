@@ -268,7 +268,7 @@ function bestAffordableBuildScore(
   return best;
 }
 
-/** loan 行动评分（对应 score_loan_result；同回合 combo 由 pick 的 2-ply 前瞻覆盖）。 */
+/** loan 行动评分（对应 score_loan_result，另含 prescreen 排名用的显式 combo 项）。 */
 export function scoreLoan(
   state: GameState,
   pid: PlayerIndex,
@@ -278,23 +278,47 @@ export function scoreLoan(
   const incomeLevel = incomeLevelAt(ps.incomeSpace);
   const cash = ps.money;
 
-  const incomeCost = LOAN_INCOME_PENALTY * ctx.profile.incomeW;
+  // 健康收入位的贷款是自我清偿的（贷后收入 ≥3 时损失可在剩余轮次内赚回，
+  // ≥6 近乎无感）——赢家在收入 5→2/9→6/21→18 位高频贷款转 VP（第 1 轮
+  // GLM vs 0903 复盘：此类贷款 118 次被旧评分排到 rank>20，LLM 看不见）。
+  const postLoanIncomeRaw = incomeLevel - LOAN_INCOME_PENALTY;
+  const incomeCostEff =
+    postLoanIncomeRaw >= 6
+      ? 0
+      : postLoanIncomeRaw >= 3
+        ? LOAN_INCOME_PENALTY * ctx.profile.incomeW * 0.25
+        : LOAN_INCOME_PENALTY * ctx.profile.incomeW;
 
   // 贷后预算解锁的最佳建造增量
   const after = bestAffordableBuildScore(state, pid, cash + LOAN_AMOUNT, ctx);
   const now = bestAffordableBuildScore(state, pid, cash, ctx);
   const gain = Math.max(0, after - now);
 
+  // 同回合 combo：prescreen 排名没有前瞻（HeuristicAgent.pick 的 2-ply 不参与
+  // 排名），贷款必须显式记「贷后本回合还能做的最佳正分行动」——heuristic-core
+  // scoreLoanOp 的 comboScale 同款，否则贷款候选结构性落后于单次建造。
+  const comboBonus =
+    cash < 24 && roundsRemaining(state) > 1.5 ? Math.max(0, after) * 0.7 : 0;
+
+  // 终局增益修正：收官阶段现金本来花不完（现金终局无价值），贷款的真实增益
+  // 是「凭空多做一件可负担的建设」，按贷后可负担最佳建造分折算（×0.7 防过
+  // 调），而非与当前预算的差值——现金充裕时差值恒 0，造成结构性低估。
+  const endgame = roundsRemaining(state) <= 2;
+  const gainEff = endgame && after > 0 ? Math.max(gain, after * 0.7) : gain;
+
   // 闲置保护：手上的钱什么正事都干不了时就借
   const idleBonus = cash < 18 ? 2.0 : 0;
 
   // 收入地板：绝不借进深度负收入（破产螺旋）
-  const postLoanIncome = incomeLevel - LOAN_INCOME_PENALTY;
   const floorPenalty =
-    postLoanIncome <= -7 ? 7.0 : postLoanIncome <= -4 ? 2.0 : postLoanIncome <= 0 ? 0.3 : 0;
+    postLoanIncomeRaw <= -7 ? 7.0 : postLoanIncomeRaw <= -4 ? 2.0 : postLoanIncomeRaw <= 0 ? 0.3 : 0;
 
-  // 现金充裕不滥借
-  const richPenalty = cash >= 55 ? 5.0 : cash >= 42 ? 2.4 : cash >= 30 ? 1.0 : 0;
+  // 现金充裕不滥借；但健康收入位（贷后 ≥3）减档、≥6 近乎豁免——终局收入不折
+  // VP，赢家惯用「贷款→当场翻面」把现金转成 VP（第 1 轮 GLM vs 0903 复盘：
+  // bot 实际选择的贷款里 118 次被本评分排到 rank>20，收入 5→2/9→6/21→18 全中）。
+  let richPenalty = cash >= 55 ? 5.0 : cash >= 42 ? 2.4 : cash >= 30 ? 1.0 : 0;
+  if (richPenalty > 0 && postLoanIncomeRaw >= 6) richPenalty *= 0.3;
+  else if (richPenalty > 0 && postLoanIncomeRaw >= 3) richPenalty *= 0.6;
 
   const unlockBonus = now <= 0 && after > 0.8 ? 3.2 : 0;
 
@@ -318,12 +342,13 @@ export function scoreLoan(
   }
 
   return (
-    gain +
+    gainEff +
+    comboBonus +
     idleBonus +
     unlockBonus +
     startupLoanBonus +
     canalLateLoanBonus -
-    incomeCost -
+    incomeCostEff -
     floorPenalty -
     richPenalty
   );
