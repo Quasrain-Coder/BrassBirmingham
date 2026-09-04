@@ -166,11 +166,12 @@ describe('LLMAgent hard 前瞻段', () => {
     expect(user).toContain('运河时代');
   });
 
-  it('normal 难度不含前瞻段', async () => {
+  it('normal 难度也含前瞻段（2026-09-05 起对 normal 开放：LLM 需感知剩余轮数）', async () => {
     const { state, legal } = opening();
     const client = new FixtureClient(makeResponse(0));
     await new LLMAgent(client, 'normal').decide(state, 0, legal);
-    expect(client.requests[0]!.user).not.toContain('前瞻');
+    expect(client.requests[0]!.user).toContain('前瞻');
+    expect(client.requests[0]!.user).toContain('行动位');
   });
 });
 

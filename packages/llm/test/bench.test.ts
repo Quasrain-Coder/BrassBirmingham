@@ -51,7 +51,7 @@ describe('driveGame', () => {
     expect(stableStringify(replay)).toBe(stableStringify(game.state));
   });
 
-  it('DecisionTrace 字段完整；fixture 恒选候选 0 → chosenRank 恒 0、degraded 恒 false', async () => {
+  it('DecisionTrace 字段完整；fixture 恒选候选 0 → chosenRank ≤ 3（终局过滤可退位）、degraded 恒 false', async () => {
     const game = await driveGame(2, SEED, [fixtureAgent(), fixtureAgent()]);
     for (const [i, d] of game.decisions.entries()) {
       expect(d.seq).toBe(i);
@@ -59,7 +59,10 @@ describe('driveGame', () => {
       expect(['canal', 'rail']).toContain(d.era);
       expect(d.round).toBeGreaterThanOrEqual(1);
       expect(d.legalCount).toBeGreaterThan(0);
-      expect(d.chosenRank).toBe(0);
+      // endgameFilter（2026-09-05）在时代最后一轮剔除研发/贷款/侦察候选，
+      // fixture 所选的"候选 0"可能不再是 prescreen 全量最优——最多退 3 位。
+      expect(d.chosenRank).toBeGreaterThanOrEqual(0);
+      expect(d.chosenRank).toBeLessThanOrEqual(3);
       expect(d.chosen.length).toBeGreaterThan(0);
       expect(d.heuristicTop.length).toBeGreaterThan(0);
       expect(d.degraded).toBe(false);
