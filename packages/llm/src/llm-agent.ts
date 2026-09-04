@@ -76,7 +76,9 @@ export function lookaheadSection(state: GameState): string {
     '',
     `【前瞻：时代进度与剩余轮数】当前为${era}第${state.round}轮，` +
       `本时代预计还剩约${roundsLeft}轮（含本轮，按余牌${cardsLeft}张估算），${after}。` +
-      `请评估本行动对未来两轮（翻面节奏、连通铺垫、现金流）的影响。`,
+      `你每轮约有${state.playerCount >= 3 ? '1-2' : '2'}个行动位，「卖出才翻面」等兑现型板块还要额外花 1 个行动位。` +
+      `请评估本行动对未来两轮（翻面节奏、连通铺垫、现金流）的影响，` +
+      `剩余轮数很少时不要为"下一轮"做铺垫。`,
   ].join('\n');
 }
 
@@ -97,6 +99,24 @@ function isValid(choiceIndex: number, candidates: number): boolean {
   return (
     Number.isInteger(choiceIndex) && choiceIndex >= 0 && choiceIndex < candidates
   );
+}
+
+/**
+ * 终局候选消毒：本时代最后 1 轮（剩余卡牌 < 一轮耗量）时，从 LLM 候选中
+ * 剔除研发/贷款/侦察——它们全是"为未来投资"的行动，终局无法兑现（贷款
+ * 的收入损失再也赚不回来，研发解锁的板块没轮次可建）。b 组 A/B 复盘
+ * （bench/out/glm-vs0903/b0、b2，2026-09-05）：prompt 禁令会被启发式
+ * rank0 候选压制，终局无效动作必须在过滤层兜底；全滤空时保留原候选。
+ */
+function endgameFilter(state: GameState, candidates: Action[]): Action[] {
+  const cardsLeft =
+    state.deck.length + state.players.reduce((sum, p) => sum + p.hand.length, 0);
+  const perRound = state.playerCount * actionsPerRound(state);
+  if (cardsLeft / perRound > 1) return candidates;
+  const filtered = candidates.filter(
+    (a) => a.type !== 'develop' && a.type !== 'loan' && a.type !== 'scout',
+  );
+  return filtered.length > 0 ? filtered : candidates;
 }
 
 export class LLMAgent implements DecidingAgent {
@@ -126,23 +146,31 @@ export class LLMAgent implements DecidingAgent {
       throw new Error('LLMAgent.decide: no legal actions');
     }
     const cfg = DIFFICULTY[this.difficulty];
-    const candidates = prescreen(state, player, legal, cfg.topK);
+    const candidates = endgameFilter(state, prescreen(state, player, legal, cfg.topK));
     // BRASS_AI_SHOW_SCORES=1：候选描述附启发式快评分（bench A/B 用）——
     // 让 LLM 对齐数值信号，解决文字 prompt 无法逾越的计算差距。
     const showScores = process.env['BRASS_AI_SHOW_SCORES'] === '1';
-    const described = candidates.map((action) => ({
-      action,
-      description:
-        describeAction(state, player, action) +
-        (showScores ? `｜快评${scoreAction(state, player, action).toFixed(1)}` : ''),
-    }));
+    const described = candidates.map((action) => {
+      const base = describeAction(state, player, action);
+      // 延迟兑现标记（b 组 A/B 复盘：模型把「卖出才翻面/桶耗尽才翻面」当
+      // 当场翻面计价，10 局 15+ 次误买——信息本在描述尾部，前置标签强制可见）。
+      const tag = base.includes('才翻面') ? '【延迟兑现】' : '';
+      return {
+        action,
+        description:
+          `${tag}${base}` +
+          (showScores ? `｜快评${scoreAction(state, player, action).toFixed(1)}` : ''),
+      };
+    });
     const { system, user } = buildDecisionPrompt(state, player, described);
     // systemExtra（bench 策略变体注入缝）拼在静态 system 尾部——前缀不变，
     // 缓存友好；生产不注入（undefined 时逐字节同 buildDecisionPrompt 输出）。
     const fullSystem =
       this.systemExtra !== undefined ? `${system}\n${this.systemExtra}` : system;
-    const fullUser =
-      this.difficulty === 'hard' ? user + lookaheadSection(state) : user;
+    // 前瞻段对 normal 也开放（原 hard 专属）：b 组 A/B 复盘证实 normal 档
+    // LLM 感知不到剩余轮数——末位贷款/终局废板块的理由都在规划"下一动作"
+    // （bench/out/glm-vs0903/b2 复盘，2026-09-05）。
+    const fullUser = user + lookaheadSection(state);
 
     const baseReq = {
       system: fullSystem,
