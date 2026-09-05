@@ -21,14 +21,23 @@ function opening() {
 }
 
 describe('BRASS_AI_LLM_MODE', () => {
-  it('缺省 argmax：零 LLM 调用，选 prescreen Top-1', async () => {
+  it('缺省 heuristic：零 LLM 调用，走 2-ply 兜底（HeuristicAgent）', async () => {
     delete process.env['BRASS_AI_LLM_MODE'];
     const { state, legal } = opening();
     const client = new FixtureClient(makeResponse(0));
     const d = await new LLMAgent(client, 'normal').decide(state, 0, legal);
     expect(client.requests).toHaveLength(0);
     expect(d.degraded).toBe(true);
-    expect(d.reason).toContain('argmax');
+    expect(d.reason).toContain('heuristic');
+    expect(legal).toContain(d.action);
+    process.env['BRASS_AI_LLM_MODE'] = 'llm';
+  });
+  it('argmax：零 LLM 调用，选 prescreen Top-1', async () => {
+    process.env['BRASS_AI_LLM_MODE'] = 'argmax';
+    const { state, legal } = opening();
+    const client = new FixtureClient(makeResponse(0));
+    const d = await new LLMAgent(client, 'normal').decide(state, 0, legal);
+    expect(client.requests).toHaveLength(0);
     expect(prescreen(state, 0, legal, DIFFICULTY.normal.topK)[0]).toBe(d.action);
     process.env['BRASS_AI_LLM_MODE'] = 'llm';
   });

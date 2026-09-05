@@ -11,7 +11,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   applyAction,
   newGame,
@@ -38,7 +38,14 @@ afterEach(() => {
   }
 });
 
-describe('driveGame', () => {
+describe('driveGame（LLM 模式：fixture 驱动决策链）', () => {
+  beforeAll(() => {
+    process.env['BRASS_AI_LLM_MODE'] = 'llm';
+  });
+  afterAll(() => {
+    delete process.env['BRASS_AI_LLM_MODE'];
+  });
+
   it('驱动 2p 整局到 game-over，log 可纯重放到同一终局', async () => {
     const game = await driveGame(2, SEED, [fixtureAgent(), fixtureAgent()]);
 
@@ -66,9 +73,8 @@ describe('driveGame', () => {
       expect(d.chosenRank).toBeLessThanOrEqual(4);
       expect(d.chosen.length).toBeGreaterThan(0);
       expect(d.heuristicTop.length).toBeGreaterThan(0);
-      // BRASS_AI_LLM_MODE 缺省 argmax（2026-09-06）：非真 LLM 决策，语义恒 degraded=true。
-      expect(d.degraded).toBe(true);
-      expect(d.usage.input).toBe(0); // argmax 不调 LLM
+      expect(d.degraded).toBe(false);
+      expect(d.usage.input).toBeGreaterThan(0);
     }
   });
 
@@ -76,6 +82,19 @@ describe('driveGame', () => {
     await expect(driveGame(2, SEED, [fixtureAgent()])).rejects.toThrow(
       /need 2 agents, got 1/,
     );
+  });
+});
+
+describe('driveGame（缺省 heuristic 模式）', () => {
+  it('零 LLM 调用：degraded 恒 true、usage 恒 0，行动恒合法', async () => {
+    delete process.env['BRASS_AI_LLM_MODE'];
+    const game = await driveGame(2, SEED, [fixtureAgent(), fixtureAgent()]);
+    for (const d of game.decisions) {
+      expect(d.degraded).toBe(true);
+      expect(d.usage.input).toBe(0);
+      expect(d.reason).toContain('heuristic');
+    }
+    process.env['BRASS_AI_LLM_MODE'] = 'llm';
   });
 });
 
@@ -92,9 +111,7 @@ describe('gameRecord / TraceWriter', () => {
     const winners = record.vps.flatMap((vp, i) => (vp === best ? [i] : []));
     expect(record.winner).toBe(winners.length === 1 ? winners[0]! : null);
     expect(record.steps).toBe(game.decisions.length);
-    // argmax 语义：每席全部决策 degraded=true（gameRecord 按席位计数）。
-    const perSeat = game.decisions.length / 2;
-    expect(record.degraded).toEqual([perSeat, perSeat]);
+    expect(record.degraded).toEqual([0, 0]);
     const totalInput = game.decisions.reduce((s, d) => s + d.usage.input, 0);
     expect(record.usage[0]!.input + record.usage[1]!.input).toBe(totalInput);
     expect(record.durationMs).toBe(1234);
