@@ -66,8 +66,9 @@ describe('driveGame', () => {
       expect(d.chosenRank).toBeLessThanOrEqual(4);
       expect(d.chosen.length).toBeGreaterThan(0);
       expect(d.heuristicTop.length).toBeGreaterThan(0);
-      expect(d.degraded).toBe(false);
-      expect(d.usage.input).toBeGreaterThan(0);
+      // BRASS_AI_LLM_MODE 缺省 argmax（2026-09-06）：非真 LLM 决策，语义恒 degraded=true。
+      expect(d.degraded).toBe(true);
+      expect(d.usage.input).toBe(0); // argmax 不调 LLM
     }
   });
 
@@ -91,7 +92,9 @@ describe('gameRecord / TraceWriter', () => {
     const winners = record.vps.flatMap((vp, i) => (vp === best ? [i] : []));
     expect(record.winner).toBe(winners.length === 1 ? winners[0]! : null);
     expect(record.steps).toBe(game.decisions.length);
-    expect(record.degraded).toEqual([0, 0]);
+    // argmax 语义：每席全部决策 degraded=true（gameRecord 按席位计数）。
+    const perSeat = game.decisions.length / 2;
+    expect(record.degraded).toEqual([perSeat, perSeat]);
     const totalInput = game.decisions.reduce((s, d) => s + d.usage.input, 0);
     expect(record.usage[0]!.input + record.usage[1]!.input).toBe(totalInput);
     expect(record.durationMs).toBe(1234);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { enumerateActions, newGame } from '@brass/engine';
 import { SYSTEM_PROMPT, describeAction } from '../src/summarize.js';
 import { prescreen } from '../src/heuristic.js';
@@ -7,10 +7,32 @@ import { FixtureClient, makeResponse } from './fixtures.js';
 
 const SEED = 42;
 
+// 缺省模式是 argmax（不调 LLM）；本文件测 LLM 决策链，显式开 llm 模式。
+beforeAll(() => {
+  process.env['BRASS_AI_LLM_MODE'] = 'llm';
+});
+afterAll(() => {
+  delete process.env['BRASS_AI_LLM_MODE'];
+});
+
 function opening() {
   const state = newGame(4, SEED);
   return { state, legal: enumerateActions(state, 0) };
 }
+
+describe('BRASS_AI_LLM_MODE', () => {
+  it('缺省 argmax：零 LLM 调用，选 prescreen Top-1', async () => {
+    delete process.env['BRASS_AI_LLM_MODE'];
+    const { state, legal } = opening();
+    const client = new FixtureClient(makeResponse(0));
+    const d = await new LLMAgent(client, 'normal').decide(state, 0, legal);
+    expect(client.requests).toHaveLength(0);
+    expect(d.degraded).toBe(true);
+    expect(d.reason).toContain('argmax');
+    expect(prescreen(state, 0, legal, DIFFICULTY.normal.topK)[0]).toBe(d.action);
+    process.env['BRASS_AI_LLM_MODE'] = 'llm';
+  });
+});
 
 describe('DIFFICULTY', () => {
   it('easy 用 haiku + topK 8，normal/hard 用 sonnet，timeout 均 8000', () => {
