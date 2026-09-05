@@ -144,16 +144,19 @@ function coalQuotaFilter(state: GameState, candidates: Action[]): Action[] {
 }
 
 /**
- * LLM 决策模式（BRASS_AI_LLM_MODE，缺省 argmax）：
- * - argmax：跳过 LLM 调用，直接选 prescreen Top-1——2026-09-06 argmax 对照
- *   实验（bench/docs/2026-09-06-argmax-architecture.md、round4 终版）证实
- *   LLM 自由选择在全部 5 个 prompt 变体下劣于信评分排序 −8~−24 VP/局，
- *   默认走 argmax 是确定性 +14VP/局；
- * - llm：真 LLM 决策（预筛 → LLM 选择 → 校验 → 重试一次 → 启发式降级），
- *   供复盘/实验与未来模型升级对比用。
+ * LLM 决策模式（BRASS_AI_LLM_MODE，缺省 heuristic）：
+ * - heuristic：跳过 LLM 调用，走 fallback = HeuristicAgent（prescreen 同款
+ *   评分 + 2-ply 同回合前瞻）——2026-09-06 基线阶梯（bench/docs/2026-09-06-round5-baselines.md）：
+ *   prescreen Top-1 ≈94.6、+2-ply ≈100.2、+完整 CFG 0903 插件 ≈114（内战），
+ *   而 LLM 自由选择在全部 5 个 prompt 变体下仅 68-88（−8~−24）。缺省取
+ *   2-ply 兜底（+5.7 vs Top-1，零 API/零 token）；
+ * - argmax：纯 prescreen Top-1（无前瞻），对照用；
+ * - llm：真 LLM 决策链（预筛 → 选择 → 校验 → 重试一次 → 启发式降级），
+ *   供复盘/实验与未来模型升级对比。
  */
-function llmMode(): 'argmax' | 'llm' {
-  return process.env['BRASS_AI_LLM_MODE'] === 'llm' ? 'llm' : 'argmax';
+function llmMode(): 'heuristic' | 'argmax' | 'llm' {
+  const m = process.env['BRASS_AI_LLM_MODE'];
+  return m === 'llm' || m === 'argmax' ? m : 'heuristic';
 }
 
 export class LLMAgent implements DecidingAgent {
@@ -183,11 +186,21 @@ export class LLMAgent implements DecidingAgent {
       throw new Error('LLMAgent.decide: no legal actions');
     }
     const cfg = DIFFICULTY[this.difficulty];
-    if (llmMode() === 'argmax') {
-      const top = prescreen(state, player, legal, cfg.topK)[0] ?? legal[0]!;
+    const mode = llmMode();
+    if (mode !== 'llm') {
+      if (mode === 'argmax') {
+        const top = prescreen(state, player, legal, cfg.topK)[0] ?? legal[0]!;
+        return {
+          action: top,
+          reason: 'argmax: prescreen Top-1（BRASS_AI_LLM_MODE=argmax，对照用）',
+          degraded: true,
+          usage: { input: 0, output: 0 },
+        };
+      }
+      const d = await this.fallback.decide(state, player, legal);
       return {
-        action: top,
-        reason: 'argmax: prescreen Top-1（BRASS_AI_LLM_MODE 缺省，LLM 自由选择负增量见 bench/docs/2026-09-06-argmax-architecture.md）',
+        action: d.action,
+        reason: 'heuristic 2-ply 兜底（BRASS_AI_LLM_MODE 缺省；LLM 自由选择负增量见 bench/docs/2026-09-06-argmax-architecture.md）',
         degraded: true,
         usage: { input: 0, output: 0 },
       };
