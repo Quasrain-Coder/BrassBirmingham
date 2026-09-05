@@ -28,7 +28,7 @@ describe('BRASS_AI_LLM_MODE', () => {
     const d = await new LLMAgent(client, 'normal').decide(state, 0, legal);
     expect(client.requests).toHaveLength(0);
     expect(d.degraded).toBe(true);
-    expect(d.reason).toContain('heuristic');
+    expect(d.reason).toContain('jsb-v20260903');
     expect(legal).toContain(d.action);
     process.env['BRASS_AI_LLM_MODE'] = 'llm';
   });

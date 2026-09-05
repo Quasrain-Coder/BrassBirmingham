@@ -92,7 +92,7 @@ describe('driveGame（缺省 heuristic 模式）', () => {
     for (const d of game.decisions) {
       expect(d.degraded).toBe(true);
       expect(d.usage.input).toBe(0);
-      expect(d.reason).toContain('heuristic');
+      expect(d.reason).toContain('jsb-v20260903');
     }
     process.env['BRASS_AI_LLM_MODE'] = 'llm';
   });
