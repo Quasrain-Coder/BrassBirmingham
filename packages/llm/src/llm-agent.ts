@@ -143,6 +143,19 @@ function coalQuotaFilter(state: GameState, candidates: Action[]): Action[] {
   return filtered.length > 0 ? filtered : candidates;
 }
 
+/**
+ * LLM 决策模式（BRASS_AI_LLM_MODE，缺省 argmax）：
+ * - argmax：跳过 LLM 调用，直接选 prescreen Top-1——2026-09-06 argmax 对照
+ *   实验（bench/docs/2026-09-06-argmax-architecture.md、round4 终版）证实
+ *   LLM 自由选择在全部 5 个 prompt 变体下劣于信评分排序 −8~−24 VP/局，
+ *   默认走 argmax 是确定性 +14VP/局；
+ * - llm：真 LLM 决策（预筛 → LLM 选择 → 校验 → 重试一次 → 启发式降级），
+ *   供复盘/实验与未来模型升级对比用。
+ */
+function llmMode(): 'argmax' | 'llm' {
+  return process.env['BRASS_AI_LLM_MODE'] === 'llm' ? 'llm' : 'argmax';
+}
+
 export class LLMAgent implements DecidingAgent {
   private readonly client: ClaudeClient;
   private readonly difficulty: Difficulty;
@@ -170,6 +183,15 @@ export class LLMAgent implements DecidingAgent {
       throw new Error('LLMAgent.decide: no legal actions');
     }
     const cfg = DIFFICULTY[this.difficulty];
+    if (llmMode() === 'argmax') {
+      const top = prescreen(state, player, legal, cfg.topK)[0] ?? legal[0]!;
+      return {
+        action: top,
+        reason: 'argmax: prescreen Top-1（BRASS_AI_LLM_MODE 缺省，LLM 自由选择负增量见 bench/docs/2026-09-06-argmax-architecture.md）',
+        degraded: true,
+        usage: { input: 0, output: 0 },
+      };
+    }
     const candidates = coalQuotaFilter(
       state,
       endgameFilter(state, prescreen(state, player, legal, cfg.topK)),
