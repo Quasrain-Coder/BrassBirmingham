@@ -28,6 +28,7 @@ import type { ClaudeClient } from './client.js';
 import type { DecidingAgent, Decision } from './decision.js';
 import { HeuristicAgent, prescreen, scoreAction } from './heuristic.js';
 import { buildDecisionPrompt, describeAction } from './summarize.js';
+import { createAgent } from './agents/registry.js';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
@@ -164,6 +165,18 @@ export class LLMAgent implements DecidingAgent {
   private readonly difficulty: Difficulty;
   private readonly fallback: DecidingAgent;
   private readonly systemExtra: string | undefined;
+  /** heuristic 兜底用的 0903 插件实例（per-seat 缓存——插件有 develops 实例状态）。 */
+  private readonly botCache = new Map<PlayerIndex, DecidingAgent>();
+
+  /** L2 级兜底：0903 插件本体（基线阶梯 L2 ≈114，比 2-ply HeuristicAgent 高 ~14）。 */
+  private bot(player: PlayerIndex): DecidingAgent {
+    let bot = this.botCache.get(player);
+    if (!bot) {
+      bot = createAgent('builtin:jsb-v20260903', { seat: player });
+      this.botCache.set(player, bot);
+    }
+    return bot;
+  }
 
   constructor(
     client: ClaudeClient,
@@ -197,10 +210,10 @@ export class LLMAgent implements DecidingAgent {
           usage: { input: 0, output: 0 },
         };
       }
-      const d = await this.fallback.decide(state, player, legal);
+      const d = await this.bot(player).decide(state, player, legal);
       return {
         action: d.action,
-        reason: 'heuristic 2-ply 兜底（BRASS_AI_LLM_MODE 缺省；LLM 自由选择负增量见 bench/docs/2026-09-06-argmax-architecture.md）',
+        reason: 'jsb-v20260903 兜底（BRASS_AI_LLM_MODE 缺省；LLM 自由选择负增量见 bench/docs/2026-09-06-argmax-architecture.md）',
         degraded: true,
         usage: { input: 0, output: 0 },
       };
