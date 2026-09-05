@@ -59,10 +59,11 @@ describe('driveGame', () => {
       expect(['canal', 'rail']).toContain(d.era);
       expect(d.round).toBeGreaterThanOrEqual(1);
       expect(d.legalCount).toBeGreaterThan(0);
-      // endgameFilter（2026-09-05）在时代最后一轮剔除研发/贷款/侦察候选，
-      // fixture 所选的"候选 0"可能不再是 prescreen 全量最优——最多退 3 位。
+      // endgameFilter（时代最后一轮剔除研发/贷款/侦察，最多退 3 位）与
+      // coalQuotaFilter（未翻煤矿 ≥2 剔除建煤矿，再退 1 位）叠加后，
+      // fixture 所选的"候选 0"最多退到 prescreen 全量第 4 位。
       expect(d.chosenRank).toBeGreaterThanOrEqual(0);
-      expect(d.chosenRank).toBeLessThanOrEqual(3);
+      expect(d.chosenRank).toBeLessThanOrEqual(4);
       expect(d.chosen.length).toBeGreaterThan(0);
       expect(d.heuristicTop.length).toBeGreaterThan(0);
       expect(d.degraded).toBe(false);

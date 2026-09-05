@@ -119,6 +119,30 @@ function endgameFilter(state: GameState, candidates: Action[]): Action[] {
   return filtered.length > 0 ? filtered : candidates;
 }
 
+/**
+ * 煤矿配额消毒：场上未翻煤矿满 2 座后从 LLM 候选中剔除「建煤矿」——
+ * prompt 配额已被证实无效（c 轮 8/10 局违规、复述规则后仍违反、计数错账），
+ * 必须在过滤层兜底。当场翻面的矿建完即翻、不占未翻计数，天然被白名单放行；
+ * 剔除后为空（极端局面煤矿是唯一可行）则保留原候选。
+ */
+function coalQuotaFilter(state: GameState, candidates: Action[]): Action[] {
+  const pid = state.turnOrder[state.currentPlayerIdx];
+  if (pid === undefined) return candidates;
+  let unflippedCoal = 0;
+  for (const slots of Object.values(state.board.slots)) {
+    for (const t of slots) {
+      if (t && t.player === pid && !t.flipped && t.tile.industry === 'coal') {
+        unflippedCoal += 1;
+      }
+    }
+  }
+  if (unflippedCoal < 2) return candidates;
+  const filtered = candidates.filter(
+    (a) => !(a.type === 'build' && a.industry === 'coal'),
+  );
+  return filtered.length > 0 ? filtered : candidates;
+}
+
 export class LLMAgent implements DecidingAgent {
   private readonly client: ClaudeClient;
   private readonly difficulty: Difficulty;
@@ -146,7 +170,10 @@ export class LLMAgent implements DecidingAgent {
       throw new Error('LLMAgent.decide: no legal actions');
     }
     const cfg = DIFFICULTY[this.difficulty];
-    const candidates = endgameFilter(state, prescreen(state, player, legal, cfg.topK));
+    const candidates = coalQuotaFilter(
+      state,
+      endgameFilter(state, prescreen(state, player, legal, cfg.topK)),
+    );
     // BRASS_AI_SHOW_SCORES=1：候选描述附启发式快评分（bench A/B 用）——
     // 让 LLM 对齐数值信号，解决文字 prompt 无法逾越的计算差距。
     const showScores = process.env['BRASS_AI_SHOW_SCORES'] === '1';
