@@ -24,6 +24,8 @@ import {
   LINKS,
   LOCATIONS,
   MERCHANTS,
+  WILD_INDUSTRY_COUNT,
+  WILD_LOCATION_COUNT,
   applyAction,
   buildDeck,
   buyCoalCost,
@@ -40,6 +42,7 @@ import {
   reachableFrom,
   stableStringify,
   type Action,
+  type Card,
   type GameState,
   type IndustryType,
   type LocationId,
@@ -319,6 +322,15 @@ const BASE_CFG = {
      * 研发只在"解锁出的板块确实值得建"时升值（棉花冲 L3 的精确版：
      * 不是无脑灌研发，而是解锁 L3 且 L3 真能建能卖时才推）。 */
     unlockBuildValueScale: 0,
+    /** 研发白解锁惩罚（0=关闭，默认待消融）：解锁出的板块大概率永远用不上时
+     * 给研发的每块移除重罚——可售产业无商人收（永远卖不掉）、煤/铁市场
+     * 吃不下全部方块（永远翻不了）、酒厂无人需要啤酒（桶必剩）。真人回放：
+     * AI 研发陶瓷厂+铁厂/酒厂后从未建对应板块，纯白给一动。 */
+    unlockWorthlessPenalty: 0,
+    /** 运河早期研发惩罚（0=关闭，默认待消融）：运河早期（前 40%）研发的风险
+     * 扣分——早期应先做便宜的可靠翻面（铁/煤 L1-L2 拿收入），研发类慢回报
+     * 行动挤占前期产能导致节奏落后（真人回放：AI3 前期 4 研发+搜寻拖垮节奏）。 */
+    canalEarlyPenalty: 0,
   },
   sell: {
     developBonusValue: 0.5,
@@ -436,6 +448,13 @@ const BASE_CFG = {
     /** 仅当两个候选的价值差小于该阈值时，才触发推演（将模拟次数只用于候选价值接近的情况，
      * 它们才是真正的难决策；差距明显的交给启发式）。 */
     rolloutDeltaThreshold: 2.0,
+    /** UCT MCTS 模拟次数（0=关闭，默认待消融）：对 top-K 根动作做 UCT 树搜索，
+     * 随机推演到终局，按我方 VP 归集（用户 2026-09-04 指定）。 */
+    mctsSimulations: 0,
+    /** UCT 探索常数（UCB1 的 C）。 */
+    mctsC: 1.41,
+    /** MCTS 根动作数（top-K 候选进树）。 */
+    mctsTopK: 6,
     /** 仅对前 K 个首动候选评估对手回应（成本 ≈ 每候选一次全量打分）。 */
     opponentResponseK: 2,
     /** 四连动（yo-yo）前瞻权重（0=关闭，默认待消融）：本轮我是最后行动者
@@ -445,6 +464,28 @@ const BASE_CFG = {
     /** 下轮第二动计入比例（0=只评下轮首动）：完整的四连动 = 本轮 2 动 +
      * 下轮 2 动，第二动按本系数折算（<1 体现深度不确定性）。 */
     fourActionSecondShare: 0,
+  },
+  /** IS-MCTS（信息集 MCTS，simulations=0 关闭，默认待消融）：对 2-ply 价值接近的
+   * 难决策，按信息集确定化（重采对手手牌+牌库）+ UCB1 选根动作 + 引导推演
+   * 若干步后接局面叶估值，多次采样取均值最优。与 mctsSimulations（扁平 UCB1、
+   * 上帝视角、纯随机推演到终局）的区别：隐藏信息重采 + 引导推演 + 叶估值。 */
+  ismcts: {
+    /** 每次触发时的模拟次数（0=关闭）。 */
+    simulations: 0,
+    /** 根动作候选数（取 2-ply 价值前 N 名）。 */
+    topK: 4,
+    /** UCB1 探索常数（价值先除 valueScale 归一）。 */
+    c: 1.0,
+    /** 价值归一化尺度（VP 量纲 ÷ 本值后进 UCB1）。 */
+    valueScale: 200,
+    /** 每次模拟的引导推演步数（之后接 evaluatePosition 叶估值）。 */
+    rolloutPlies: 24,
+    /** 推演 ε-随机概率（防同一确定化下轨迹全同）。 */
+    policyEpsilon: 0.1,
+    /** 触发门槛：仅当 2-ply 前两名价值差 < 本值时触发（难决策才花算力）。 */
+    gateMargin: 3.0,
+    /** 模拟 LCG 种子基（与 round/rngState 混合，保证同局面同决策——回放可复现）。 */
+    seed: 0x9e3779b9,
   },
   /** 局面估值叶（上游 MCTS 叶评估器 evaluate_position 移植）：2-ply 前瞻的
    * 叶子从"只看现金惩罚"升级为完整局面评估，等效延展决策视野。
@@ -2005,7 +2046,28 @@ function developTargetValue(
   }
   if (ctx.plan.industry === ind) v += w.planBonus;
   if (hasBuildableCard(state, ctx.pid, ind)) v += w.buildableCardBonus;
+  // 研发白解锁惩罚：解锁出的板块大概率永远用不上时重罚（真人回放：
+  // AI 研发陶瓷厂+铁厂/酒厂后从未建对应板块，纯白给一动）。
+  if (w.unlockWorthlessPenalty > 0 && unlocked && unlockedWorthless(state, ctx.pid, unlocked)) {
+    v -= w.unlockWorthlessPenalty;
+  }
   return v - developGuardrailPenalty(ind, removed.level);
+}
+
+/** 解锁出的板块是否大概率永远用不上：可售产业无商人收（永远卖不掉）、
+ * 煤/铁市场一块都吃不进（永远翻不了）、酒厂无人需要啤酒（桶必剩）。 */
+function unlockedWorthless(state: GameState, pid: PlayerIndex, unlocked: TileDef): boolean {
+  const ind = unlocked.industry;
+  if (ind === 'cotton' || ind === 'manufacturer' || ind === 'pottery') {
+    return !MERCHANT_IDS.some((id) => merchantAccepts(state, id, ind));
+  }
+  if (ind === 'coal' || ind === 'iron') {
+    return simulateMarketSale(state, ind === 'coal', unlocked.resourcesPlaced).sold === 0;
+  }
+  if (ind === 'brewery') {
+    return sellableBeerDemand(state, pid) === 0 && ownedBeerBarrels(state, pid) === 0;
+  }
+  return false;
 }
 
 /** 研发方向引导的可行性门：仅当玩家已用一块 L1 棉花/陶瓷板块"投石问路"
@@ -2072,6 +2134,11 @@ function scoreDevelopOp(
   const over = Math.max(0, developsInEra + 1 - limit);
   p.risk -= over * over * w.overLimitSteepness + over;
   p.risk -= ironScarcity;
+  // 运河早期研发惩罚：早期应先做便宜的可靠翻面（铁/煤 L1-L2 拿收入），
+  // 研发类慢回报行动挤占前期产能导致节奏落后。
+  if (w.canalEarlyPenalty > 0 && ctx.phase === 'canal-early') {
+    p.risk -= w.canalEarlyPenalty;
+  }
 
   return totalOf(ctx, p);
 }
@@ -2490,12 +2557,173 @@ function randomRollout(state: GameState, pid: PlayerIndex, rngSeed: number): num
   return s.players[pid]!.vp;
 }
 
+/** UCT MCTS：对 top-K 根动作做 UCB1 选择，随机推演到终局，按我方 VP 归集取最优。 */
+function mctsChoose(
+  state: GameState,
+  pid: PlayerIndex,
+  rootCandidates: Scored[],
+  develops: DevelopCounts,
+): Action {
+  const w = CFG.lookahead;
+  const top = rootCandidates.slice(0, w.mctsTopK);
+  const stats = top.map(() => ({ visits: 0, vp: 0 }));
+  for (let sim = 0; sim < w.mctsSimulations; sim++) {
+    const totalVisits = stats.reduce((s, x) => s + x.visits, 0);
+    let bestUcb = Number.NEGATIVE_INFINITY;
+    let bestIdx = 0;
+    for (let i = 0; i < stats.length; i++) {
+      const st = stats[i]!;
+      const mean = st.visits === 0 ? Number.POSITIVE_INFINITY : st.vp / st.visits;
+      const ucb = mean + w.mctsC * Math.sqrt(Math.log(Math.max(1, totalVisits)) / Math.max(1, st.visits));
+      if (ucb > bestUcb) {
+        bestUcb = ucb;
+        bestIdx = i;
+      }
+    }
+    let vp = 0;
+    try {
+      const s1 = applyAction(state, top[bestIdx]!.action);
+      vp = randomRollout(s1, pid, 0x9e3779b9 ^ (sim * 0x10001 + bestIdx));
+    } catch {
+      vp = 0;
+    }
+    stats[bestIdx]!.visits += 1;
+    stats[bestIdx]!.vp += vp;
+  }
+  let best = 0;
+  let bestMean = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < stats.length; i++) {
+    const st = stats[i]!;
+    const mean = st.vp / Math.max(1, st.visits);
+    if (mean > bestMean) {
+      bestMean = mean;
+      best = i;
+    }
+  }
+  return top[best]!.action;
+}
+
+// ---------------------------------------------------------------------------
+// IS-MCTS：信息集确定化 + 引导推演（0907）
+// ---------------------------------------------------------------------------
+
+/** 推演时的研发计数近似（不为每个对手单独追踪，零计数对研发评分影响可接受）。 */
+const ZERO_DEVELOPS: DevelopCounts = { canal: 0, rail: 0 };
+
+/**
+ * 信息集确定化：从 pid 视角重采隐藏信息。未知牌 = 全量牌库 − 我方手牌 − 弃牌堆
+ * （公开记忆），洗牌后按各对手手牌数重发、余下作牌库。百搭不在牌库集合内：
+ * 对手可能持有的百搭 = 供应堆流出量（公开）− 我方手牌/弃牌中的百搭，补进未知池。
+ */
+function determinize(state: GameState, pid: PlayerIndex, rand: () => number): GameState {
+  const me = state.players[pid]!;
+  const known = new Set<string>();
+  for (const c of me.hand) known.add(c.id);
+  for (const c of state.discard) known.add(c.id);
+  const unknown: Card[] = buildDeck(state.playerCount).filter((c) => !known.has(c.id));
+  const myWildLoc = me.hand.filter((c) => c.kind === 'wild-location').length + state.discard.filter((c) => c.kind === 'wild-location').length;
+  const myWildInd = me.hand.filter((c) => c.kind === 'wild-industry').length + state.discard.filter((c) => c.kind === 'wild-industry').length;
+  for (let i = 0; i < Math.max(0, WILD_LOCATION_COUNT - state.wildSupply.location - myWildLoc); i++) {
+    unknown.push({ id: 'wild-location', kind: 'wild-location' });
+  }
+  for (let i = 0; i < Math.max(0, WILD_INDUSTRY_COUNT - state.wildSupply.industry - myWildInd); i++) {
+    unknown.push({ id: 'wild-industry', kind: 'wild-industry' });
+  }
+  for (let i = unknown.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    const t = unknown[i]!;
+    unknown[i] = unknown[j]!;
+    unknown[j] = t;
+  }
+  let ptr = 0;
+  const players = state.players.map((p, i) => {
+    if (i === pid) return p;
+    const hand = unknown.slice(ptr, ptr + p.hand.length);
+    ptr += p.hand.length;
+    return { ...p, hand };
+  });
+  return { ...state, players, deck: unknown.slice(ptr) };
+}
+
+/** 引导推演 rolloutPlies 步（全体玩家 1-ply 启发式贪心 + ε-随机），
+ * 提前终局按真实 VP，否则接 evaluatePosition 叶估值。 */
+function guidedRollout(state: GameState, pid: PlayerIndex, rand: () => number): number {
+  const w = CFG.ismcts;
+  let s = state;
+  for (let step = 0; step < w.rolloutPlies && s.phase !== 'game-over'; step++) {
+    const p = s.turnOrder[s.currentPlayerIdx]!;
+    const legal = enumerateActions(s, p);
+    if (legal.length === 0) break;
+    let pick: Action;
+    if (rand() < w.policyEpsilon) {
+      pick = legal[Math.floor(rand() * legal.length)]!;
+    } else {
+      pick = scoreLegal(s, getCtx(s, p), legal, ZERO_DEVELOPS, 1)[0]!.action;
+    }
+    try {
+      s = applyAction(s, pick);
+    } catch {
+      break;
+    }
+  }
+  if (s.phase === 'game-over') return s.players[pid]!.vp * CFG.value.vp;
+  return evaluatePosition(s, pid);
+}
+
+/** IS-MCTS 根选择：UCB1 选根 → 确定化 → 应用根动作 → 引导推演 → 均值最优。 */
+function ismctsChoose(state: GameState, pid: PlayerIndex, ranked: { action: Action; value: number }[]): Action {
+  const w = CFG.ismcts;
+  const top = ranked.slice(0, w.topK);
+  if (top.length === 1) return top[0]!.action;
+  const stats = top.map(() => ({ visits: 0, value: 0 }));
+  let seed = (w.seed ^ (state.round * 0x10001) ^ state.rngState) >>> 0;
+  const rand = (): number => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 0x100000000);
+  for (let sim = 0; sim < w.simulations; sim++) {
+    const totalVisits = stats.reduce((s, x) => s + x.visits, 0);
+    let bestUcb = Number.NEGATIVE_INFINITY;
+    let idx = 0;
+    for (let i = 0; i < stats.length; i++) {
+      const st = stats[i]!;
+      const mean = st.visits === 0 ? Number.POSITIVE_INFINITY : st.value / st.visits / w.valueScale;
+      const ucb = mean + w.c * Math.sqrt(Math.log(Math.max(1, totalVisits)) / Math.max(1, st.visits));
+      if (ucb > bestUcb) {
+        bestUcb = ucb;
+        idx = i;
+      }
+    }
+    try {
+      const det = determinize(state, pid, rand);
+      const s1 = applyAction(det, top[idx]!.action);
+      stats[idx]!.value += guidedRollout(s1, pid, rand);
+      stats[idx]!.visits += 1;
+    } catch {
+      // 仿真失败的样本不计入（防污染均值）。
+    }
+  }
+  let best = 0;
+  let bestMean = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < stats.length; i++) {
+    const mean = stats[i]!.value / Math.max(1, stats[i]!.visits);
+    if (mean > bestMean) {
+      bestMean = mean;
+      best = i;
+    }
+  }
+  return top[best]!.action;
+}
+
 /** choose_action：首动候选 × 次动最优的确定性前瞻，返回 legal 中的最佳行动。 */
 function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], develops: DevelopCounts): Action {
   const ctx = getCtx(state, pid);
   const incomeBefore = incomeLevelAt(state.players[pid]!.incomeSpace);
   const scored = scoreLegal(state, ctx, legal, develops, 0);
   const firstCandidates = topPerType(scored, CFG.lookahead.firstActionK);
+
+  // UCT MCTS（mctsSimulations>0）：对 top-K 根动作做 UCB1 树搜索，随机推演
+  // 到终局按我方 VP 归集取最优（用户 2026-09-04 指定）。
+  if (CFG.lookahead.mctsSimulations > 0) {
+    return mctsChoose(state, pid, firstCandidates, develops);
+  }
 
   let best: { action: Action; value: number } | null = null;
   const ranked: { action: Action; value: number }[] = [];
@@ -2599,6 +2827,15 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
     }
     if (!best || value > best.value) best = { action: c1.action, value };
     ranked.push({ action: c1.action, value });
+  }
+
+  // IS-MCTS（ismcts.simulations>0）：2-ply 前两名价值接近（< gateMargin）的难决策
+  // 交给信息集 MCTS 采样裁决；差距明显时信任启发式（省算力）。
+  if (CFG.ismcts.simulations > 0 && ranked.length >= 2) {
+    ranked.sort((a, b) => b.value - a.value);
+    if (ranked[0]!.value - ranked[1]!.value < CFG.ismcts.gateMargin) {
+      return ismctsChoose(state, pid, ranked);
+    }
   }
 
   // 推演复核（rolloutK>0）：对价值前 rolloutTopK 名各跑 K 局随机推演到终局，
