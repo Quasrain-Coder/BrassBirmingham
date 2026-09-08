@@ -92,17 +92,20 @@ export function applyDevelop(
   state: GameState,
   player: PlayerIndex,
   action: Action,
+  opts?: { assumeLegal?: boolean },
 ): GameState {
   if (action.type !== 'develop') {
     throw new IllegalActionError('not-a-develop-action', `not-a-develop-action: ${action.type}`);
   }
-  const legal = enumerateDevelop(state, player).some(
-    (a) =>
-      a.type === 'develop' &&
-      a.cardId === action.cardId &&
-      a.removals.length === action.removals.length &&
-      a.removals.every((v, k) => v === action.removals[k]),
-  );
+  const legal =
+    opts?.assumeLegal === true ||
+    enumerateDevelop(state, player).some(
+      (a) =>
+        a.type === 'develop' &&
+        a.cardId === action.cardId &&
+        a.removals.length === action.removals.length &&
+        a.removals.every((v, k) => v === action.removals[k]),
+    );
   if (!legal) {
     throw new IllegalActionError(
       'illegal-develop',

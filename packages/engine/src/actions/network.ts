@@ -266,17 +266,20 @@ export function applyNetwork(
   state: GameState,
   player: PlayerIndex,
   action: Action,
+  opts?: { assumeLegal?: boolean },
 ): GameState {
   if (action.type !== 'network') {
     throw new IllegalActionError('not-a-network-action', `not-a-network-action: ${action.type}`);
   }
-  const legal = enumerateNetwork(state, player).some(
-    (a) =>
-      a.type === 'network' &&
-      a.cardId === action.cardId &&
-      a.links.length === action.links.length &&
-      a.links.every((v, k) => v === action.links[k]),
-  );
+  const legal =
+    opts?.assumeLegal === true ||
+    enumerateNetwork(state, player).some(
+      (a) =>
+        a.type === 'network' &&
+        a.cardId === action.cardId &&
+        a.links.length === action.links.length &&
+        a.links.every((v, k) => v === action.links[k]),
+    );
   if (!legal) {
     throw new IllegalActionError(
       'illegal-network',
