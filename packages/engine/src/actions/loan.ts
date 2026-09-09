@@ -28,13 +28,14 @@ export function applyLoan(
   state: GameState,
   player: PlayerIndex,
   action: Action,
+  opts?: { assumeLegal?: boolean },
 ): GameState {
   if (action.type !== 'loan') {
     throw new IllegalActionError('not-a-loan-action', `not-a-loan-action: ${action.type}`);
   }
-  const legal = enumerateLoan(state, player).some(
-    (a) => a.type === 'loan' && a.cardId === action.cardId,
-  );
+  const legal =
+    opts?.assumeLegal === true ||
+    enumerateLoan(state, player).some((a) => a.type === 'loan' && a.cardId === action.cardId);
   if (!legal) {
     throw new IllegalActionError(
       'illegal-loan',

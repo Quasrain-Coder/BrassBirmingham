@@ -250,17 +250,20 @@ export function applyBuild(
   state: GameState,
   player: PlayerIndex,
   action: Action,
+  opts?: { assumeLegal?: boolean },
 ): { state: GameState; events: GameEvent[] } {
   if (action.type !== 'build') {
     throw new IllegalActionError('not-a-build-action', `not-a-build-action: ${action.type}`);
   }
-  const legal = enumerateBuilds(state, player).some(
-    (a) =>
-      a.type === 'build' &&
-      a.cardId === action.cardId &&
-      a.industry === action.industry &&
-      a.location === action.location,
-  );
+  const legal =
+    opts?.assumeLegal === true ||
+    enumerateBuilds(state, player).some(
+      (a) =>
+        a.type === 'build' &&
+        a.cardId === action.cardId &&
+        a.industry === action.industry &&
+        a.location === action.location,
+    );
   if (!legal) {
     throw new IllegalActionError(
       'illegal-build',

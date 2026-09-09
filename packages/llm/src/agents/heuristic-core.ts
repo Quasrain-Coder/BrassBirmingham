@@ -486,6 +486,14 @@ const BASE_CFG = {
     gateMargin: 3.0,
     /** 模拟 LCG 种子基（与 round/rngState 混合，保证同局面同决策——回放可复现）。 */
     seed: 0x9e3779b9,
+    /** 根候选分配器：'ucb1'=UCB1 自适应（0907 原版）；'paired'=共用随机数配对
+     * （所有候选在同一批确定化世界+同一条推演随机流里对战，逐轮 z 检验淘汰
+     * 明显劣势者——两两比较方差大幅缩减，同等预算下区分度更高）。 */
+    allocator: 'ucb1' as 'ucb1' | 'paired',
+    /** paired：均值差超过 elimZ×SE 时淘汰该候选（0=不淘汰，纯配对）。 */
+    elimZ: 2.0,
+    /** paired：淘汰检验所需的最小轮数（样本太少不淘汰）。 */
+    elimMinRounds: 3,
   },
   /** 局面估值叶（上游 MCTS 叶评估器 evaluate_position 移植）：2-ply 前瞻的
    * 叶子从"只看现金惩罚"升级为完整局面评估，等效延展决策视野。
@@ -551,6 +559,28 @@ function deepMerge(base: AnyObj, over: AnyObj): AnyObj {
  * （额外打分项、决策前/后加工）时，直接 import 本函数包一层 decide 即可，
  * 不必复制核心逻辑（见 createHeuristicPlugin 的用法）。
  */
+/** ISMCTS 分段计时（bench/decision-time.ts 用；累加开销可忽略）。 */
+export const ISMCTS_PROFILE = {
+  triggers: 0,
+  sims: 0,
+  determinizeMs: 0,
+  rolloutScoreMs: 0,
+  rolloutCtxMs: 0,
+  rolloutApplyMs: 0,
+  leafMs: 0,
+};
+
+/** ISMCTS 分段计时清零。 */
+export function resetIsmctsProfile(): void {
+  ISMCTS_PROFILE.triggers = 0;
+  ISMCTS_PROFILE.sims = 0;
+  ISMCTS_PROFILE.determinizeMs = 0;
+  ISMCTS_PROFILE.rolloutScoreMs = 0;
+  ISMCTS_PROFILE.rolloutCtxMs = 0;
+  ISMCTS_PROFILE.rolloutApplyMs = 0;
+  ISMCTS_PROFILE.leafMs = 0;
+}
+
 export function buildAgent(CFG: Cfg, meta: AgentPlugin['meta']): { decide: (args: { state: GameState; seat: PlayerIndex; legal: Action[] }) => Action } {
 
 /** 一时代轮数（context.rs ERA_ROUNDS，仅用于把"时代剩余"归一到 0..1）。 */
@@ -2265,7 +2295,7 @@ function scoreLoanOp(
   // 同回合 combo：贷款后立即解锁一个生产性第二动（Loan → Build/...）。
   if (cash < w.comboCashThreshold && ctx.roundsRemaining > w.comboMinRoundsLeft && depth === 0) {
     try {
-      const s1 = applyAction(state, action);
+      const s1 = applyAction(state, action, { assumeLegal: true });
       if (s1.phase !== 'game-over' && s1.turnOrder[s1.currentPlayerIdx] === pid) {
         const simCtx = getCtx(s1, pid);
         let bestSecond = Number.NEGATIVE_INFINITY;
@@ -2551,7 +2581,7 @@ function randomRollout(state: GameState, pid: PlayerIndex, rngSeed: number): num
     const player = s.turnOrder[s.currentPlayerIdx]!;
     const legal = enumerateActions(s, player);
     if (legal.length === 0) break;
-    s = applyAction(s, legal[Math.floor(rand() * legal.length)]!);
+    s = applyAction(s, legal[Math.floor(rand() * legal.length)]!, { assumeLegal: true });
     if (++steps > 100_000) break;
   }
   return s.players[pid]!.vp;
@@ -2582,7 +2612,7 @@ function mctsChoose(
     }
     let vp = 0;
     try {
-      const s1 = applyAction(state, top[bestIdx]!.action);
+      const s1 = applyAction(state, top[bestIdx]!.action, { assumeLegal: true });
       vp = randomRollout(s1, pid, 0x9e3779b9 ^ (sim * 0x10001 + bestIdx));
     } catch {
       vp = 0;
@@ -2658,16 +2688,26 @@ function guidedRollout(state: GameState, pid: PlayerIndex, rand: () => number): 
     if (rand() < w.policyEpsilon) {
       pick = legal[Math.floor(rand() * legal.length)]!;
     } else {
-      pick = scoreLegal(s, getCtx(s, p), legal, ZERO_DEVELOPS, 1)[0]!.action;
+      const t0 = performance.now();
+      const pCtx = getCtx(s, p);
+      const t1 = performance.now();
+      pick = scoreLegal(s, pCtx, legal, ZERO_DEVELOPS, 1)[0]!.action;
+      ISMCTS_PROFILE.rolloutCtxMs += t1 - t0;
+      ISMCTS_PROFILE.rolloutScoreMs += performance.now() - t1;
     }
     try {
-      s = applyAction(s, pick);
+      const t2 = performance.now();
+      s = applyAction(s, pick, { assumeLegal: true });
+      ISMCTS_PROFILE.rolloutApplyMs += performance.now() - t2;
     } catch {
       break;
     }
   }
   if (s.phase === 'game-over') return s.players[pid]!.vp * CFG.value.vp;
-  return evaluatePosition(s, pid);
+  const t3 = performance.now();
+  const v = evaluatePosition(s, pid);
+  ISMCTS_PROFILE.leafMs += performance.now() - t3;
+  return v;
 }
 
 /** IS-MCTS 根选择：UCB1 选根 → 确定化 → 应用根动作 → 引导推演 → 均值最优。 */
@@ -2675,9 +2715,21 @@ function ismctsChoose(state: GameState, pid: PlayerIndex, ranked: { action: Acti
   const w = CFG.ismcts;
   const top = ranked.slice(0, w.topK);
   if (top.length === 1) return top[0]!.action;
-  const stats = top.map(() => ({ visits: 0, value: 0 }));
   let seed = (w.seed ^ (state.round * 0x10001) ^ state.rngState) >>> 0;
   const rand = (): number => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 0x100000000);
+  if (w.allocator === 'paired') return ismctsPaired(state, pid, top, rand);
+  return ismctsUcb1(state, pid, top, rand);
+}
+
+/** 0907 原版：UCB1 自适应选根，每次模拟独立确定化。 */
+function ismctsUcb1(
+  state: GameState,
+  pid: PlayerIndex,
+  top: { action: Action; value: number }[],
+  rand: () => number,
+): Action {
+  const w = CFG.ismcts;
+  const stats = top.map(() => ({ visits: 0, value: 0 }));
   for (let sim = 0; sim < w.simulations; sim++) {
     const totalVisits = stats.reduce((s, x) => s + x.visits, 0);
     let bestUcb = Number.NEGATIVE_INFINITY;
@@ -2692,10 +2744,13 @@ function ismctsChoose(state: GameState, pid: PlayerIndex, ranked: { action: Acti
       }
     }
     try {
+      const t0 = performance.now();
       const det = determinize(state, pid, rand);
-      const s1 = applyAction(det, top[idx]!.action);
+      ISMCTS_PROFILE.determinizeMs += performance.now() - t0;
+      const s1 = applyAction(det, top[idx]!.action, { assumeLegal: true });
       stats[idx]!.value += guidedRollout(s1, pid, rand);
       stats[idx]!.visits += 1;
+      ISMCTS_PROFILE.sims += 1;
     } catch {
       // 仿真失败的样本不计入（防污染均值）。
     }
@@ -2704,6 +2759,85 @@ function ismctsChoose(state: GameState, pid: PlayerIndex, ranked: { action: Acti
   let bestMean = Number.NEGATIVE_INFINITY;
   for (let i = 0; i < stats.length; i++) {
     const mean = stats[i]!.value / Math.max(1, stats[i]!.visits);
+    if (mean > bestMean) {
+      bestMean = mean;
+      best = i;
+    }
+  }
+  return top[best]!.action;
+}
+
+/** paired 分配器（共用随机数）：预生成 detCount 个确定化世界，所有候选在
+ * 同一批世界、同一条推演随机流里对战；每轮后 z 检验淘汰明显劣势者。 */
+function ismctsPaired(
+  state: GameState,
+  pid: PlayerIndex,
+  top: { action: Action; value: number }[],
+  rand: () => number,
+): Action {
+  const w = CFG.ismcts;
+  const detCount = Math.max(1, Math.ceil(w.simulations / top.length));
+  // 世界与每世界的推演随机流种子（候选间完全共享——配对比较的方差缩减核心）。
+  const worlds: GameState[] = [];
+  const worldSeeds: number[] = [];
+  for (let i = 0; i < detCount; i++) {
+    const t0 = performance.now();
+    worlds.push(determinize(state, pid, rand));
+    ISMCTS_PROFILE.determinizeMs += performance.now() - t0;
+    worldSeeds.push((w.seed ^ (i * 0x9e3779b9) ^ state.rngState) >>> 0);
+  }
+  const stats = top.map(() => ({ n: 0, sum: 0, samples: [] as number[] }));
+  const alive = top.map(() => true);
+  for (let round = 0; round < detCount; round++) {
+    let anyAlive = false;
+    for (let i = 0; i < top.length; i++) {
+      if (!alive[i]) continue;
+      anyAlive = true;
+      try {
+        // 同世界同随机流：候选间差异只来自根动作及其后续分歧。
+        let rseed = worldSeeds[round]!;
+        const wrand = (): number => ((rseed = (rseed * 1664525 + 1013904223) >>> 0) / 0x100000000);
+        const s1 = applyAction(worlds[round]!, top[i]!.action, { assumeLegal: true });
+        const v = guidedRollout(s1, pid, wrand);
+        stats[i]!.n += 1;
+        stats[i]!.sum += v;
+        stats[i]!.samples.push(v);
+        ISMCTS_PROFILE.sims += 1;
+      } catch {
+        // 仿真失败的样本不计入。
+      }
+    }
+    if (!anyAlive) break;
+    // z 检验淘汰：与当前最优的配对差均值 < -elimZ×SE 的候选出局。
+    if (w.elimZ > 0 && round + 1 >= w.elimMinRounds) {
+      let bestMean = Number.NEGATIVE_INFINITY;
+      let bestIdx = -1;
+      for (let i = 0; i < top.length; i++) {
+        if (!alive[i] || stats[i]!.n === 0) continue;
+        const m = stats[i]!.sum / stats[i]!.n;
+        if (m > bestMean) {
+          bestMean = m;
+          bestIdx = i;
+        }
+      }
+      for (let i = 0; i < top.length; i++) {
+        if (!alive[i] || i === bestIdx || stats[i]!.n < w.elimMinRounds) continue;
+        const b = stats[bestIdx]!;
+        const a = stats[i]!;
+        const n = Math.min(a.n, b.n);
+        const diffs: number[] = [];
+        for (let k = 0; k < n; k++) diffs.push(a.samples[k]! - b.samples[k]!);
+        const dm = diffs.reduce((s, x) => s + x, 0) / n;
+        const dv = diffs.reduce((s, x) => s + (x - dm) * (x - dm), 0) / Math.max(1, n - 1);
+        const se = Math.sqrt(dv / n);
+        if (dm < -w.elimZ * se && se > 0) alive[i] = false;
+      }
+    }
+  }
+  let best = 0;
+  let bestMean = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < top.length; i++) {
+    const mean = stats[i]!.sum / Math.max(1, stats[i]!.n);
     if (mean > bestMean) {
       bestMean = mean;
       best = i;
@@ -2730,7 +2864,7 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
   for (const c1 of firstCandidates) {
     let s1: GameState;
     try {
-      s1 = applyAction(state, c1.action);
+      s1 = applyAction(state, c1.action, { assumeLegal: true });
     } catch {
       continue;
     }
@@ -2753,7 +2887,7 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
         let bestV = Number.NEGATIVE_INFINITY;
         for (const c2 of topPerType(secondScored, CFG.lookahead.secondActionK)) {
           try {
-            const s2 = applyAction(s1, c2.action);
+            const s2 = applyAction(s1, c2.action, { assumeLegal: true });
             const v = c2.score + CFG.leaf.weight * CFG.leaf.secondActionEval * evaluatePosition(s2, pid);
             if (v > bestV) {
               bestV = v;
@@ -2767,7 +2901,7 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
       if (bestSecond) {
         value = c1.score + ctx.profile.alpha * Math.max(0, bestSecond.score);
         try {
-          endState = applyAction(s1, bestSecond.action);
+          endState = applyAction(s1, bestSecond.action, { assumeLegal: true });
         } catch {
           endState = s1;
         }
@@ -2795,7 +2929,7 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
         // 完整四连动：下轮第二动也按系数计入（先手连打两动的全部价值）。
         if (CFG.lookahead.fourActionSecondShare > 0) {
           try {
-            const s3 = applyAction(endState, nextBest.action);
+            const s3 = applyAction(endState, nextBest.action, { assumeLegal: true });
             if (s3.phase !== 'game-over' && s3.turnOrder[s3.currentPlayerIdx] === pid) {
               const s3Ctx = getCtx(s3, pid);
               const thirdScored = scoreLegal(s3, s3Ctx, enumerateActions(s3, pid), develops, 0);
@@ -2834,6 +2968,7 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
   if (CFG.ismcts.simulations > 0 && ranked.length >= 2) {
     ranked.sort((a, b) => b.value - a.value);
     if (ranked[0]!.value - ranked[1]!.value < CFG.ismcts.gateMargin) {
+      ISMCTS_PROFILE.triggers += 1;
       return ismctsChoose(state, pid, ranked);
     }
   }
@@ -2854,7 +2989,7 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
       let sum = 0;
       for (let k = 0; k < CFG.lookahead.rolloutK; k++) {
         try {
-          const s1 = applyAction(state, top[i]!.action);
+          const s1 = applyAction(state, top[i]!.action, { assumeLegal: true });
           sum += randomRollout(s1, pid, 0x9e3779b9 ^ (i * 0x10001 + k));
         } catch {
           sum += 0;
@@ -2871,7 +3006,7 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
         let sum = 0;
         for (let k = 0; k < CFG.lookahead.rolloutK; k++) {
           try {
-            const s1 = applyAction(state, top[0]!.action);
+            const s1 = applyAction(state, top[0]!.action, { assumeLegal: true });
             sum += randomRollout(s1, pid, 0x9e3779b9 ^ k);
           } catch {
             sum += 0;

@@ -50,16 +50,19 @@ export function applyScout(
   state: GameState,
   player: PlayerIndex,
   action: Action,
+  opts?: { assumeLegal?: boolean },
 ): GameState {
   if (action.type !== 'scout') {
     throw new IllegalActionError('not-a-scout-action', `not-a-scout-action: ${action.type}`);
   }
-  const legal = enumerateScout(state, player).some(
-    (a) =>
-      a.type === 'scout' &&
-      a.cardIds.length === action.cardIds.length &&
-      a.cardIds.every((v, k) => v === action.cardIds[k]),
-  );
+  const legal =
+    opts?.assumeLegal === true ||
+    enumerateScout(state, player).some(
+      (a) =>
+        a.type === 'scout' &&
+        a.cardIds.length === action.cardIds.length &&
+        a.cardIds.every((v, k) => v === action.cardIds[k]),
+    );
   if (!legal) {
     throw new IllegalActionError(
       'illegal-scout',

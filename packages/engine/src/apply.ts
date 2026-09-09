@@ -165,14 +165,17 @@ export function refillHand(state: GameState, player: PlayerIndex): GameState {
  * opts.deferRoundEnd：见 endTurnIfNeeded——一轮结束不立即结算,
  * 返回 roundEndPending=true 的待结算态(联机回合确认窗口用);该选项同时
  * 跳过补牌(补牌同属回合结算,联机 held 玩家 end_turn 时由调用方 refillHand)。
+ * opts.assumeLegal：调用方保证 action 来自对同一状态 enumerateActions 的输出
+ * 时跳过合法性重校验（校验 = 全量重枚举 + 逐动作 stableStringify 比较，
+ * 是 MCTS 推演等高频调用路径的绝对热点；仅跳过校验，执行逻辑不变）。
  */
 export function applyAction(
   state: GameState,
   action: Action,
-  opts?: { deferRoundEnd?: boolean },
+  opts?: { deferRoundEnd?: boolean; assumeLegal?: boolean },
 ): GameState {
   const player = state.turnOrder[state.currentPlayerIdx]!;
-  if (!isLegalAction(state, player, action)) {
+  if (opts?.assumeLegal !== true && !isLegalAction(state, player, action)) {
     throw new IllegalActionError(
       'illegal-action',
       `illegal-action: ${stableStringify(action)} for player ${player}`,
@@ -180,33 +183,34 @@ export function applyAction(
   }
 
   let next: GameState;
+  const modOpts = opts?.assumeLegal === true ? { assumeLegal: true } : undefined;
   switch (action.type) {
     case 'build': {
       // build 自己已弃 1 卡
-      const r = applyBuild(state, player, action);
+      const r = applyBuild(state, player, action, modOpts);
       next = { ...r.state, lastEvents: r.events };
       break;
     }
     case 'sell': {
-      const r = applySell(state, player, action);
+      const r = applySell(state, player, action, modOpts);
       next = discardActionCard({ ...r.state, lastEvents: r.events }, player, action.cardId);
       break;
     }
     case 'network':
-      next = discardActionCard(applyNetwork(state, player, action), player, action.cardId);
+      next = discardActionCard(applyNetwork(state, player, action, modOpts), player, action.cardId);
       break;
     case 'develop':
-      next = discardActionCard(applyDevelop(state, player, action), player, action.cardId);
+      next = discardActionCard(applyDevelop(state, player, action, modOpts), player, action.cardId);
       break;
     case 'loan':
-      next = discardActionCard(applyLoan(state, player, action), player, action.cardId);
+      next = discardActionCard(applyLoan(state, player, action, modOpts), player, action.cardId);
       break;
     case 'pass':
       next = discardActionCard(applyPass(state, player, action), player, action.cardId);
       break;
     case 'scout':
       // scout 自己已弃 3 卡
-      next = applyScout(state, player, action);
+      next = applyScout(state, player, action, modOpts);
       break;
   }
 

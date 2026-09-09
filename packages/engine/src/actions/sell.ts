@@ -321,11 +321,12 @@ export function applySell(
   state: GameState,
   player: PlayerIndex,
   action: Action,
+  opts?: { assumeLegal?: boolean },
 ): { state: GameState; events: GameEvent[] } {
   if (action.type !== 'sell') {
     throw new IllegalActionError('not-a-sell-action', `not-a-sell-action: ${action.type}`);
   }
-  validateSales(state, player, action);
+  if (opts?.assumeLegal !== true) validateSales(state, player, action);
 
   const events: GameEvent[] = [];
   let next = state;
