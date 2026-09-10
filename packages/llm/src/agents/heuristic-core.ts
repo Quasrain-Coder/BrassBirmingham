@@ -155,6 +155,16 @@ const BASE_CFG = {
      * 孤岛煤且市场吃不下全部方块时 flipProb 乘本值——利克煤终局未翻的教训
      * （hint 1：小连通块里煤无法翻面，给一个很大的惩罚）。 */
     isolatedCoalUnflippableMult: 1.0,
+    /** 运河煤 flip 折扣（1=不变）：运河时代煤 flipProb 乘本值——真人回放
+     * AI 造煤 5-7 次 vs 真人 1-2 次,弱化边际煤估价；折扣同时传导启发式
+     * 与 MCTS 推演/叶估值（统一口径）。 */
+    canalCoalFlipDiscount: 1.0,
+    /** 铁路酒厂 flip 地板（0=关闭）：铁路时代酒厂 flipProb 下限——不是太
+     * 末期造出必被人喝掉翻面（真人回放真人 5 酒厂全翻 vs AI 0-1 造）。 */
+    breweryRailFlipFloor: 0,
+    /** 运河酒厂 flip 地板（0=关闭）：运河时代酒厂 flipProb 下限——运河造
+     * 的桶进铁路必被喝掉（出售/双修弹药）,桶经济的起点。 */
+    breweryCanalFlipFloor: 0,
     // ── 以下为插件新增（上游无）。C6 消融链 ×500 终验（2026-08-31，62.6% vs
     // 母体 36.2%）证明：收官窗/库存衰减复杂机制全是净负贡献，默认全部关闭；
     // 有效的只有 sell/network 里三个加量常数项。代码保留供后续调参。 ──
@@ -361,6 +371,15 @@ const BASE_CFG = {
      * 最后一桶且对手有该商人可收的未翻板块，按对手未翻 VP 面值 × 本值
      * 奖励——让对手 12-20 VP 的卖出流产（对手建模第二项，高手常规武器）。 */
     denyLastBarrelBonus: 0,
+    /** 自有酒厂喝干翻面奖（0=关闭，用桶优先级）：出售消耗的啤酒喝干自己
+     * 某酒厂最后一桶时，按该酒厂 flip VP × eraScoreMult + 收入 × 本值奖励——
+     * 用桶优先级：自有桶 > 贸易商桶 > 对手桶（自有桶翻面是自己进账）。 */
+    ownBreweryFlipCredit: 0,
+    /** 对手酒厂喝干翻面罚（0=关闭，用桶优先级）：出售消耗的啤酒喝干对手
+     * 某酒厂最后一桶时，按该酒厂 flip VP × eraScoreMult + 收入 × 本值扣减——
+     * 送对手免费翻面是纯亏（真人回放实证：自有桶空+商人桶充足却喝干对手
+     * 最后一桶送翻面）。 */
+    opponentBreweryFlipPenalty: 0,
   },
   loan: {
     amount: 30,
@@ -1330,9 +1349,27 @@ function flipProbability(
   if (ind === 'coal' || ind === 'iron') {
     const cubes = nextTile(state, ctx.pid, ind)?.resourcesPlaced ?? 1;
     base = resourceFlip(state, ctx, ind, cubes, loc);
+    // 运河煤 flip 折扣（canalCoalFlipDiscount<1 开启）：弱化边际煤的
+    // 估价——真人回放 AI 造煤 5-7 次 vs 真人 1-2 次；折扣同时传导启发式
+    // 与 MCTS 推演/叶估值（统一口径,无需单独弱化 MCTS）。
+    if (ind === 'coal' && isCanalPhase(ctx.phase) && w.canalCoalFlipDiscount < 1) {
+      base *= w.canalCoalFlipDiscount;
+    }
   } else if (ind === 'brewery') {
     // 本引擎 brewery 板块 resourcesPlaced 恒 0，放桶数按时代（BREWERY_BARRELS）。
     base = breweryFlip(state, ctx, BREWERY_BARRELS[state.era]);
+    // 铁路酒厂 flip 地板（breweryRailFlipFloor>0 开启）：铁路时代造出
+    // 的酒厂只要不是太末期,必被人出售/双修喝掉翻面（真人回放真人 5 酒厂
+    // 全翻 vs AI 仅 0-1 造）——桶经济是 AI 缺失的核心收益来源。
+    if (!isCanalPhase(ctx.phase) && w.breweryRailFlipFloor > 0) {
+      base = Math.max(base, w.breweryRailFlipFloor);
+    }
+    // 运河酒厂 flip 地板（breweryCanalFlipFloor>0 开启）：运河造的桶
+    // 进铁路必被喝掉（桶在铁路是出售/双修的弹药）——运河酒厂是桶经济的起点,
+    // 真人运河造桶为铁路蓄力,AI 0-1 造导致铁路无自有桶可用。
+    if (isCanalPhase(ctx.phase) && w.breweryCanalFlipFloor > 0) {
+      base = Math.max(base, w.breweryCanalFlipFloor);
+    }
   } else {
     base = sellableFlip(state, ctx, ind, loc, state.players[ctx.pid]!.hand.length);
     // 出售动数窗硬门：剩余动数卖不完库存（含本块）→ 必砸手里，压到 floor。
@@ -2192,6 +2229,60 @@ function merchantBonusParts(state: GameState, id: MerchantId): ScoreParts {
   }
 }
 
+/**
+ * 出售用桶模拟（用桶优先级）：按引擎规范化消耗顺序（商人桶至多 1 → 自有
+ * 酒厂字典序 → 对手酒厂字典序，组间共享库存，与 consumeBeer 同口径）模拟本次
+ * 出售的啤酒消耗，返回「自有酒厂被喝干的翻面（奖励）」与「对手酒厂被喝干的
+ * 翻面（送对手免费翻面,惩罚）」。
+ */
+function sellBeerFlipEffects(
+  state: GameState,
+  pid: PlayerIndex,
+  action: Extract<Action, { type: 'sell' }>,
+): { ownFlips: TileDef[]; oppFlips: TileDef[] } {
+  const barrels = new Map<string, number>();
+  const meta = new Map<string, { player: PlayerIndex; tile: TileDef }>();
+  for (const [loc, slots] of Object.entries(state.board.slots)) {
+    slots.forEach((t, si) => {
+      if (t && !t.flipped && t.tile.industry === 'brewery' && t.resources > 0) {
+        barrels.set(`${loc}:${si}`, t.resources);
+        meta.set(`${loc}:${si}`, { player: t.player, tile: t.tile });
+      }
+    });
+  }
+  const ownFlips: TileDef[] = [];
+  const oppFlips: TileDef[] = [];
+  for (const sale of action.sales) {
+    const placed = state.board.slots[sale.location]?.[sale.slotIndex];
+    if (!placed) continue;
+    let need = placed.tile.beerToFlip;
+    if (sale.useMerchantBeer && need > 0) need -= 1;
+    if (need === 0) continue;
+    const reach = reachableFrom(state, [sale.merchant]);
+    const keys = [...barrels.keys()].sort();
+    for (const k of keys) {
+      if (need === 0) break;
+      const m = meta.get(k)!;
+      if (m.player !== pid) continue;
+      const take = Math.min(need, barrels.get(k)!);
+      barrels.set(k, barrels.get(k)! - take);
+      need -= take;
+      if (barrels.get(k) === 0) ownFlips.push(m.tile);
+    }
+    for (const k of keys) {
+      if (need === 0) break;
+      const m = meta.get(k)!;
+      if (m.player === pid) continue;
+      if (!reach.has(k.split(':')[0] as LocationId)) continue;
+      const take = Math.min(need, barrels.get(k)!);
+      barrels.set(k, barrels.get(k)! - take);
+      need -= take;
+      if (barrels.get(k) === 0) oppFlips.push(m.tile);
+    }
+  }
+  return { ownFlips, oppFlips };
+}
+
 /** score_sell_plans：对一个合法 sell 行动（引擎枚举的组合）评分。 */
 function scoreSellOp(state: GameState, ctx: EvalCtx, action: Extract<Action, { type: 'sell' }>): number {
   const w = CFG.sell;
@@ -2213,6 +2304,22 @@ function scoreSellOp(state: GameState, ctx: EvalCtx, action: Extract<Action, { t
       if (barrelsLeft === 1) {
         p.strategic += opponentsUnflippedSellableVpFor(state, ctx.pid, sale.merchant) * w.denyLastBarrelBonus;
       }
+    }
+  }
+
+  // 用桶优先级（ownBreweryFlipCredit/opponentBreweryFlipPenalty>0 开启）：
+  // 自有酒厂被喝干 = 自己翻面进账(VP+收入),奖;对手酒厂被喝干 = 送对手免费翻面,罚
+  // （真人回放实证：useMerchantBeer=false 且自有桶为空 → 喝干对手最后一桶
+  // 送翻面,而当时商人桶充足）。
+  if (w.ownBreweryFlipCredit > 0 || w.opponentBreweryFlipPenalty > 0) {
+    const fx = sellBeerFlipEffects(state, ctx.pid, action);
+    for (const tile of fx.ownFlips) {
+      p.vp += tile.vp * eraScoreMult(state, tile) * w.ownBreweryFlipCredit;
+      p.income += tile.incomeAdvance * w.ownBreweryFlipCredit;
+    }
+    for (const tile of fx.oppFlips) {
+      p.vp -= tile.vp * eraScoreMult(state, tile) * w.opponentBreweryFlipPenalty;
+      p.income -= tile.incomeAdvance * w.opponentBreweryFlipPenalty;
     }
   }
 
@@ -2258,20 +2365,6 @@ function scoreSellOp(state: GameState, ctx: EvalCtx, action: Extract<Action, { t
 // loan.rs — LOAN 评分
 // ---------------------------------------------------------------------------
 
-/** 预算内可负担的最佳建造分（上游 best_affordable_build_score）。 */
-function bestAffordableBuildScore(state: GameState, ctx: EvalCtx, budget: number): number {
-  let best = Number.NEGATIVE_INFINITY;
-  for (const t of ctx.targets) {
-    const tile = nextTile(state, ctx.pid, t.industry);
-    if (!tile) continue;
-    if (buildCostOf(state, ctx.pid, tile, t.location).cash > budget) continue;
-    // 注意：上游按预算过滤后仍以真实现金评分（超现金的拿 unaffordable 罚分）。
-    const s = scoreBuildOp(state, ctx, t.industry, t.location);
-    if (s > best) best = s;
-  }
-  return best === Number.NEGATIVE_INFINITY ? 0 : best;
-}
-
 /** score_loan_result：含同回合 combo 仿真（depth 防递归）。 */
 function scoreLoanOp(
   state: GameState,
@@ -2286,8 +2379,24 @@ function scoreLoanOp(
   const postLoanIncome = incomeLevelAt(ps.incomeSpace) - w.incomePenalty;
   const cash = ps.money;
 
-  const after = bestAffordableBuildScore(state, ctx, cash + w.amount);
-  const now = bestAffordableBuildScore(state, ctx, cash);
+  // after/now 合并单趟扫描（scoreBuildOp 与预算无关，原两次 bestAffordableBuildScore
+  // 调用重复评分可负担集合的子集——并集即 after 集，一次评分同时更新两个 best；
+  // 数学等价,loan 占推演评分 ~45% 的去重收益）。
+  let bestAfter = Number.NEGATIVE_INFINITY;
+  let bestNow = Number.NEGATIVE_INFINITY;
+  for (const t of ctx.targets) {
+    const tile = nextTile(state, ctx.pid, t.industry);
+    if (!tile) continue;
+    const costCash = buildCostOf(state, ctx.pid, tile, t.location).cash;
+    const inAfter = costCash <= cash + w.amount;
+    const inNow = costCash <= cash;
+    if (!inAfter && !inNow) continue;
+    const s = scoreBuildOp(state, ctx, t.industry, t.location);
+    if (inAfter && s > bestAfter) bestAfter = s;
+    if (inNow && s > bestNow) bestNow = s;
+  }
+  const after = bestAfter === Number.NEGATIVE_INFINITY ? 0 : bestAfter;
+  const now = bestNow === Number.NEGATIVE_INFINITY ? 0 : bestNow;
   const gain = Math.max(0, after - now);
 
   const p = parts({ income: -w.incomePenalty, strategic: gain });
