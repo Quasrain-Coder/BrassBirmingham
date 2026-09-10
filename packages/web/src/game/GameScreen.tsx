@@ -441,27 +441,14 @@ function GameBoard({
     }
     const rect = wrap.getBoundingClientRect();
     if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-      // 落点 → viewBox 坐标 → 吸附到"该产业合法候选城市"的最近槽位:
-      // 以槽位印刷框**边缘**为基准放宽半格(容错 = 正方形格子的一半,落框内必中,
-      // 超出半格不吸附;只在合法候选集合里取最近,不会跨城误吸)
+      // 落点 → viewBox 坐标 → 吸附判定（与悬停预览同一 snapToSlot 规则）
       const vx = BOARD_VIEW.x + ((x - rect.left) / rect.width) * BOARD_VIEW.size;
       const vy = BOARD_VIEW.y + ((y - rect.top) / rect.height) * BOARD_VIEW.size;
-      let best: { loc: LocationId; dist: number } | null = null;
-      for (const a of draft.candidates) {
-        if (a.type !== 'build' || a.industry !== ind) continue;
-        for (const r of SLOT_RECTS[a.location] ?? []) {
-          const dx = Math.max(r.x - vx, 0, vx - (r.x + r.w));
-          const dy = Math.max(r.y - vy, 0, vy - (r.y + r.h));
-          const dist = Math.hypot(dx, dy);
-          if (best === null || dist < best.dist) best = { loc: a.location, dist };
-        }
-      }
-      if (best === null || best.dist > SLOT_SIZE / 2) return;
-      const loc = best.loc;
+      const target = snapToSlot(ind, vx, vy);
+      if (target === null) return;
+      const loc = target.location;
       const def = state.players[seat]?.tiles.find((t) => t.industry === ind);
       if (def === undefined) return;
-      const target = resolveBuildSlot(state, seat, loc, ind, def.level);
-      if (target === null) return;
       draft.pickIndustry(ind);
       draft.clickSlot(loc, target.slotIndex, true);
       // 拖拽触发了建造/改建:左侧行动栏联动切到建造行(出售暂存已在 hook 内清空)
@@ -496,6 +483,34 @@ function GameBoard({
   };
   // 拖拽悬停吸附预览:拖到合法候选槽(含己方改建槽)附近时,临时显示新板块覆盖其上
   const [dragSnap, setDragSnap] = useState<{ location: LocationId; slotIndex: number } | null>(null);
+  /**
+   * 吸附判定（落锤与悬停预览共用，用户规格）：只遍历该产业的合法落点
+   * （resolveBuildSlot 规范化目标槽去重），落点位于某目标槽框内
+   * （|vx−cx| ≤ w/2 且 |vy−cy| ≤ h/2）即吸附该槽；命中多个取中心最近者——
+   * 吸附区恰为槽框本身，相邻槽框不重叠故至多一个候选天然成立。
+   */
+  const snapToSlot = (ind: IndustryType, vx: number, vy: number): { location: LocationId; slotIndex: number } | null => {
+    const def = state.players[seat]?.tiles.find((t) => t.industry === ind);
+    if (def === undefined) return null;
+    const seen = new Set<string>();
+    let best: { location: LocationId; slotIndex: number; dist: number } | null = null;
+    for (const a of draft.candidates) {
+      if (a.type !== 'build' || a.industry !== ind) continue;
+      const target = resolveBuildSlot(state, seat, a.location, ind, def.level);
+      if (target === null) continue;
+      const key = `${target.location}:${target.slotIndex}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const r = SLOT_RECTS[target.location]?.[target.slotIndex];
+      if (r === undefined) continue;
+      const dx = Math.abs(vx - (r.x + r.w / 2));
+      const dy = Math.abs(vy - (r.y + r.h / 2));
+      if (dx > r.w / 2 || dy > r.h / 2) continue;
+      const dist = Math.hypot(dx, dy);
+      if (best === null || dist < best.dist) best = { ...target, dist };
+    }
+    return best === null ? null : { location: best.location, slotIndex: best.slotIndex };
+  };
   const computeSnap = (ind: IndustryType, x: number, y: number): { location: LocationId; slotIndex: number } | null => {
     const wrap = boardWrapRef.current;
     if (wrap === null) return null;
@@ -503,23 +518,7 @@ function GameBoard({
     if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return null;
     const vx = BOARD_VIEW.x + ((x - rect.left) / rect.width) * BOARD_VIEW.size;
     const vy = BOARD_VIEW.y + ((y - rect.top) / rect.height) * BOARD_VIEW.size;
-    const def = state.players[seat]?.tiles.find((t) => t.industry === ind);
-    if (def === undefined) return null;
-    let best: { location: LocationId; slotIndex: number; dist: number } | null = null;
-    for (const a of draft.candidates) {
-      if (a.type !== 'build' || a.industry !== ind) continue;
-      const target = resolveBuildSlot(state, seat, a.location, ind, def.level);
-      if (target === null) continue;
-      const r = SLOT_RECTS[target.location]?.[target.slotIndex];
-      if (r === undefined) continue;
-      // 与落锤(handleTileDrop)同一容错:以印刷框边缘为基准放宽半格
-      const dx = Math.max(r.x - vx, 0, vx - (r.x + r.w));
-      const dy = Math.max(r.y - vy, 0, vy - (r.y + r.h));
-      const dist = Math.hypot(dx, dy);
-      if (best === null || dist < best.dist) best = { ...target, dist };
-    }
-    if (best === null || best.dist > SLOT_SIZE / 2) return null;
-    return { location: best.location, slotIndex: best.slotIndex };
+    return snapToSlot(ind, vx, vy);
   };
   useEffect(() => {
     if (dragTile === null) return;
