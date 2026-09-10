@@ -44,7 +44,9 @@ import {
   merchantBarrelOptions,
   merchantBarrelRemaining,
   merchantsForTile,
+  networkCoalChoices,
   overbuildSlotTargets,
+  placeableBuildsAt,
   resolveBuildSlot,
   sellCandidatesAt,
   sellOptions,
@@ -52,7 +54,7 @@ import {
   sellableTilesFor,
   targetsFor,
 } from './interactions';
-import type { BuildAction, CommittedBeerUses, ResourceSourceOption, SellAction } from './interactions';
+import type { BuildAction, CommittedBeerUses, ResourceSourceChoice, ResourceSourceOption, SellAction } from './interactions';
 import { cardName, industryName, locationName, merchantName } from './display';
 import { moneyDelta, previewOf } from './preview';
 
@@ -75,6 +77,14 @@ export interface ActionDraft {
   networkBeerOptions: { location: LocationId; slotIndex: number; own: boolean; barrels: number }[];
   /** 选/取消双轨酒源(再点同一酒源取消;图上点可用酒厂等价)。 */
   pickNetworkBeer: (ref: { location: LocationId; slotIndex: number }) => void;
+  /** network 逐段煤源选择(bug1):与 links 对齐,候选 ≥2 才非空(模拟前段后的棋盘)。 */
+  networkCoalChoices: (ResourceSourceChoice | null)[];
+  /** 逐段已选煤源计划(null=规范化自动)。 */
+  networkCoal: (ResourceSourceRef[] | null)[];
+  /** 设定第 li 段某源的取用量。 */
+  setNetworkCoalCount: (li: number, ref: SlotRef, count: number) => void;
+  /** 恢复第 li 段规范化默认。 */
+  resetNetworkCoal: (li: number) => void;
   developPicks: IndustryType[];
   /** develop 可选产业（出现在任一候选中）。 */
   developChoices: IndustryType[];
@@ -179,6 +189,8 @@ export function useActionDraft({
   const [chosen, setChosen] = useState<Action | null>(null);
   /** 双轨啤酒显式酒源(选完两条路后;不可用商人桶,缺省规范化自动消耗)。 */
   const [networkBeer, setNetworkBeer] = useState<{ location: LocationId; slotIndex: number } | null>(null);
+  /** network 逐段煤源计划(与 links 对齐;null=该段规范化自动)。 */
+  const [networkCoal, setNetworkCoal] = useState<(ResourceSourceRef[] | null)[]>([]);
   /** build/develop 显式资源来源(null = 无选择器或不附字段;默认同步为规范化方案)。 */
   const [buildCoal, setBuildCoal] = useState<ResourceSourceRef[] | null>(null);
   const [buildIron, setBuildIron] = useState<ResourceSourceRef[] | null>(null);
@@ -194,6 +206,7 @@ export function useActionDraft({
     setSellGroups([]);
     setBonusDevelop(null);
     setNetworkBeer(null);
+    setNetworkCoal([]);
     setBuildCoal(null);
     setBuildIron(null);
     setDevelopIron(null);
@@ -321,7 +334,7 @@ export function useActionDraft({
       const ind = buildIndustry;
       buildSlots = buildSlots.filter(
         (s) =>
-          buildCandidatesAt(candidates, s.location, s.slotIndex).filter(
+          placeableBuildsAt(state, seat, candidates, s.location, s.slotIndex).filter(
             (a) => a.industry === ind,
           ).length > 0,
       );
@@ -382,6 +395,40 @@ export function useActionDraft({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [networkBeerOptions]);
+  // network 逐段煤源(bug1):铁路时代每段路独立选煤源;候选在模拟前段后的棋盘上
+  const networkCoalChoicesArr = useMemo(
+    () =>
+      state.era === 'rail' && networkMatch.exact !== null
+        ? networkCoalChoices(state, seat, networkMatch.exact.links, networkCoal)
+        : [],
+    [state, seat, networkMatch.exact, networkCoal],
+  );
+  // 候选出现/变化时同步规范化默认方案;段数变化时重置
+  useEffect(() => {
+    setNetworkCoal(networkCoalChoicesArr.map((c) => c?.defaultPlan ?? null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [networkCoalChoicesArr.length, networkMatch.exact?.links.join(',')]);
+  const setNetworkCoalCount = (li: number, ref: SlotRef, count: number): void => {
+    setNetworkCoal((prev) => {
+      const next = [...prev];
+      const choice = networkCoalChoicesArr[li];
+      if (!choice) return prev;
+      const others = (next[li] ?? []).filter((r) => !(r.location === ref.location && r.slotIndex === ref.slotIndex));
+      const cap = Math.max(
+        0,
+        Math.min(count, 1, choice.options.find((o) => o.location === ref.location && o.slotIndex === ref.slotIndex)?.available ?? 0),
+      );
+      next[li] = cap > 0 ? [...others, { location: ref.location, slotIndex: ref.slotIndex, count: cap }] : others;
+      return next;
+    });
+  };
+  const resetNetworkCoal = (li: number): void => {
+    setNetworkCoal((prev) => {
+      const next = [...prev];
+      next[li] = networkCoalChoicesArr[li]?.defaultPlan ?? null;
+      return next;
+    });
+  };
   const sell = sellOptions(candidates);
   const visibleSellSingles =
     sellTile === null
@@ -531,10 +578,21 @@ export function useActionDraft({
       ? { ...developMatched, ironSources: developIron }
       : developMatched;
 
-  const networkResolved =
-    networkMatch.exact !== null && networkBeer !== null
-      ? { ...networkMatch.exact, beerSource: networkBeer }
-      : networkMatch.exact;
+  const networkResolved = useMemo(() => {
+    if (networkMatch.exact === null) return null;
+    let out: Action = networkMatch.exact;
+    if (networkBeer !== null) out = { ...out, beerSource: networkBeer };
+    // 逐段煤源(bug1):仅当该段有真实选择(候选 ≥2)且已选计划时附显式源
+    if (networkCoalChoicesArr.length > 0) {
+      const cs = out.links.map((_, li) => {
+        const plan = networkCoalChoicesArr[li] !== null && networkCoalChoicesArr[li] !== undefined ? networkCoal[li] : null;
+        const first = plan?.[0];
+        return first !== undefined && first.count > 0 ? { location: first.location, slotIndex: first.slotIndex } : null;
+      });
+      if (cs.some((x) => x !== null)) out = { ...out, coalSources: cs };
+    }
+    return out;
+  }, [networkMatch.exact, networkBeer, networkCoalChoicesArr, networkCoal]);
   const resolved: Action | null =
     chosenResolved ??
     (buildChoices.length > 0
@@ -711,7 +769,7 @@ export function useActionDraft({
         return;
       }
     }
-    let builds = buildCandidatesAt(candidates, location, slotIndex);
+    let builds = placeableBuildsAt(state, seat, candidates, location, slotIndex);
     // 产业预选:只在该产业内解析(槽位多产业歧义被预选消解)
     if (buildIndustry !== null) {
       builds = builds.filter((a) => a.industry === buildIndustry);
@@ -876,6 +934,10 @@ export function useActionDraft({
     networkBeer,
     networkBeerOptions,
     pickNetworkBeer,
+    networkCoalChoices: networkCoalChoicesArr,
+    networkCoal,
+    setNetworkCoalCount,
+    resetNetworkCoal,
     developPicks,
     developChoices: developOptions(candidates),
     scoutPicks: scoutPicksEff,
@@ -1087,6 +1149,33 @@ export function ActionBar({
             ) : null}
           </div>
         ) : null}
+        {/* network 逐段煤源行(bug1):候选 ≥2 才出现;默认规范化最近源,可改选/恢复自动 */}
+        {draft.networkCoalChoices.map((choice, li) => {
+          if (choice === null || choice === undefined) return null;
+          const picked = draft.networkCoal[li] ?? [];
+          return (
+            <div className="action-choices" data-testid={`network-coal-options-${li}`} key={`network-coal-${li}`}>
+              <span>第 {li + 1} 段路煤（选 1 块）：</span>
+              {choice.options.map((o) => {
+                const cur = picked.find((r) => r.location === o.location && r.slotIndex === o.slotIndex)?.count ?? 0;
+                return (
+                  <button
+                    key={`${o.location}:${o.slotIndex}`}
+                    type="button"
+                    data-testid={`network-coal-${li}-${o.location}-${o.slotIndex}`}
+                    className={cur > 0 ? 'selected' : undefined}
+                    onClick={() => draft.setNetworkCoalCount(li, o, cur > 0 ? 0 : 1)}
+                  >
+                    {o.owner === seat ? '自家' : '对手'}·{locationName(o.location)}（{o.available} 煤）
+                  </button>
+                );
+              })}
+              <button type="button" className="btn-ghost" data-testid={`network-coal-${li}-auto`} onClick={() => draft.resetNetworkCoal(li)}>
+                恢复自动
+              </button>
+            </div>
+          );
+        })}
         {/* 建造行:常驻可整行收起(全局记住);产业按钮带 等级+花费 */}
         {buildRowHidden ? (
           <div className="action-choices" data-testid="build-options">

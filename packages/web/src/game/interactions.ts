@@ -18,6 +18,8 @@ import {
   LOCATIONS,
   MERCHANTS,
   coalSources,
+  consumeCoal,
+  firstLocationEndpoint,
   ironSources,
   merchantHasUsableBarrel,
   reachableFrom,
@@ -528,6 +530,33 @@ export function explicitBuildSlot(
   return clicked.slotIndex;
 }
 
+/**
+ * 点击槽位后真正可落入该槽的 build 候选（bug3 修复）：buildCandidatesAt 只按
+ * 印刷图标过滤，会把「单图标槽优先」规则下实际放不进该槽的候选也留下（如空
+ * 伯明翰双图标槽的制造厂），导致强制二选一弹窗。规则：
+ * ①优先保留「规范化落点恰为该槽」或「双-双图标槽可显式选入」的候选——
+ *   伯明翰双图标槽只剩棉纺,直接放入（制造厂只能去单图标槽,点它自己的图标即可）；
+ * ②若过滤后为空,回退到印刷图标全集（点击按产业解析,规范化落点——
+ *   如斯托克双图标槽点制造厂,规范化到单图标槽,不出现弹窗）。
+ */
+export function placeableBuildsAt(
+  state: FilteredState,
+  seat: PlayerIndex,
+  candidates: readonly Action[],
+  location: LocationId,
+  slotIndex: number,
+): BuildAction[] {
+  const all = buildCandidatesAt(candidates, location, slotIndex);
+  const landing = all.filter((b) => {
+    const def = state.players[seat]?.tiles.find((t) => t.industry === b.industry);
+    if (def === undefined) return false;
+    const resolved = resolveBuildSlot(state, seat, b.location, b.industry, def.level);
+    if (resolved !== null && resolved.slotIndex === slotIndex) return true;
+    return explicitBuildSlot(state, seat, b, { location, slotIndex }) !== undefined;
+  });
+  return landing.length > 0 ? landing : all;
+}
+
 // ---------------------------------------------------------------------------
 // 资源来源选择器(2026-08-27):并列任选的煤/铁源、商人桶格——
 // 唯一选项时自动解析(返回 null 不打扰玩家),≥2 个真实选项才给候选列表。
@@ -630,6 +659,43 @@ export function explicitIronSources(state: FilteredState, need: number): Resourc
   const options = withSlotIndices(state, 'iron', ironSources(state as unknown as GameState));
   if (options.length < 2) return null;
   return { options, defaultPlan: defaultIronSources(options, need) };
+}
+
+/**
+ * network 逐段煤源选择（bug1 修复）：铁路时代每段路独立选煤源（引擎
+ * `coalSources[li]` 与 links 对齐）。第 li 段的候选在「前 li−1 段已放置且
+ * 煤已消耗」的模拟棋盘上计算——与引擎串行仿真同口径（network.ts 枚举：
+ * 放第 1 段→耗煤→放第 2 段→耗煤），经新路才连通的矿/被前段喝干的矿
+ * 才会正确出现/消失。返回与 links 对齐的 choice 数组（null=该段无真实选择，
+ * 规范化自动解析不打扰玩家）。
+ */
+export function networkCoalChoices(
+  state: FilteredState,
+  seat: PlayerIndex,
+  links: number[],
+  picks: (ResourceSourceRef[] | null)[],
+): (ResourceSourceChoice | null)[] {
+  if (links.length === 0) return [];
+  const gs = state as unknown as GameState;
+  let sim: GameState = { ...gs, board: { ...gs.board, links: [...gs.board.links] } };
+  const out: (ResourceSourceChoice | null)[] = [];
+  for (let li = 0; li < links.length; li += 1) {
+    const linkIndex = links[li]!;
+    // 先放该段路,再算候选（引擎同口径:放完路才耗煤,经新路连通的矿也算）
+    sim = { ...sim, board: { ...sim.board, links: [...sim.board.links, { linkIndex, player: seat, era: sim.era }] } };
+    out.push(explicitCoalSources(sim as unknown as FilteredState, seat, firstLocationEndpoint(linkIndex), 1));
+    // 推进串行模拟：按显式计划(或规范化默认)耗 1 煤
+    const plan = picks[li] ?? out[li]?.defaultPlan ?? null;
+    try {
+      sim =
+        plan !== null && plan.length > 0
+          ? consumeCoal(sim, seat, firstLocationEndpoint(linkIndex), 1, { explicit: plan }).state
+          : consumeCoal(sim, seat, firstLocationEndpoint(linkIndex), 1).state;
+    } catch {
+      // 引擎枚举已保证可行;仿真失败时保持当前棋盘继续（候选仅供参考）。
+    }
+  }
+  return out;
 }
 
 /** 已消耗的一桶商人啤酒(分组卖出已收组):显式 tileIndex 精确扣,缺省按规范化扣。 */

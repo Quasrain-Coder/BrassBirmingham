@@ -23,7 +23,9 @@ import {
   matchNetwork,
   matchScout,
   merchantBarrelOptions,
+  networkCoalChoices,
   normalizeRemovals,
+  placeableBuildsAt,
   sellCandidatesAt,
   sellOptions,
   sellSlotTargets,
@@ -503,5 +505,66 @@ describe('explicitMerchantBarrel(商人桶格选择)', () => {
     const opts = merchantBarrelOptions(mTyped, 'cotton', [{ industry: 'manufacturer' }]);
     // 制造货用桶:无精确格 → 规范化耗万能格(格 1),剩棉花格
     expect(opts).toEqual([0]);
+  });
+});
+
+describe('placeableBuildsAt（bug3：双图标槽位按真实落点过滤）', () => {
+  it('空伯明翰双图标槽:制造厂被单图标槽优先挤掉,只剩棉纺直接放入', () => {
+    const s = filterStateFor(newGame(4, 42), 0);
+    const builds: Action[] = [
+      { type: 'build', cardId: 'c1', industry: 'cotton', location: 'birmingham' },
+      { type: 'build', cardId: 'c1', industry: 'manufacturer', location: 'birmingham' },
+    ];
+    const hits = placeableBuildsAt(s, 0, builds, 'birmingham', 0);
+    expect(hits.map((a) => (a.type === 'build' ? a.industry : ''))).toEqual(['cotton']);
+  });
+
+  it('斯托克双图标槽点制造厂:槽内无落点时回退城市级,规范化到单图标槽', () => {
+    const s = filterStateFor(newGame(4, 42), 0);
+    const builds: Action[] = [
+      { type: 'build', cardId: 'c1', industry: 'manufacturer', location: 'stoke-on-trent' },
+    ];
+    const hits = placeableBuildsAt(s, 0, builds, 'stoke-on-trent', 0);
+    expect(hits).toEqual(builds); // 回退全集(规范化落点 = 单图标槽)
+  });
+});
+
+describe('networkCoalChoices（bug1：network 逐段煤源,模拟前段后的棋盘）', () => {
+  const fixture = () => {
+    const s = filterStateFor(newGame(4, 42), 0);
+    s.era = 'rail';
+    const coal = tileDef('coal', 1)!;
+    s.board.slots['dudley']![0] = { tile: coal, player: 0, flipped: false, resources: 1 };
+    s.board.slots['wolverhampton']![1] = { tile: coal, player: 1, flipped: false, resources: 2 };
+    // 已有 link 26(dudley—wolverhampton):wolverhampton 与 dudley 连通
+    s.board.links.push({ linkIndex: 26, player: 0, era: 'rail' });
+    return s;
+  };
+
+  it('第 1 段候选 = 连通煤矿(经新路连通也算);第 2 段候选在第 1 段放置+耗煤后计算', () => {
+    const s = fixture();
+    // links = [3(birmingham—dudley), 25(dudley—kidderminster)]
+    const choices = networkCoalChoices(s, 0, [3, 25], [null, null]);
+    // 第 1 段(link 4,锚点 birmingham):经新放的 link 4 连通 dudley 矿 + 经 link 27 连通 wolverhampton 矿
+    expect(choices[0]).not.toBeNull();
+    expect(choices[0]!.options).toEqual([
+      { location: 'dudley', slotIndex: 0, available: 1, owner: 0 },
+      { location: 'wolverhampton', slotIndex: 1, available: 2, owner: 1 },
+    ]);
+    expect(choices[0]!.defaultPlan).toEqual([{ location: 'dudley', slotIndex: 0, count: 1 }]);
+    // 第 2 段(link 26,锚点 dudley):dudley 矿已被第 1 段喝干 → 只剩 wolverhampton 1 个 → 无真实选择
+    expect(choices[1]).toBeNull();
+  });
+
+  it('第 1 段显式改选 wolverhampton → 第 2 段候选同步变化', () => {
+    const s = fixture();
+    const picks = [[{ location: 'wolverhampton', slotIndex: 1, count: 1 }], null];
+    const choices = networkCoalChoices(s, 0, [3, 25], picks);
+    // wolverhampton 被第 1 段喝掉 1 块(余 1) + dudley(1) → 仍有 2 个候选
+    expect(choices[1]).not.toBeNull();
+    expect(choices[1]!.options).toEqual([
+      { location: 'dudley', slotIndex: 0, available: 1, owner: 0 },
+      { location: 'wolverhampton', slotIndex: 1, available: 1, owner: 1 },
+    ]);
   });
 });

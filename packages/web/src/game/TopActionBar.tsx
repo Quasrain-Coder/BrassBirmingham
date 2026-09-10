@@ -231,6 +231,33 @@ export function TopActionBar({
           ) : null}
         </div>
       ) : null}
+      {/* network 逐段煤源行(bug1):候选 ≥2 才出现;默认规范化最近源,可改选/恢复自动 */}
+      {draft.networkCoalChoices.map((choice, li) => {
+        if (choice === null || choice === undefined) return null;
+        const picked = draft.networkCoal[li] ?? [];
+        return (
+          <div className="action-choices top-detail-row" data-testid={`network-coal-options-${li}`} key={`network-coal-${li}`}>
+            <span>第 {li + 1} 段路煤（选 1 块）：</span>
+            {choice.options.map((o) => {
+              const cur = picked.find((r) => r.location === o.location && r.slotIndex === o.slotIndex)?.count ?? 0;
+              return (
+                <button
+                  key={`${o.location}:${o.slotIndex}`}
+                  type="button"
+                  data-testid={`network-coal-${li}-${o.location}-${o.slotIndex}`}
+                  className={cur > 0 ? 'selected' : undefined}
+                  onClick={() => draft.setNetworkCoalCount(li, o, cur > 0 ? 0 : 1)}
+                >
+                  {o.owner === seat ? '自家' : '对手'}·{locationName(o.location)}（{o.available} 煤）
+                </button>
+              );
+            })}
+            <button type="button" className="btn-ghost" data-testid={`network-coal-${li}-auto`} onClick={() => draft.resetNetworkCoal(li)}>
+              恢复自动
+            </button>
+          </div>
+        );
+      })}
 
       {active === 'build' ? (
         <div className="action-choices top-detail-row" data-testid="build-options">
