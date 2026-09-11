@@ -384,7 +384,8 @@ function GameBoard({
 
   // 高亮跟随播报:播谁的行动就高亮谁(5 秒全程,直到播完才切换);队列空时回到
   // 实际当前玩家——人类回合于是从思考一直亮到点"结束回合"。面板发光与头像光圈统一。
-  const highlightSeat: PlayerIndex = spotlight !== null ? spotlight.player : current;
+  // 扣回合窗口(turnHold)同样停在扣住者:其回合未彻底结束,高亮不移交下家(与沙漏同口径)。
+  const highlightSeat: PlayerIndex = spotlight !== null ? spotlight.player : turnHold !== null ? turnHold : current;
   // 沙漏座位:扣回合窗口停在扣住者(其回合未彻底结束),否则为实际当前玩家(含 AI)
   const hourglassSeat: PlayerIndex = turnHold !== null ? turnHold : current;
 
