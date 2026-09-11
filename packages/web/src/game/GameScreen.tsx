@@ -151,11 +151,18 @@ function GameBoard({
       (n, list) => n + list.filter((a) => a.note !== 'round-income').length,
       0,
     );
+    let r: number;
     if (state.era === 'canal') {
-      return real <= pc ? 1 : 2 + Math.floor((real - pc) / (2 * pc));
+      r = real <= pc ? 1 : 2 + Math.floor((real - pc) / (2 * pc));
+    } else {
+      r = Math.floor(real / (2 * pc)) + 1;
     }
-    return Math.floor(real / (2 * pc)) + 1;
-  }, [eraActions, state.era, state.playerCount]);
+    // 轮末结算窗口(第二动已执行、轮末结算挂起待确认)时不偷跑下一轮:
+    // 派生轮次与 state.round 均已推进到下一轮,显示仍按进行中那轮(①)。
+    // 注意:turnHold 每个回合打满都会扣(非仅轮末),不能用它判轮末。
+    if (state.roundEndPending) r = Math.max(1, r - 1);
+    return r;
+  }, [eraActions, state.era, state.playerCount, state.roundEndPending]);
   // 时代总轮数 = 整副牌数 ÷ 每轮出牌数(2·人数):2P=10、3P=9、4P=8(模拟验证)
   // 运河首轮 1 动/人不影响该恒等式(首轮少出的 pc 张恰由 setup 弃牌补足)
   const eraTotal = useMemo(
@@ -377,11 +384,29 @@ function GameBoard({
 
   // 高亮跟随播报:播谁的行动就高亮谁(5 秒全程,直到播完才切换);队列空时回到
   // 实际当前玩家——人类回合于是从思考一直亮到点"结束回合"。面板发光与头像光圈统一。
-  const highlightSeat: PlayerIndex = spotlight !== null ? spotlight.player : current;
+  // 扣回合窗口(turnHold)同样停在扣住者:其回合未彻底结束,高亮不移交下家(与沙漏同口径)。
+  const highlightSeat: PlayerIndex = spotlight !== null ? spotlight.player : turnHold !== null ? turnHold : current;
+  // 沙漏座位:扣回合窗口停在扣住者(其回合未彻底结束),否则为实际当前玩家(含 AI)
+  const hourglassSeat: PlayerIndex = turnHold !== null ? turnHold : current;
+
+  // 每位玩家耗时(含 AI):累计用时与回合数——按沙漏归属结算,谁的沙漏时间归谁
+  const [timeStats, setTimeStats] = useState<Partial<Record<PlayerIndex, { totalMs: number; turns: number }>>>({});
+  const turnClockRef = useRef<{ seat: PlayerIndex; t: number } | null>(null);
+  useEffect(() => {
+    const now = Date.now();
+    const prev = turnClockRef.current;
+    if (prev !== null && prev.seat !== hourglassSeat) {
+      setTimeStats((tt) => {
+        const cur = tt[prev.seat] ?? { totalMs: 0, turns: 0 };
+        return { ...tt, [prev.seat]: { totalMs: cur.totalMs + (now - prev.t), turns: cur.turns + 1 } };
+      });
+    }
+    if (turnClockRef.current?.seat !== hourglassSeat) turnClockRef.current = { seat: hourglassSeat, t: now };
+  }, [hourglassSeat]);
 
   // 布局模式:经典 / 宽屏(27 寸全屏,地图居中,左右两列面板全部铺开)
   const storage = typeof localStorage === 'undefined' ? null : localStorage;
-  const [layoutWide, setLayoutWideState] = useState<boolean>(() => storage?.getItem('brass-layout') === 'wide');
+  const [layoutWide, setLayoutWideState] = useState<boolean>(() => storage?.getItem('brass-layout') !== 'classic');
   const toggleLayout = (): void => {
     const v = !layoutWide;
     setLayoutWideState(v);
@@ -396,7 +421,7 @@ function GameBoard({
   // 离开对局防呆确认弹窗
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [handRaise, setHandRaise] = useState<HandRaiseMode>(
-    () => (storage?.getItem('brass-hand-raise') as HandRaiseMode | null) ?? 'single',
+    () => (storage?.getItem('brass-hand-raise') as HandRaiseMode | null) ?? 'all',
   );
   const [stackView, setStackView] = useState<StackViewMode>(
     () => (storage?.getItem('brass-stack-view') === 'list' ? 'list' : 'mat'),
@@ -856,7 +881,7 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} roundNow={roundNow} turnHold={turnHold} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? [...draft.developPicks, ...(draft.bonusDevelop !== null ? [draft.bonusDevelop] : [])] : undefined} buildPicks={i === seat && draft.buildPreview !== null ? [draft.buildPreview.industry] : undefined} developBinRef={i === seat ? developBinRef : undefined} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} hourglass={i === hourglassSeat} timeStats={timeStats[i]} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} roundNow={roundNow} turnHold={turnHold} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? [...draft.developPicks, ...(draft.bonusDevelop !== null ? [draft.bonusDevelop] : [])] : undefined} buildPicks={i === seat && draft.buildPreview !== null ? [draft.buildPreview.industry] : undefined} developBinRef={i === seat ? developBinRef : undefined} />
               </div>
             ))}
           </aside>
@@ -867,7 +892,7 @@ function GameBoard({
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} roundNow={roundNow} turnHold={turnHold} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? [...draft.developPicks, ...(draft.bonusDevelop !== null ? [draft.bonusDevelop] : [])] : undefined} buildPicks={i === seat && draft.buildPreview !== null ? [draft.buildPreview.industry] : undefined} developBinRef={i === seat ? developBinRef : undefined} />
+                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} hourglass={i === hourglassSeat} timeStats={timeStats[i]} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} roundNow={roundNow} turnHold={turnHold} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? [...draft.developPicks, ...(draft.bonusDevelop !== null ? [draft.bonusDevelop] : [])] : undefined} buildPicks={i === seat && draft.buildPreview !== null ? [draft.buildPreview.industry] : undefined} developBinRef={i === seat ? developBinRef : undefined} />
               </div>
             ))}
           </aside>
@@ -877,18 +902,18 @@ function GameBoard({
         <>
           <div className="player-boards">
             {seatsBefore.map((i) => (
-              <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} />
+              <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} hourglass={i === hourglassSeat} timeStats={timeStats[i]} buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} />
             ))}
           </div>
           <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
           {boardEl}
           {handEl}
           {actionEl}
-          <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} buildStatus={buildability} playedCards={playedCards[seat] ?? []} />
+          <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} hourglass={seat === hourglassSeat} timeStats={timeStats[seat]} buildStatus={buildability} playedCards={playedCards[seat] ?? []} />
           {seatsAfter.length > 0 ? (
             <div className="player-boards player-boards-after">
               {seatsAfter.map((i) => (
-                <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} />
+                <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} hourglass={i === hourglassSeat} timeStats={timeStats[i]} buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} />
               ))}
             </div>
           ) : null}

@@ -137,14 +137,19 @@ describe('<GameScreen>', () => {
   it('宽屏布局:切换按钮 → 左右两列面板铺开 + 本回合信息行', () => {
     const { store, game, ws } = setup(true);
     const { container } = render(<GameScreen store={store} />);
+    // 新默认:宽屏布局(偏好全部拉到最左边)
+    expect(container.querySelector('.wide-grid')).not.toBeNull();
+    // 偏好设置弹窗里切换视图 → 经典
+    fireEvent.click(screen.getByTestId('open-prefs'));
+    fireEvent.click(screen.getByTestId('pref-layout').querySelector('.pref-slide')!);
+    fireEvent.click(screen.getByTestId('prefs-close'));
     expect(container.querySelector('.wide-grid')).toBeNull();
-    // 偏好设置弹窗里切换视图 → 宽屏
+    // 再切回宽屏:4p 左列 2 个席位、右列 2 个席位,面板全部铺开(defaultOpen)
     fireEvent.click(screen.getByTestId('open-prefs'));
     fireEvent.click(screen.getByTestId('pref-layout').querySelector('.pref-slide')!);
     fireEvent.click(screen.getByTestId('prefs-close'));
     const grid = container.querySelector('.wide-grid');
     expect(grid).not.toBeNull();
-    // 4p:左列 2 个席位、右列 2 个席位,面板全部铺开(defaultOpen)
     expect(container.querySelectorAll('.wide-col-left .wide-seat')).toHaveLength(2);
     expect(container.querySelectorAll('.wide-col-right .wide-seat')).toHaveLength(2);
     // 面板顶部两行:第一行顺位+名称+钱;第二行本回合行动+开销
@@ -152,11 +157,11 @@ describe('<GameScreen>', () => {
     expect(rank1).toHaveTextContent('#1');
     const round1 = screen.getByTestId(`compact-round-${game.turnOrder[0]!}`);
     expect(round1).toHaveTextContent('本回合未行动');
-    // 再切回经典布局
-    fireEvent.click(screen.getByTestId('open-prefs'));
-    fireEvent.click(screen.getByTestId('pref-layout').querySelector('.pref-slide')!);
-    fireEvent.click(screen.getByTestId('prefs-close'));
-    expect(container.querySelector('.wide-grid')).toBeNull();
+    // 沙漏:当前玩家显示,其他玩家不显示
+    const cur = game.turnOrder[game.currentPlayerIdx]!;
+    expect(screen.queryByTestId(`hourglass-${cur}`)).not.toBeNull();
+    const other = game.turnOrder[(game.currentPlayerIdx + 1) % 4]!;
+    expect(screen.queryByTestId(`hourglass-${other}`)).toBeNull();
     void ws;
   });
 

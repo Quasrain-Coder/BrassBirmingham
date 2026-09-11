@@ -26,6 +26,18 @@ export function playerName(room: RoomState | undefined, seat: PlayerIndex): stri
   return info?.nickname ?? `玩家${seat + 1}`;
 }
 
+/** 耗时格式化:累计用时(mm:ss 或 h:mm:ss)。 */
+function fmtDuration(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 3600) return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** 平均每动格式化(秒,一位小数)。 */
+function fmtPerTurn(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 /** 座位 AI 徽章：房间信息标记 isAI 时渲染（无房间信息或对局外不渲染）。 */
 export function AIBadge({
   room,
@@ -309,6 +321,8 @@ export function PlayerBoard({
   pulse = false,
   compact = false,
   activeTurn = false,
+  hourglass = false,
+  timeStats,
   buildStatus,
   playedCards,
   eraActions,
@@ -334,6 +348,10 @@ export function PlayerBoard({
   compact?: boolean;
   /** 当前回合进行中(思考/行动全程):面板持续发光(稳态,区别于脉冲)。 */
   activeTurn?: boolean;
+  /** 沙漏:该座位回合进行中(含 AI;扣回合窗口停在扣住者,彻底结束才移交下家)。 */
+  hourglass?: boolean;
+  /** 耗时统计(含 AI):累计用时与回合数,版面头部展示(总耗时/平均每动)。 */
+  timeStats?: { totalMs: number; turns: number } | undefined;
   /** 各产业可建性标注(本人回合的本人面板;明细行内显示,如 "✓ 可建造"/"还需 £3")。 */
   buildStatus?: Partial<Record<IndustryType, string>> | undefined;
   /** 该座位本时代已打出的牌(右上"打出"按钮的单人记录用)。 */
@@ -430,8 +448,18 @@ export function PlayerBoard({
           </span>
           <ColorDot seat={seat} />
           <span className="player-name">{playerName(room, seat)}</span>
+          {hourglass ? (
+            <span className="turn-hourglass" data-testid={`hourglass-${seat}`} title="回合进行中" aria-label="回合进行中">
+              ⏳
+            </span>
+          ) : null}
           <AIBadge room={room} seat={seat} />
           <span className="head-money money-oval">£{self.money}</span>
+          {timeStats !== undefined && timeStats.turns > 0 ? (
+            <span className="head-timestats" data-testid={`timestats-${seat}`} title="累计用时 / 平均每动用时">
+              ⏱{fmtDuration(timeStats.totalMs)}·{fmtPerTurn(timeStats.totalMs / timeStats.turns)}/动
+            </span>
+          ) : null}
           {seatSwitch !== undefined ? (
             <button
               type="button"

@@ -3076,3 +3076,35 @@ body {
 .action-log-modal .action-log-group-cards {
   overflow-y: hidden;
 }
+
+/* 沙漏(玩家 ID 旁,回合进行中,含 AI;扣回合窗口停在扣住者) */
+.turn-hourglass {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 13px;
+  line-height: 1;
+  animation: hourglass-flip 1.6s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes hourglass-flip {
+  0%, 100% { transform: rotate(0deg); opacity: 1; }
+  50% { transform: rotate(180deg); opacity: 0.55; }
+}
+
+/* 行动播报(5s)行动者地图头像脉冲光环:与面板脉冲同窗,非地图目标动作也同步亮起 */
+.spotlight-avatar-pulse {
+  animation: spotlight-avatar-pulse 1.2s ease-in-out infinite;
+}
+@keyframes spotlight-avatar-pulse {
+  0%, 100% { opacity: 0.95; stroke-width: 7; }
+  50% { opacity: 0.25; stroke-width: 13; }
+}
+
+/* 耗时统计(玩家头部):小号弱化显示,不抢钱数主体 */
+.head-timestats {
+  font-size: 11px;
+  opacity: 0.72;
+  margin-left: 6px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
