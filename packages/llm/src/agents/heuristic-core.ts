@@ -162,6 +162,10 @@ const BASE_CFG = {
     /** 铁路酒厂 flip 地板（0=关闭）：铁路时代酒厂 flipProb 下限——不是太
      * 末期造出必被人喝掉翻面（真人回放真人 5 酒厂全翻 vs AI 0-1 造）。 */
     breweryRailFlipFloor: 0,
+    /** 动态地板衰减窗口（0911）：最后 N 动内按比例衰减到 lateFloor。 */
+    breweryRailFlipDecayWindow: 0,
+    /** 动态地板末值（0911）：末期的地板下限（有无未翻可售板块时生效）。 */
+    breweryRailFlipLateFloor: 0,
     /** 运河酒厂 flip 地板（0=关闭）：运河时代酒厂 flipProb 下限——运河造
      * 的桶进铁路必被喝掉（出售/双修弹药）,桶经济的起点。 */
     breweryCanalFlipFloor: 0,
@@ -293,6 +297,10 @@ const BASE_CFG = {
      * 未翻板块得以卖出翻面时，按对手未翻 VP 面值 × 本值从我的 Link 分中
      * 扣减——基础设施白送对手翻面是隐性亏损（对手建模第一项）。 */
     opponentFlipSharePenalty: 0,
+    /** 未翻建筑图标系数（0=关闭，0911）：Link 端点的未翻面板块按
+     * 本系数计入未来价值——高价值未翻板块（棉/制造/陶）大概率会翻,
+     * 其图标在时代末会兑现,高手局该系数应 >0.5。 */
+    unflippedIconCoefficient: 0,
   },
   develop: {
     railEraTile: 0.35,
@@ -307,6 +315,10 @@ const BASE_CFG = {
     canalBonus: 0.15,
     planBonus: 0.3,
     buildableCardBonus: 0.3,
+    /** 末轮研发收益归零轮数（0=关闭，0911）：roundsRemaining ≤ 本值时,
+     * 研发收益只剩铁的成本（解锁出的板块在末轮卖不掉,白解锁）。
+     * 见 scoreDevelopOp 末段。 */
+    endgameZeroRound: 0,
     ironScarcityCost: 0.6,
     secondTargetScale: 0.4,
     canalScale: 2.0,
@@ -965,6 +977,13 @@ function linkCurrentAndPotentialVps(
   for (const e of endpoints) {
     current += linkIconsAt(state, e);
     future += futureLinkNodePotential(state, e);
+    // 0911 未翻建筑图标系数:端点未翻板块按系数计入未来价值
+    // （高价值未翻板块大概率会翻,其图标时代末兑现;系数 >0.5 反映高手预期）。
+    if (CFG.network.unflippedIconCoefficient > 0 && !isMerchantNode(e)) {
+      for (const t of state.board.slots[e] ?? []) {
+        if (t && !t.flipped) future += t.tile.linkIcons * CFG.network.unflippedIconCoefficient;
+      }
+    }
   }
   return { current, future };
 }
@@ -1361,8 +1380,17 @@ function flipProbability(
     // 铁路酒厂 flip 地板（breweryRailFlipFloor>0 开启）：铁路时代造出
     // 的酒厂只要不是太末期,必被人出售/双修喝掉翻面（真人回放真人 5 酒厂
     // 全翻 vs AI 仅 0-1 造）——桶经济是 AI 缺失的核心收益来源。
+    // 动态化（0911 定案）：开局至最后 breweryRailFlipDecayWindow 动前保持高位
+    // （早期桶必被喝掉）;末期按比例衰减到 breweryRailFlipLateFloor——
+    // 除非自己有未翻可售板块（桶确定会被用掉）则不衰减保持高位。
     if (!isCanalPhase(ctx.phase) && w.breweryRailFlipFloor > 0) {
-      base = Math.max(base, w.breweryRailFlipFloor);
+      let floor = w.breweryRailFlipFloor;
+      const actionsLeft = ctx.roundsRemaining * 2;
+      if (actionsLeft < w.breweryRailFlipDecayWindow && ownUnflippedSellableCount(state, ctx.pid) === 0) {
+        const t = Math.min(1, (w.breweryRailFlipDecayWindow - actionsLeft) / w.breweryRailFlipDecayWindow);
+        floor = w.breweryRailFlipFloor + (w.breweryRailFlipLateFloor - w.breweryRailFlipFloor) * t;
+      }
+      base = Math.max(base, floor);
     }
     // 运河酒厂 flip 地板（breweryCanalFlipFloor>0 开启）：运河造的桶
     // 进铁路必被喝掉（桶在铁路是出售/双修的弹药）——运河酒厂是桶经济的起点,
@@ -2193,6 +2221,12 @@ function scoreDevelopOp(
   if (isCanalPhase(ctx.phase)) {
     p.vp *= w.canalScale;
     p.strategic += values.length > 1 ? w.canalDoubleTargetBonus : -w.canalSingleTargetPenalty;
+  }
+
+  // 末轮研发收益归零（endgameZeroRound>0 开启）：解锁出的板块在末轮卖不掉,
+  // 白解锁——收益只剩铁的成本（真人回放 seq117:末轮研发解锁 L5 无人可卖）。
+  if (w.endgameZeroRound > 0 && ctx.roundsRemaining <= w.endgameZeroRound) {
+    return totalOf(ctx, parts({ money: -ironCost }));
   }
 
   // 行动经济护栏：研发次数超限时陡增惩罚（本引擎无 develops 计数，

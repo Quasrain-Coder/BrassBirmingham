@@ -29,7 +29,7 @@ export default createHeuristicPlugin({
     flip: {
       railSellableNoOwnBeerPenalty: 2.0,
       canalCoalFlipDiscount: 0.7,
-      breweryRailFlipFloor: 0.85,
+      breweryRailFlipFloor: 0.6,
     },
     sell: {
       ownBreweryFlipCredit: 1.0,
