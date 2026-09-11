@@ -23,6 +23,7 @@ import jsbV20260906Rollout from './jsb-v20260906-rollout.js';
 import jsbV20260907 from './jsb-v20260907.js';
 import jsbV20260908 from './jsb-v20260908.js';
 import jsbV20260910 from './jsb-v20260910.js';
+import jsbV20260911 from './jsb-v20260911.js';
 
 const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'lm-heuristic-v20260826': lmV20260826,
@@ -37,6 +38,7 @@ const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'jsb-v20260907': jsbV20260907,
   'jsb-v20260908': jsbV20260908,
   'jsb-v20260910': jsbV20260910,
+  'jsb-v20260911': jsbV20260911,
 };
 
 /** 大厅缺省 AI：jsb-v20260903（0902b 迭代：真实概率叶，vs 0902b 56.2%（×500）、内战 114.3，2026-09-03 切默认）。 */
