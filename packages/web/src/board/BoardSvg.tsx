@@ -926,6 +926,19 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                   strokeWidth={11}
                 />
               ) : null}
+              {/* 行动播报(5s):行动者头像脉冲光环——非地图目标动作(研发/贷款/搜寻/过)
+                  也在地图上同步亮起,与面板脉冲同窗(spotlight?.player === seat) */}
+              {spotlight?.player === seat ? (
+                <circle
+                  className="spotlight-avatar-pulse"
+                  cx={b.x}
+                  cy={b.y}
+                  r={121}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth={7}
+                />
+              ) : null}
               {/* 本轮已行动(含 0 开销的纯贷款)即显示钱数椭圆;未行动不显示 */}
               {spent > 0 || rank < state.currentPlayerIdx || (rank === state.currentPlayerIdx && state.actionsThisTurn > 0) ? (
                 <g className="turn-money-oval" data-testid={`turn-spent-${seat}`}>

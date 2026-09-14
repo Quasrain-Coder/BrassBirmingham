@@ -530,7 +530,9 @@ export function useActionDraft({
   );
   useEffect(() => setDevelopIron(developIronChoice?.defaultPlan ?? null), [developIronChoice]);
 
-  /** 逐块设定某源的取用量(0=不取;夹紧:不超过该源余量与总需求余量)。 */
+  /** 逐块设定某源的取用量(0=不取;夹紧:不超过该源余量与总需求余量)。
+   *  单选切换体感:需求已被其他源占满且点的是新源时,直接替换整个选择
+   *  (点谁就是谁,不用先删原来的)。 */
   const setSourceCount = (
     setter: (updater: (prev: ResourceSourceRef[] | null) => ResourceSourceRef[] | null) => void,
     options: readonly ResourceSourceOption[],
@@ -543,15 +545,14 @@ export function useActionDraft({
         (r) => !(r.location === ref.location && r.slotIndex === ref.slotIndex),
       );
       const othersTotal = others.reduce((s, r) => s + r.count, 0);
-      const cap = Math.max(
-        0,
-        Math.min(
-          count,
-          need - othersTotal,
-          options.find((o) => o.location === ref.location && o.slotIndex === ref.slotIndex)
-            ?.available ?? 0,
-        ),
-      );
+      const available =
+        options.find((o) => o.location === ref.location && o.slotIndex === ref.slotIndex)
+          ?.available ?? 0;
+      // 需求已满且点的是新源 → 单选替换(清空其他,该源取至需求上限)
+      if (othersTotal >= need && count > 0) {
+        return [{ location: ref.location, slotIndex: ref.slotIndex, count: Math.min(count, need, available) }];
+      }
+      const cap = Math.max(0, Math.min(count, need - othersTotal, available));
       return cap > 0
         ? [...others, { location: ref.location, slotIndex: ref.slotIndex, count: cap }]
         : others;
@@ -1608,19 +1609,29 @@ export function ResourceSourceDetails({
         {options.map((o) => {
           const cur =
             picked.find((r) => r.location === o.location && r.slotIndex === o.slotIndex)?.count ?? 0;
-          return Array.from({ length: o.available }, (_, i) => (
+          const maxForThis = Math.min(need, o.available);
+          const total = picked.reduce((s, r) => s + r.count, 0);
+          return (
             <button
-              key={`${o.location}:${o.slotIndex}:${i}`}
+              key={`${o.location}:${o.slotIndex}`}
               type="button"
-              data-testid={`${testid}-${o.location}-${o.slotIndex}-${i}`}
-              className={cur > i ? 'selected' : undefined}
-              title={`${o.owner === seat ? '自家' : '对手'}${kind === 'coal' ? '煤矿' : '铁厂'}·取 ${i + 1} 块(再点取消)`}
-              onClick={() => onSet(o, cur === i + 1 ? i : i + 1)}
+              data-testid={`${testid}-${o.location}-${o.slotIndex}`}
+              className={cur > 0 ? 'selected' : undefined}
+              title={`${o.owner === seat ? '自家' : '对手'}${kind === 'coal' ? '煤矿' : '铁厂'}·点按取量(到顶再点取消)`}
+              onClick={() => {
+                if (cur === 0 && total >= need) {
+                  // 需求已满且点新源 → 单选替换(setSourceCount 替换分支)
+                  onSet(o, 1);
+                  return;
+                }
+                onSet(o, cur >= maxForThis ? 0 : cur + 1);
+              }}
             >
               {o.owner === seat ? '自家' : '对手'}·{locationName(o.location)}
-              {CUBE_NUM[i] ?? `${i + 1}`}
+              {cur > 0 ? ` ×${cur}` : ''}
+              {`（${o.available}）`}
             </button>
-          ));
+          );
         })}
         <span className="action-row-hint">
           {market > 0

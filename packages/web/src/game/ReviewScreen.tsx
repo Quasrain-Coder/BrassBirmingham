@@ -29,7 +29,7 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
   // 偏好设置(与对战共用 localStorage;布局在回看固定为宽屏,仅卡牌悬浮/版图风格/日志风格生效)
   const storage = typeof localStorage === 'undefined' ? null : localStorage;
   const [handRaise, setHandRaise] = useState<HandRaiseMode>(
-    () => (storage?.getItem('brass-hand-raise') as HandRaiseMode | null) ?? 'single',
+    () => (storage?.getItem('brass-hand-raise') as HandRaiseMode | null) ?? 'all',
   );
   const [stackView, setStackView] = useState<StackViewMode>(
     () => (storage?.getItem('brass-stack-view') === 'list' ? 'list' : 'mat'),
@@ -65,10 +65,12 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
     })),
   };
 
-  // 时代内当前轮号(与 GameScreen 同一推算:全座位真实行动数 ÷ 每轮行动数)
+  // 时代内当前轮号(与 GameScreen 同一推算:全座位真实行动数 ÷ 每轮行动数);
+  // 轮末结算挂起(roundEndPending)时与 GameScreen 同口径不偷跑下一轮
   const real = eraActions.reduce((n, l) => n + l.filter((a) => a.note !== 'round-income').length, 0);
-  const roundNow =
+  let roundNow =
     state.era === 'canal' ? (real <= pc ? 1 : 2 + Math.floor((real - pc) / (2 * pc))) : Math.floor(real / (2 * pc)) + 1;
+  if (state.roundEndPending) roundNow = Math.max(1, roundNow - 1);
   const eraTotal = buildDeck(pc as 2 | 3 | 4).length / (2 * pc);
   const eraRoundText = `${state.era === 'canal' ? '运河时代' : '铁路时代'} · 第 ${Math.min(roundNow, eraTotal)}/${eraTotal} 轮`;
 
