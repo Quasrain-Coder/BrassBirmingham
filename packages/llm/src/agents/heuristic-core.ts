@@ -425,6 +425,11 @@ const BASE_CFG = {
     canalLateCashThreshold: 30.0,
     canalLateLowCashBonus: 2.8,
     canalLateBonus: 1.8,
+    /** 末轮贷款罚（endgameLoanPenalty>0 开启）：末轮（roundsRemaining 低于
+     * 阈值）贷款换不到 VP 还白亏收入——轨迹实证 P3 在 R16 连续贷款两次
+     * （收入 23→17），£60 换不到 VP。末轮每个动作必须直接换 VP。 */
+    endgameRoundsThreshold: 0,
+    endgameLoanPenalty: 0,
   },
   scout: {
     lowKeep: 1.0,
@@ -2500,6 +2505,13 @@ function scoreLoanOp(
         : cash >= w.richLightCash
           ? w.richLightPenalty
           : 0;
+
+  // 末轮贷款罚：末轮（roundsRemaining 低于阈值）贷款换不到 VP 还白亏收入——
+  // 轨迹实证 P3 在 R16 连续贷款两次（收入 23→17），£60 换不到 VP。
+  // 末轮每个动作必须直接换 VP。
+  if (w.endgameLoanPenalty > 0 && ctx.roundsRemaining <= w.endgameRoundsThreshold) {
+    p.risk -= w.endgameLoanPenalty;
+  }
 
   return totalOf(ctx, p);
 }
