@@ -267,9 +267,10 @@ export function HandBar({
             .filter((c) => c !== '')
             .join(' ');
           return (
-            <button
+            <div
               key={card.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               data-testid={`hand-card-${card.id}`}
               className={classes}
               draggable
@@ -296,12 +297,19 @@ export function HandBar({
                   ? scoutMode.onToggle(card.id)
                   : onSelect?.(card.id)
               }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  scoutMode !== null && scoutMode !== undefined
+                    ? scoutMode.onToggle(card.id)
+                    : onSelect?.(card.id);
+                }
+              }}
             >
               <img className="hand-card-art" src={cardImageSrc(card)} alt={cardName(card)} />
               <span className="hand-card-name">{cardName(card)}</span>
               <span className="card-tip">{cardName(card)}</span>
               {isWild ? <span className="wild-badge">百搭</span> : null}
-            </button>
+            </div>
           );
         })}
       </div>
