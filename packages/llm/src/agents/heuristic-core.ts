@@ -240,6 +240,21 @@ const BASE_CFG = {
     /** 棉花流冲刺奖（2026-09-03 用户 hint，0=关闭）：铁路时代建 L3+ 棉且
      * 自有酒桶时的方向性加值（铁路再冲 3-4 张 L3/L4 棉，配自酒卖）。 */
     cottonRushBonus: 0,
+    /** 棉花流战略评估（cottonStrategy.enabled=false 关闭）：三因素综合评估
+     * 是否该走棉花流——独家棉（无对手研发棉花）+ 贸易商奖励（shrewsbury/
+     * nottingham 有棉花板块）+ 手牌储备（棉花产业/城市牌）。全部具备时
+     * 棉花建造/研发/卖出额外奖励。 */
+    cottonStrategy: {
+      enabled: false,
+      /** 独家棉建造奖（无对手研发棉花时）。 */
+      exclusiveBonus: 3.0,
+      /** 贸易商奖励建造奖（shrewsbury/nottingham 有棉花板块时）。 */
+      merchantBonus: 2.0,
+      /** 手牌储备建造奖（每张棉花产业/城市牌）。 */
+      handCardBonus: 1.0,
+      /** 棉花流研发奖（三因素全部具备时）。 */
+      developBonus: 2.0,
+    },
     /** 运河后期 L1 建造惩罚（0=关闭，默认待消融）：运河进度 <35% 时建 L1
      * 板块的风险扣分——L1 未翻在运河末被移除=纯亏（审计：全场每局 ~0.6 块
      * L1 建了没翻，含棉 L1/煤 L1/制造 L1）。 */
@@ -425,6 +440,11 @@ const BASE_CFG = {
     canalLateCashThreshold: 30.0,
     canalLateLowCashBonus: 2.8,
     canalLateBonus: 1.8,
+    /** 末轮贷款罚（endgameLoanPenalty>0 开启）：末轮（roundsRemaining 低于
+     * 阈值）贷款换不到 VP 还白亏收入——轨迹实证 P3 在 R16 连续贷款两次
+     * （收入 23→17），£60 换不到 VP。末轮每个动作必须直接换 VP。 */
+    endgameRoundsThreshold: 0,
+    endgameLoanPenalty: 0,
   },
   scout: {
     lowKeep: 1.0,
@@ -495,6 +515,13 @@ const BASE_CFG = {
     /** 下轮第二动计入比例（0=只评下轮首动）：完整的四连动 = 本轮 2 动 +
      * 下轮 2 动，第二动按本系数折算（<1 体现深度不确定性）。 */
     fourActionSecondShare: 0,
+    /** 3-ply 前瞻权重（0=关闭，默认待消融）：我两动 + 对手最佳回应（用同款
+     * 2-ply 评估）——比 2-ply 多一层对手建模，但更准确地评估"我两动后
+     * 对手会怎么应对"。与 opponentResponseWeight（贪心 1-ply 对手）的区别：
+     * 对手也用 2-ply，模型更准。 */
+    threePlyWeight: 0,
+    /** 3-ply 对手回应的候选数（取对手 top-K 首动）。 */
+    threePlyOpponentK: 3,
   },
   /** IS-MCTS（信息集 MCTS，simulations=0 关闭，默认待消融）：对 2-ply 价值接近的
    * 难决策，按信息集确定化（重采对手手牌+牌库）+ UCB1 选根动作 + 引导推演
@@ -771,6 +798,52 @@ function computePlan(state: GameState, ctx: EvalCtx): Plan {
     }
   }
   return bestScore === Number.NEGATIVE_INFINITY ? fallback : best;
+}
+
+/** 棉花流战略评估：三因素综合评估是否该走棉花流。
+ * 返回 { exclusive, merchant, handCards } 供评分函数使用。 */
+function evaluateCottonStrategy(state: GameState, pid: PlayerIndex): {
+  exclusive: boolean;
+  merchant: boolean;
+  handCards: number;
+} {
+  // 1. 独家棉：没有对手研发过棉花（对手板块栈里没有 L2+ 棉花）。
+  // 只打一张 L1 棉不算（L1 棉是投石问路，不算真正的棉花流）。
+  let exclusive = true;
+  for (let i = 0; i < state.playerCount; i++) {
+    if (i === pid) continue;
+    const oppCotton = state.players[i]!.tiles.filter((t) => t.industry === 'cotton');
+    // 对手板块栈里 L1 棉花数量 < 总数 = 研发过棉花（L1 被研发掉了）
+    const l1Count = oppCotton.filter((t) => t.level === 1).length;
+    if (l1Count < oppCotton.length) {
+      exclusive = false;
+      break;
+    }
+  }
+
+  // 2. 贸易商奖励：shrewsbury（vp+4）和 nottingham（vp+3）是否有棉花板块。
+  const merchant =
+    state.merchants.shrewsbury.tiles.some((t) => t === 'cotton') ||
+    state.merchants.nottingham.tiles.some((t) => t === 'cotton');
+
+  // 3. 手牌储备：手上棉花产业牌 + 可建棉花的城市牌数量。
+  let handCards = 0;
+  for (const card of state.players[pid]!.hand) {
+    if (card.kind === 'industry' && card.industries.includes('cotton')) handCards++;
+    else if (card.kind === 'wild-industry') handCards++;
+    else if (card.kind === 'location') {
+      const def = LOCATIONS[card.location];
+      if (def && def.region !== 'farm') {
+        const slots = state.board.slots[card.location]!;
+        const ok = def.slots.some(
+          (s, i) => s.industries.includes('cotton') && (slots[i] === null || slots[i] === undefined),
+        );
+        if (ok) handCards++;
+      }
+    }
+  }
+
+  return { exclusive, merchant, handCards };
 }
 
 // ---------------------------------------------------------------------------
@@ -1897,6 +1970,16 @@ function scoreBuildOp(state: GameState, ctx: EvalCtx, ind: IndustryType, loc: Lo
   ) {
     p.risk -= CFG.build.railCoalLatePenalty;
   }
+  // 棉花流战略评估：三因素综合评估是否该走棉花流——独家棉（无对手研发棉花）+
+  // 贸易商奖励（shrewsbury/nottingham 有棉花板块）+ 手牌储备（棉花产业/城市牌）。
+  // 全部具备时棉花建造额外奖励（真人回放：胜利方独家棉后期优势大）。
+  // 注意：只给单因素奖会让 AI 在不该走棉花流时也盲目建棉——必须三因素全部具备。
+  if (CFG.build.cottonStrategy.enabled && ind === 'cotton') {
+    const cs = evaluateCottonStrategy(state, ctx.pid);
+    if (cs.exclusive && cs.merchant && cs.handCards > 0) {
+      p.strategic += CFG.build.cottonStrategy.exclusiveBonus + CFG.build.cottonStrategy.merchantBonus + cs.handCards * CFG.build.cottonStrategy.handCardBonus;
+    }
+  }
   // 可售板块自有酒门槛（hint 3）：铁路时代建可售板块，若自有酒桶不足以翻面
   // 且手上没有酒厂牌可造桶，视为大概率砸手里——贸易商桶只有 1 个、
   // 铁路时代不可能从其他玩家手里获得桶，自有酒桶是唯一可靠弹药。
@@ -2140,6 +2223,13 @@ function developTargetValue(
     }
   }
   if (ctx.plan.industry === ind) v += w.planBonus;
+  // 棉花流研发奖：三因素全部具备时，研发棉花解锁高等级板块额外奖励。
+  if (CFG.build.cottonStrategy.enabled && ind === 'cotton') {
+    const cs = evaluateCottonStrategy(state, ctx.pid);
+    if (cs.exclusive && cs.merchant && cs.handCards > 0) {
+      v += CFG.build.cottonStrategy.developBonus;
+    }
+  }
   if (hasBuildableCard(state, ctx.pid, ind)) v += w.buildableCardBonus;
   // 研发白解锁惩罚：解锁出的板块大概率永远用不上时重罚（真人回放：
   // AI 研发陶瓷厂+铁厂/酒厂后从未建对应板块，纯白给一动）。
@@ -2391,6 +2481,18 @@ function scoreSellOp(state: GameState, ctx: EvalCtx, action: Extract<Action, { t
     }
     p.strategic += l1 * w.canalEndL1Bonus;
   }
+  // 棉花流卖出奖：三因素全部具备时，卖出棉花额外奖励。
+  if (CFG.build.cottonStrategy.enabled) {
+    const cs = evaluateCottonStrategy(state, ctx.pid);
+    if (cs.exclusive && cs.merchant) {
+      for (const sale of action.sales) {
+        const placed = state.board.slots[sale.location]?.[sale.slotIndex];
+        if (placed && placed.tile.industry === 'cotton') {
+          p.strategic += CFG.build.cottonStrategy.merchantBonus;
+        }
+      }
+    }
+  }
 
   return totalOf(ctx, p);
 }
@@ -2500,6 +2602,13 @@ function scoreLoanOp(
         : cash >= w.richLightCash
           ? w.richLightPenalty
           : 0;
+
+  // 末轮贷款罚：末轮（roundsRemaining 低于阈值）贷款换不到 VP 还白亏收入——
+  // 轨迹实证 P3 在 R16 连续贷款两次（收入 23→17），£60 换不到 VP。
+  // 末轮每个动作必须直接换 VP。
+  if (w.endgameLoanPenalty > 0 && ctx.roundsRemaining <= w.endgameRoundsThreshold) {
+    p.risk -= w.endgameLoanPenalty;
+  }
 
   return totalOf(ctx, p);
 }
@@ -3099,6 +3208,44 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
           const oppScored = scoreLegal(endState, oppCtx, enumerateActions(endState, opp), develops, 0);
           const oppBest = oppScored[0];
           if (oppBest && oppBest.score > 0) value -= CFG.lookahead.opponentResponseWeight * oppBest.score;
+        }
+      }
+    }
+    // 3-ply 前瞻（threePlyWeight>0 开启）：我两动后，对手也用 2-ply 评估其最佳
+    // 回应——比 opponentResponseWeight（贪心 1-ply）更准确地建模对手。
+    // 对手的最佳 2-ply 价值从己方价值中扣减（MaxN 各自最大化）。
+    if (CFG.lookahead.threePlyWeight > 0 && firstCandidates.indexOf(c1) < CFG.lookahead.threePlyOpponentK) {
+      if (endState.phase !== 'game-over') {
+        const opp = endState.turnOrder[endState.currentPlayerIdx]!;
+        if (opp !== pid) {
+          const oppCtx = getCtx(endState, opp);
+          const oppScored = scoreLegal(endState, oppCtx, enumerateActions(endState, opp), develops, 0);
+          const oppFirst = topPerType(oppScored, CFG.lookahead.threePlyOpponentK);
+          let oppBestValue = Number.NEGATIVE_INFINITY;
+          for (const oc1 of oppFirst) {
+            try {
+              const os1 = applyAction(endState, oc1.action, { assumeLegal: true });
+              let ov = oc1.score;
+              if (os1.phase !== 'game-over' && os1.turnOrder[os1.currentPlayerIdx] === opp) {
+                const os1Ctx = getCtx(os1, opp);
+                const os2Scored = scoreLegal(os1, os1Ctx, enumerateActions(os1, opp), develops, 0);
+                const os2Best = topPerType(os2Scored, 1)[0];
+                if (os2Best) {
+                  ov = oc1.score + oppCtx.profile.alpha * Math.max(0, os2Best.score);
+                  try {
+                    const os2 = applyAction(os1, os2Best.action, { assumeLegal: true });
+                    if (CFG.leaf.weight > 0) ov += CFG.leaf.weight * evaluatePosition(os2, opp);
+                  } catch {
+                    if (CFG.leaf.weight > 0) ov += CFG.leaf.weight * evaluatePosition(os1, opp);
+                  }
+                }
+              }
+              if (ov > oppBestValue) oppBestValue = ov;
+            } catch {
+              // 仿真失败跳过。
+            }
+          }
+          if (oppBestValue > Number.NEGATIVE_INFINITY) value -= CFG.lookahead.threePlyWeight * oppBestValue;
         }
       }
     }
