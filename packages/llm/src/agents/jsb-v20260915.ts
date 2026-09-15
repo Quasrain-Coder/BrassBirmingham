@@ -29,6 +29,7 @@ export default createHeuristicPlugin({
         merchantBonus: 2.0,
         handCardBonus: 1.0,
         developBonus: 2.0,
+        threshold: 3.0,
       },
     },
     flip: {

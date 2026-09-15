@@ -240,10 +240,10 @@ const BASE_CFG = {
     /** 棉花流冲刺奖（2026-09-03 用户 hint，0=关闭）：铁路时代建 L3+ 棉且
      * 自有酒桶时的方向性加值（铁路再冲 3-4 张 L3/L4 棉，配自酒卖）。 */
     cottonRushBonus: 0,
-    /** 棉花流战略评估（cottonStrategy.enabled=false 关闭）：三因素综合评估
-     * 是否该走棉花流——独家棉（无对手研发棉花）+ 贸易商奖励（shrewsbury/
-     * nottingham 有棉花板块）+ 手牌储备（棉花产业/城市牌）。全部具备时
-     * 棉花建造/研发/卖出额外奖励。 */
+    /** 棉花流战略评估（cottonStrategy.enabled=false 关闭）：三因素线性叠加
+     * 评估棉花流可行性——独家棉（无对手研发棉花）+ 贸易商奖励（shrewsbury/
+     * nottingham 有棉花板块）+ 手牌储备（棉花产业/城市牌）。线性估价但有
+     * 阈值：每个因素独立加分（丝滑），但总分低于阈值时不给奖（防低分时盲目建棉）。 */
     cottonStrategy: {
       enabled: false,
       /** 独家棉建造奖（无对手研发棉花时）。 */
@@ -254,6 +254,8 @@ const BASE_CFG = {
       handCardBonus: 1.0,
       /** 棉花流研发奖（三因素全部具备时）。 */
       developBonus: 2.0,
+      /** 总分阈值（低于此值时不给奖，防低分时盲目建棉）。 */
+      threshold: 3.0,
     },
     /** 运河后期 L1 建造惩罚（0=关闭，默认待消融）：运河进度 <35% 时建 L1
      * 板块的风险扣分——L1 未翻在运河末被移除=纯亏（审计：全场每局 ~0.6 块
@@ -2217,6 +2219,13 @@ function developTargetValue(
     }
   }
   if (ctx.plan.industry === ind) v += w.planBonus;
+  // 棉花流研发奖：三因素全部具备时，研发棉花解锁高等级板块额外奖励。
+  if (CFG.build.cottonStrategy.enabled && ind === 'cotton') {
+    const cs = evaluateCottonStrategy(state, ctx.pid);
+    if (cs.exclusive && cs.merchant && cs.handCards > 0) {
+      v += CFG.build.cottonStrategy.developBonus;
+    }
+  }
   if (hasBuildableCard(state, ctx.pid, ind)) v += w.buildableCardBonus;
   // 研发白解锁惩罚：解锁出的板块大概率永远用不上时重罚（真人回放：
   // AI 研发陶瓷厂+铁厂/酒厂后从未建对应板块，纯白给一动）。
@@ -2467,6 +2476,18 @@ function scoreSellOp(state: GameState, ctx: EvalCtx, action: Extract<Action, { t
       if (placed && placed.tile.level === 1) l1 += 1;
     }
     p.strategic += l1 * w.canalEndL1Bonus;
+  }
+  // 棉花流卖出奖：三因素全部具备时，卖出棉花额外奖励。
+  if (CFG.build.cottonStrategy.enabled) {
+    const cs = evaluateCottonStrategy(state, ctx.pid);
+    if (cs.exclusive && cs.merchant) {
+      for (const sale of action.sales) {
+        const placed = state.board.slots[sale.location]?.[sale.slotIndex];
+        if (placed && placed.tile.industry === 'cotton') {
+          p.strategic += CFG.build.cottonStrategy.merchantBonus;
+        }
+      }
+    }
   }
 
   return totalOf(ctx, p);
