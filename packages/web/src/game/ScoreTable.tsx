@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import type { PlayerIndex } from '@brass/engine';
-import { LINKS, LINK_EXTRA_ENDPOINTS, LOCATIONS } from '@brass/engine';
+import { LINKS, LINK_EXTRA_ENDPOINTS, LOCATIONS, MERCHANTS } from '@brass/engine';
 import type { FilteredState, RoomState } from '@brass/protocol';
 import { PLAYER_COLORS } from '../board/BoardSvg';
 import { playerName } from './Panels';
@@ -38,7 +38,10 @@ export function computeEraBreakdown(state: FilteredState): Map<PlayerIndex, EraS
     const endpoints = [def.a, def.b, ...(LINK_EXTRA_ENDPOINTS[link.linkIndex] ?? [])];
     const row = out.get(link.player)!;
     for (const ep of endpoints) {
-      if (ep in LOCATIONS) row.linkVp += iconsAt(ep);
+      // 商人端点 +2（与引擎 scoreEraLinks 一致：商人位板面印 2 个连接图标）；
+      // 城市端点按已翻面板块的 linkIcons 总数（不分归属）。
+      if (Object.prototype.hasOwnProperty.call(MERCHANTS, ep)) row.linkVp += 2;
+      else if (ep in LOCATIONS) row.linkVp += iconsAt(ep);
     }
   }
 
@@ -95,7 +98,10 @@ export function computeProvisional(state: FilteredState): Map<PlayerIndex, Provi
     const endpoints = [def.a, def.b, ...(LINK_EXTRA_ENDPOINTS[link.linkIndex] ?? [])];
     const row = out.get(link.player)!;
     for (const ep of endpoints) {
-      if (ep in LOCATIONS) row.linkVp += iconsAt(ep);
+      // 商人端点 +2（与引擎 scoreEraLinks 一致：商人位板面印 2 个连接图标）；
+      // 城市端点按已翻面板块的 linkIcons 总数（不分归属）。
+      if (Object.prototype.hasOwnProperty.call(MERCHANTS, ep)) row.linkVp += 2;
+      else if (ep in LOCATIONS) row.linkVp += iconsAt(ep);
     }
   }
   for (const slots of Object.values(state.board.slots)) {

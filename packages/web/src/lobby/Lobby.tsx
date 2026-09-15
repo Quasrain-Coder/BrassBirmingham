@@ -363,6 +363,19 @@ export function Lobby({ store }: { store: GameStore }): ReactElement {
 export function RoomView({ store }: { store: GameStore }): ReactElement {
   const s = useGameStore(store);
   const room = s.room;
+  // 房间创建后自动复制房间号（clipboard 可用时写入剪贴板，不可用/被拒时静默降级为手动复制）。
+  const [autoCopied, setAutoCopied] = useState<'idle' | 'copied' | 'manual'>('idle');
+  useEffect(() => {
+    if (room === null || autoCopied !== 'idle') return;
+    const write = navigator.clipboard?.writeText;
+    if (typeof write === 'function') {
+      write(room.code)
+        .then(() => setAutoCopied('copied'))
+        .catch(() => setAutoCopied('manual'));
+    } else {
+      setAutoCopied('manual');
+    }
+  }, [room, autoCopied]);
   if (room === null) {
     return (
       <p className="status" data-testid="no-room">
@@ -396,6 +409,11 @@ export function RoomView({ store }: { store: GameStore }): ReactElement {
         <p className="room-code" data-testid="room-code">
           {room.code}
         </p>
+        {autoCopied === 'copied' ? (
+          <p className="auto-copy-badge" data-testid="auto-copy-badge">已自动复制</p>
+        ) : autoCopied === 'manual' ? (
+          <p className="auto-copy-badge manual" data-testid="auto-copy-badge">自动复制失败·请手动复制</p>
+        ) : null}
         <CopyCodeButton code={room.code} />
         {room.customSeed ? (
           <p className="seed-badge" data-testid="custom-seed-badge">

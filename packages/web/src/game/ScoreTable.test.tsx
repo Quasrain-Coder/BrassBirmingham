@@ -40,4 +40,15 @@ describe('computeEraBreakdown', () => {
     expect(b.get(0)!.linkVp).toBe(2); // farm-south 已翻面酒厂 2 图标(归属不影响)
     expect(b.get(2)!.industryVp).toBe(4);
   });
+
+  it('商人端点 +2（与引擎 scoreEraLinks 一致）', () => {
+    const s = filterStateFor(newGame(4, 42), 0);
+    const brewery1 = tileDef('brewery', 1)!; // vp4 linkIcons2
+    s.board.slots['derby']![0] = { tile: brewery1, player: 1, flipped: true, resources: 0 };
+    // link23 derby-nottingham：derby 2 图标 + nottingham 商人 +2
+    s.board.links.push({ linkIndex: 23, player: 3, era: 'canal' });
+    const b = computeEraBreakdown(s);
+    expect(b.get(3)!.linkVp).toBe(2 + 2); // derby 2 图标 + nottingham 商人 +2
+    expect(b.get(1)!.industryVp).toBe(4);
+  });
 });
