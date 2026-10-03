@@ -167,7 +167,7 @@ export const BOARD_VIEW = { x: 990, y: 990, size: 4200 };
 
 function tileImage(industry: IndustryType, level: number, player: PlayerIndex, flipped: boolean): string {
   const color = PLAYER_COLOR_KEYS[player] ?? 'purple';
-  return `/assets/tiles/${industry}-${level}-${color}${flipped ? '-back' : ''}.png`;
+  return `${import.meta.env.BASE_URL}tiles/${industry}-${level}-${color}${flipped ? '-back' : ''}.png`;
 }
 
 /** 连线渲染几何：回缩端点 ta/tb、路径点串、主方向角（deg，ta→tb）。 */
@@ -247,7 +247,7 @@ function BuiltLinkToken({ mid, angle, player, era }: { mid: { x: number; y: numb
         strokeWidth={6}
       />
       <image
-        href={era === 'canal' ? '/assets/link-canal.png' : '/assets/link-rail.png'}
+        href={`${import.meta.env.BASE_URL}${era === 'canal' ? 'link-canal.png' : 'link-rail.png'}`}
         x={mid.x - 46}
         y={mid.y - 26}
         width={92}
@@ -356,7 +356,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
       </defs>
 
       {/* 官方版图底图 */}
-      <image className="board-image" href="/assets/board.jpg" x={0} y={0} width={BOARD_SIZE} height={BOARD_SIZE} />
+      <image className="board-image" href={`${import.meta.env.BASE_URL}board.jpg`} x={0} y={0} width={BOARD_SIZE} height={BOARD_SIZE} />
 
       {/* 已建连接（玩家色描边，沿印刷路径）+ 连线点击热区 */}
       <g className="board-links">
@@ -646,7 +646,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                   <image
                     key={`${id}-tile-${ti}`}
                     className="board-merchant-tile"
-                    href={`/assets/merchants/${type}.png`}
+                    href={`${import.meta.env.BASE_URL}merchants/${type}.png`}
                     x={r.x}
                     y={r.y}
                     width={r.w}
@@ -695,9 +695,9 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
       {/* 左侧三牌堆:本时代待摸牌堆/万能产业/万能城市——错位堆叠,依稀可数余量;
           余量直接读 state(deck.count / wildSupply),reset/回放天然一致 */}
       <g className="board-decks" pointerEvents="none">
-        <DeckStack rect={DECK_RECTS.draw} count={state.deck.count} img="/assets/cards/back.png" testid="deck-stack-draw" mode="count" />
-        <DeckStack rect={DECK_RECTS.wildIndustry} count={state.wildSupply.industry} img="/assets/cards/wild-industry.png" testid="deck-stack-wild-industry" mode="stagger" />
-        <DeckStack rect={DECK_RECTS.wildLocation} count={state.wildSupply.location} img="/assets/cards/wild-location.png" testid="deck-stack-wild-location" mode="stagger" />
+        <DeckStack rect={DECK_RECTS.draw} count={state.deck.count} img={`${import.meta.env.BASE_URL}cards/back.png`} testid="deck-stack-draw" mode="count" />
+        <DeckStack rect={DECK_RECTS.wildIndustry} count={state.wildSupply.industry} img={`${import.meta.env.BASE_URL}cards/wild-industry.png`} testid="deck-stack-wild-industry" mode="stagger" />
+        <DeckStack rect={DECK_RECTS.wildLocation} count={state.wildSupply.location} img={`${import.meta.env.BASE_URL}cards/wild-location.png`} testid="deck-stack-wild-location" mode="stagger" />
       </g>
 
       {/* 连线 token 顶层渲染（不被板块图遮挡） */}
@@ -899,7 +899,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
               className={isCurrent ? 'current' : thinking ? 'thinking' : undefined}
             >
               <image
-                href={`/assets/players/${colorKey}.png`}
+                href={`${import.meta.env.BASE_URL}players/${colorKey}.png`}
                 x={b.x - 105}
                 y={b.y - 105}
                 width={210}

@@ -972,7 +972,7 @@ export function ActionBar({
     draft.resolved !== null ? money + moneyDelta(draft.resolved, state, seat) : null;
   const moneyChip = (showProjection: boolean): ReactElement => (
     <span className="action-money" data-testid="action-money">
-      <img className="coin-icon" src="/assets/coins/1.png" alt="" />
+      <img className="coin-icon" src={`${import.meta.env.BASE_URL}coins/1.png`} alt="" />
       £{money}
       {showProjection && projected !== null && projected !== money ? (
         <span className={`action-money-delta ${projected > money ? 'pos' : 'neg'}`}>

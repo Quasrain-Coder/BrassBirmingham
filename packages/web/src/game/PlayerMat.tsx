@@ -58,7 +58,7 @@ export function PlayerMat({
       role="img"
       aria-label="玩家建筑版图"
     >
-      <image href="/assets/player-mat.jpg" x={0} y={0} width={MAT_IMAGE.w} height={MAT_IMAGE.h} />
+      <image href={`${import.meta.env.BASE_URL}player-mat.jpg`} x={0} y={0} width={MAT_IMAGE.w} height={MAT_IMAGE.h} />
       {INDUSTRY_ORDER.map((ind) => {
         const slots = MAT_SLOTS[ind];
         const topLevel = slots.find((s) => (remaining.get(`${ind}-${s.level}`) ?? 0) > 0)?.level;
@@ -74,7 +74,7 @@ export function PlayerMat({
                   {Array.from({ length: isTop && hiddenTopInd === ind ? left - 1 : left }, (_, i) => (
                     <image
                       key={i}
-                      href={`/assets/tiles/${ind}-${slot.level}-${colorKey}.png`}
+                      href={`${import.meta.env.BASE_URL}tiles/${ind}-${slot.level}-${colorKey}.png`}
                       x={slot.x + i * PILE_DX}
                       y={slot.y + i * PILE_DY}
                       width={slot.w}
