@@ -58,7 +58,7 @@ export function DiscardModal({
                     <span className="discard-cell">
                       <img
                         className="discard-card discard-card-back"
-                        src="/assets/cards/back.png"
+                        src={`${import.meta.env.BASE_URL}cards/back.png`}
                         alt="开局暗置"
                       />
                       <span className="discard-card-name">暗置</span>
@@ -123,7 +123,7 @@ export function ActionLogModal({
     <div className="discard-cards">
       {faceDown === 1 ? (
         <span className="discard-cell">
-          <img className="discard-card discard-card-back" src="/assets/cards/back.png" alt="开局暗置" />
+          <img className="discard-card discard-card-back" src={`${import.meta.env.BASE_URL}cards/back.png`} alt="开局暗置" />
           <span className="discard-card-name">暗置</span>
           <span className="card-tip">开局暗置（不公开）</span>
         </span>
@@ -211,7 +211,7 @@ export function ActionLogModal({
                             <span className="discard-cell">
                               <img
                                 className="discard-card discard-card-back"
-                                src="/assets/cards/back.png"
+                                src={`${import.meta.env.BASE_URL}cards/back.png`}
                                 alt="开局暗置"
                               />
                               <span className="card-tip">开局暗置（不公开）</span>
@@ -264,7 +264,7 @@ export function ActionLogModal({
                               <span className="discard-cell">
                                 <img
                                   className="discard-card discard-card-back"
-                                  src="/assets/cards/back.png"
+                                  src={`${import.meta.env.BASE_URL}cards/back.png`}
                                   alt="开局暗置"
                                 />
                                 <span className="card-tip">开局暗置（不公开）</span>

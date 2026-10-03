@@ -99,7 +99,7 @@ export function TurnOrderBar({
               >
                 <img
                   className="turn-avatar"
-                  src={`/assets/players/${colorKey}.png`}
+                  src={`${import.meta.env.BASE_URL}players/${colorKey}.png`}
                   alt={playerName(room, seat)}
                   style={{ borderColor: PLAYER_COLORS[seat] ?? '#7f8c8d' }}
                 />
@@ -107,7 +107,7 @@ export function TurnOrderBar({
                   <span className="turn-spent" data-testid={`turn-spent-${seat}`}>
                     <span className="turn-coins" aria-hidden="true">
                       {Array.from({ length: Math.min(spent, 4) }, (_, i) => (
-                        <img key={i} src="/assets/coins/1.png" alt="" />
+                        <img key={i} src={`${import.meta.env.BASE_URL}coins/1.png`} alt="" />
                       ))}
                     </span>
                     <span className="turn-spent-num">£{spent}</span>
@@ -138,7 +138,7 @@ export function TurnOrderBar({
               <span className="player-name">{playerName(room, seat)}</span>{' '}
               <AIBadge room={room} seat={seat} />
               <span className="turn-money">
-                <img className="coin-icon" src="/assets/coins/1.png" alt="" />£{player?.money ?? 0}
+                <img className="coin-icon" src={`${import.meta.env.BASE_URL}coins/1.png`} alt="" />£{player?.money ?? 0}
               </span>
               <span className="turn-vp">{player?.vp ?? 0} 分</span>
               <span>已花 £{player?.spentThisRound ?? 0}</span>
@@ -165,10 +165,10 @@ const CARD_VARIANTS: Record<string, number> = {
 export function cardImageSrc(card: Card): string {
   const face = cardFaceKey(card);
   const variants = CARD_VARIANTS[face] ?? 1;
-  if (variants <= 1) return `/assets/cards/${face}.png`;
+  if (variants <= 1) return `${import.meta.env.BASE_URL}cards/${face}.png`;
   const n = Number(card.id.split('-').pop() ?? '0');
   const pick = (Number.isFinite(n) ? n : 0) % variants;
-  return `/assets/cards/${face}${pick === 0 ? '' : `@${pick + 1}`}.png`;
+  return `${import.meta.env.BASE_URL}cards/${face}${pick === 0 ? '' : `@${pick + 1}`}.png`;
 }
 
 export function HandBar({
@@ -614,7 +614,7 @@ export function PlayerBoard({
                         }
                       >
                         <img
-                          src={`/assets/tiles/${ind}-${def.level}-${colorKey}.png`}
+                          src={`${import.meta.env.BASE_URL}tiles/${ind}-${def.level}-${colorKey}.png`}
                           alt={`${industryName(ind)} Lv${def.level}`}
                         />
                         <span className="stack-tile-count">×{remaining}</span>
@@ -677,7 +677,7 @@ export function PlayerBoard({
           收入等级 {level}
         </span>
         <span className="head-money">
-          <img className="coin-icon" src="/assets/coins/1.png" alt="" />£{self.money}
+          <img className="coin-icon" src={`${import.meta.env.BASE_URL}coins/1.png`} alt="" />£{self.money}
         </span>
         <span className="head-vp">{self.vp} 分</span>
         <span className="board-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
@@ -706,7 +706,7 @@ export function PlayerBoard({
                         title={`${industryName(t.industry)} Lv${t.level} @ ${locationName(t.location)}${t.flipped ? '（已翻面）' : ''}`}
                       >
                         <img
-                          src={`/assets/tiles/${t.industry}-${t.level}-${colorKey}${t.flipped ? '-back' : ''}.png`}
+                          src={`${import.meta.env.BASE_URL}tiles/${t.industry}-${t.level}-${colorKey}${t.flipped ? '-back' : ''}.png`}
                           alt={industryName(t.industry)}
                         />
                         <span className="board-tile-sub">Lv{t.level}</span>
@@ -785,7 +785,7 @@ export function PlayerBoard({
                         title={`${industryName(ind)} Lv${def.level}｜建造成本 ${cost}｜翻面得 ${def.vp} 分、收入 +${def.incomeAdvance} 级`}
                       >
                         <img
-                          src={`/assets/tiles/${ind}-${def.level}-${colorKey}.png`}
+                          src={`${import.meta.env.BASE_URL}tiles/${ind}-${def.level}-${colorKey}.png`}
                           alt={`${industryName(ind)} Lv${def.level}`}
                         />
                         <span className="stack-tile-count">×{remaining}</span>

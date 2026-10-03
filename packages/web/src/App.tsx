@@ -16,10 +16,15 @@ import { ReviewScreen } from './game/ReviewScreen';
 import { GameClient, GameStore, useGameStore } from './game/store';
 import { Lobby, RoomView } from './lobby/Lobby';
 
-/** 同源 ws 端点（server 静态托管 + /ws 升级，见 M2 Task 8）。 */
+/** 同源 ws 端点：默认 /ws（server 静态托管 + /ws 升级，见 M2 Task 8）。
+ *  反代/嵌入式部署时页面不在根路径，改用「相对当前页面的 ws」
+ *  （如 /apps/brass/index.html → /apps/brass/ws，由宿主后端代理到游戏服务器），
+ *  并透传页面查询参数（宿主鉴权 token 随行）。 */
 function wsUrl(): string {
-  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${window.location.host}/ws`;
+  const url = new URL('ws', window.location.href);
+  url.protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  url.search = window.location.search;
+  return url.toString();
 }
 
 function TakenOverScreen({ store }: { store: GameStore }): ReactElement {

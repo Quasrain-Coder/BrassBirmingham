@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react';
  * 生产：vite build 出 dist/，由 server 以 WEB_DIST 同端口托管（静态 + /ws 共端口）。
  */
 export default defineConfig({
+  base: './',
   plugins: [react()],
   server: {
     port: 5174,

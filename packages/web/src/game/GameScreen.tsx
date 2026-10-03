@@ -251,8 +251,8 @@ function GameBoard({
       });
       if (e.action.type === 'scout') {
         const to = playerAreaRect(e.player);
-        spawnFlight('/assets/cards/wild-industry.png', stackRect('wild-industry'), to);
-        spawnFlight('/assets/cards/wild-location.png', stackRect('wild-location'), to);
+        spawnFlight(`${import.meta.env.BASE_URL}cards/wild-industry.png`, stackRect('wild-industry'), to);
+        spawnFlight(`${import.meta.env.BASE_URL}cards/wild-location.png`, stackRect('wild-location'), to);
       } else if (e.action.cardId.startsWith('wild-')) {
         const card = cardFromId(e.action.cardId);
         const kind = card.kind === 'wild-industry' ? 'wild-industry' : 'wild-location';
@@ -364,14 +364,14 @@ function GameBoard({
       const beneficiary = (prev!.hold ?? current) as PlayerIndex;
       if (drop > 0) {
         const to = playerAreaRect(beneficiary);
-        for (let i = 0; i < Math.min(drop, 2); i += 1) spawnFlight('/assets/cards/back.png', stackRect('draw'), to);
+        for (let i = 0; i < Math.min(drop, 2); i += 1) spawnFlight(`${import.meta.env.BASE_URL}cards/back.png`, stackRect('draw'), to);
       }
       lastDeckRef.current = deckNow;
     } else if (turnHold === null && !roundBreak && (prev === null || prev.hold === null)) {
       // AI 行动线:补牌即播,受益者是上一步的当前玩家
       if (drop > 0 && prev !== null) {
         const to = playerAreaRect(prev.current);
-        for (let i = 0; i < Math.min(drop, 2); i += 1) spawnFlight('/assets/cards/back.png', stackRect('draw'), to);
+        for (let i = 0; i < Math.min(drop, 2); i += 1) spawnFlight(`${import.meta.env.BASE_URL}cards/back.png`, stackRect('draw'), to);
       }
       lastDeckRef.current = deckNow;
     }
@@ -724,7 +724,7 @@ function GameBoard({
       {dragTile !== null && dragDef !== undefined ? (
         <img
           className="tile-drag-ghost"
-          src={`/assets/tiles/${dragTile.ind}-${dragDef.level}-${['purple', 'yellow', 'orange', 'teal'][seat] ?? 'purple'}.png`}
+          src={`${import.meta.env.BASE_URL}tiles/${dragTile.ind}-${dragDef.level}-${['purple', 'yellow', 'orange', 'teal'][seat] ?? 'purple'}.png`}
           alt=""
           style={{
             left: dragTile.x - dragTile.w / 2,
