@@ -66,7 +66,7 @@ describe('<PlayerBoard>', () => {
     const pot5 = screen.getByTestId('player-board-stack-0-pottery-5');
     expect(pot5).toHaveTextContent('×1');
     expect(pot5).toHaveTextContent('翻 20分 +5收');
-    expect(pot5.querySelector('img')?.getAttribute('src')).toBe('/assets/tiles/pottery-5-purple.png');
+    expect(pot5.querySelector('img')?.getAttribute('src')).toBe('/tiles/pottery-5-purple.png');
     // 制造厂 Lv8：2 块
     expect(screen.getByTestId('player-board-stack-0-manufacturer-8')).toHaveTextContent('×2');
   });
@@ -94,7 +94,7 @@ describe('<PlayerBoard>', () => {
     const { container } = render(<PlayerBoard state={state} seat={0} defaultOpen />);
     const mat = container.querySelector('svg.player-mat');
     expect(mat).not.toBeNull();
-    expect(mat?.querySelector('image')?.getAttribute('href')).toBe('/assets/player-mat.jpg');
+    expect(mat?.querySelector('image')?.getAttribute('href')).toBe('/player-mat.jpg');
     // 29 框全渲染;棉 I 遮罩、棉 II 栈顶描边
     expect(container.querySelectorAll('[data-mat-slot]')).toHaveLength(29);
     const cotton1 = container.querySelector('[data-mat-slot="cotton-1"]');
@@ -105,7 +105,7 @@ describe('<PlayerBoard>', () => {
     // 实物堆叠:栈顶按剩余数叠放玩家色板块 token(棉 II 剩 2 → 2 张图)
     const pile = cotton2?.querySelectorAll('.mat-pile image');
     expect(pile).toHaveLength(2);
-    expect(pile?.[0]?.getAttribute('href')).toBe('/assets/tiles/cotton-2-purple.png');
+    expect(pile?.[0]?.getAttribute('href')).toBe('/tiles/cotton-2-purple.png');
     // 初始局面的制造厂 I(剩 1)→ 单块堆叠
     const m1 = container.querySelector('[data-mat-slot="manufacturer-1"]');
     expect(m1?.querySelectorAll('.mat-pile image')).toHaveLength(1);
@@ -146,11 +146,11 @@ describe('<PlayerBoard>', () => {
     const cottonThumb = screen.getByTestId('player-board-tile-0-cotton-0');
     expect(cottonThumb.classList.contains('flipped')).toBe(true);
     expect(cottonThumb.querySelector('img')?.getAttribute('src')).toBe(
-      '/assets/tiles/cotton-2-purple-back.png',
+      '/tiles/cotton-2-purple-back.png',
     );
     const coalThumb = screen.getByTestId('player-board-tile-0-coal-0');
     expect(coalThumb.querySelector('img')?.getAttribute('src')).toBe(
-      '/assets/tiles/coal-1-purple.png',
+      '/tiles/coal-1-purple.png',
     );
   });
 
@@ -200,7 +200,7 @@ describe('<TurnOrderBar>', () => {
     expect(items).toHaveLength(4);
     // 头像图与玩家色 key 对应;当前玩家 current 类
     const avatar = items[0]?.querySelector('img.turn-avatar');
-    expect(avatar?.getAttribute('src')).toMatch(/^\/assets\/players\/(purple|yellow|orange|teal)\.png$/);
+    expect(avatar?.getAttribute('src')).toMatch(/^\/players\/(purple|yellow|orange|teal)\.png$/);
     expect(items[state.currentPlayerIdx]?.classList.contains('current')).toBe(true);
     // 花费 £7:钱币堆最多 4 层 + 数字
     const spent = screen.getByTestId(`turn-spent-${cur}`);
@@ -228,7 +228,7 @@ describe('<HandBar>', () => {
     render(<HandBar state={state} seat={0} />);
     const cardL = screen.getByTestId('hand-card-l0');
     expect(cardL).toHaveTextContent('伯明翰');
-    expect(cardL.querySelector('img')?.getAttribute('src')).toBe('/assets/cards/loc-birmingham.png');
+    expect(cardL.querySelector('img')?.getAttribute('src')).toBe('/cards/loc-birmingham.png');
     const cardI = screen.getByTestId('hand-card-i0');
     expect(cardI).toHaveTextContent('棉纺厂/制造厂');
     expect(cardI.classList.contains('wild')).toBe(false);
@@ -236,16 +236,16 @@ describe('<HandBar>', () => {
 
   it('多美术牌面按副本序号轮转（ind-brewery 3 张）', () => {
     expect(cardImageSrc({ id: 'ind-brewery-0', kind: 'industry', industries: ['brewery'] })).toBe(
-      '/assets/cards/ind-brewery.png',
+      '/cards/ind-brewery.png',
     );
     expect(cardImageSrc({ id: 'ind-brewery-1', kind: 'industry', industries: ['brewery'] })).toBe(
-      '/assets/cards/ind-brewery@2.png',
+      '/cards/ind-brewery@2.png',
     );
     expect(cardImageSrc({ id: 'ind-brewery-2', kind: 'industry', industries: ['brewery'] })).toBe(
-      '/assets/cards/ind-brewery@3.png',
+      '/cards/ind-brewery@3.png',
     );
     expect(cardImageSrc({ id: 'ind-brewery-3', kind: 'industry', industries: ['brewery'] })).toBe(
-      '/assets/cards/ind-brewery.png',
+      '/cards/ind-brewery.png',
     );
   });
 
