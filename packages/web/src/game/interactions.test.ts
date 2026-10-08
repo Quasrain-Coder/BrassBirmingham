@@ -5,8 +5,8 @@
  * 关键不变量：匹配函数一律返回入参数组里的**同一个对象**（toBe），绝不新构造。
  */
 import { describe, expect, it } from 'vitest';
-import { enumerateActions, newGame, tileDef } from '@brass/engine';
-import type { Action, Card, GameState, IndustryType } from '@brass/engine';
+import { enumerateActions, enumerateNetwork, LINKS, newGame, tileDef } from '@brass/engine';
+import type { Action, Card, GameState, IndustryType, LocationId } from '@brass/engine';
 import { filterStateFor } from '@brass/protocol';
 import type { FilteredState } from '@brass/protocol';
 import {
@@ -23,13 +23,16 @@ import {
   matchNetwork,
   matchScout,
   merchantBarrelOptions,
+  networkBeerSources,
   networkCoalChoices,
+  nextSourceCount,
   normalizeRemovals,
   placeableBuildsAt,
   sellCandidatesAt,
   sellOptions,
   sellSlotTargets,
   targetsFor,
+  type ActionTargets,
 } from './interactions';
 
 type NetworkAction = Extract<Action, { type: 'network' }>;
@@ -124,7 +127,7 @@ describe('buildSlotTargets / sellSlotTargets', () => {
     const card = hand.find((c) => c.kind === 'location');
     if (card?.kind !== 'location') throw new Error('fixture 缺 location 卡');
     const t = targetsFor(card.id, legal);
-    const refs = buildSlotTargets(t, state.board.slots);
+    const refs = buildSlotTargets(filterStateFor(state, 0), 0, t);
     expect(refs.length).toBeGreaterThan(0);
     for (const r of refs) {
       expect(r.location).toBe(card.location);
@@ -138,9 +141,32 @@ describe('buildSlotTargets / sellSlotTargets', () => {
       flipped: false,
       resources: 0,
     };
-    const refs2 = buildSlotTargets(t, state.board.slots);
+    const refs2 = buildSlotTargets(filterStateFor(state, 0), 0, t);
     expect(refs2).toHaveLength(refs.length - 1);
     expect(refs2).not.toContainEqual(first);
+  });
+
+  it('运河时代同城已有己方板块:规范化落点为改建时,空槽不高亮(brass-GM7VZA bug1)', () => {
+    const { state } = freshGame();
+    // 己方(P0)在 uttoxeter slot1 已有 1 级酒厂(该城两槽均印 brewery)
+    state.board.slots['uttoxeter']![1] = {
+      tile: { industry: 'brewery', level: 1 } as never,
+      player: 0,
+      flipped: false,
+      resources: 1,
+    };
+    // 面板上的 1 级酒厂全部移除(栈顶变 2 级),使"改建自己 1 级酒厂"成为唯一合法解
+    const ps = state.players[0]!;
+    while (ps.tiles.find((t) => t.industry === 'brewery')?.level === 1) {
+      ps.tiles.splice(ps.tiles.findIndex((t) => t.industry === 'brewery'), 1);
+    }
+    const targets: ActionTargets = {
+      locations: new Set(['uttoxeter' as LocationId]),
+      links: new Set(),
+      industries: new Map([['uttoxeter' as LocationId, ['brewery' as IndustryType]]]),
+    };
+    // 规范化落点 = 改建 slot1(占用) → 空 slot0 不得高亮
+    expect(buildSlotTargets(filterStateFor(state, 0), 0, targets)).toEqual([]);
   });
 
   it('sell 高亮槽位直接取 sales 的 (location, slotIndex)', () => {
@@ -262,6 +288,74 @@ describe('sellOptions', () => {
   it('无多块枚举时 fullSet 为 null', () => {
     expect(sellOptions([sell1('birmingham', 0)]).fullSet).toBeNull();
     expect(sellOptions([]).singles).toEqual([]);
+  });
+
+  it('多块全集取最长:最大集之后的"减一"子集不覆盖(brass-GM7VZA bug3)', () => {
+    const s = (location: string, slotIndex: number) => ({
+      location,
+      slotIndex,
+      merchant: 'oxford' as const,
+      useMerchantBeer: false,
+    });
+    const full3: SellAction = {
+      type: 'sell',
+      cardId: 'c1',
+      sales: [s('coventry', 0), s('stoke-on-trent', 0), s('stoke-on-trent', 2)],
+    };
+    const sub2a: SellAction = { type: 'sell', cardId: 'c1', sales: [s('coventry', 0), s('stoke-on-trent', 0)] };
+    const sub2b: SellAction = { type: 'sell', cardId: 'c1', sales: [s('stoke-on-trent', 0), s('stoke-on-trent', 2)] };
+    // engine 枚举序:最大集在前,其后全部减一子集——fullSet 必须是 3 块最大集
+    const opts = sellOptions([sell1('birmingham', 0), full3, sub2a, sub2b]);
+    expect(opts.fullSet).toBe(full3);
+  });
+});
+
+describe('networkBeerSources', () => {
+  it('双轨酒源可达性计入两条新路:新路尽头的对手酒厂可选(brass-GM7VZA bug2)', () => {
+    const { state } = freshGame();
+    state.era = 'rail';
+    // 对手(P1)在 uttoxeter slot0 的未翻面酒厂(2 桶)
+    state.board.slots['uttoxeter']![0] = {
+      tile: { industry: 'brewery', level: 1 } as never,
+      player: 1,
+      flipped: false,
+      resources: 2,
+    };
+    // 不连通的对手酒厂(walsall, P2)不应出现
+    state.board.slots['walsall']![0] = {
+      tile: { industry: 'brewery', level: 1 } as never,
+      player: 2,
+      flipped: false,
+      resources: 1,
+    };
+    // 双修 stone–uttoxeter(36) + derby–uttoxeter(24):锚点 derby,新路接通 uttoxeter
+    const fs = filterStateFor(state, 0);
+    const opts = networkBeerSources(fs, 0, [36, 24]);
+    expect(opts).toContainEqual({ location: 'uttoxeter', slotIndex: 0, own: false, barrels: 2 });
+    expect(opts.some((o) => o.location === 'walsall')).toBe(false);
+    // 未放路时 uttoxeter 不连通——只认锚点 derby 自身可达的酒厂
+    const before = networkBeerSources(fs, 0, []);
+    expect(before).toEqual([]);
+  });
+
+  it('运河时代/非双轨返回空', () => {
+    const { state } = freshGame();
+    expect(networkBeerSources(filterStateFor(state, 0), 0, [3])).toEqual([]);
+    state.era = 'rail';
+    expect(networkBeerSources(filterStateFor(state, 0), 0, [3])).toEqual([]);
+  });
+});
+
+describe('nextSourceCount', () => {
+  const a = { location: 'birmingham' as LocationId, slotIndex: 0 };
+  const b = { location: 'coventry' as LocationId, slotIndex: 0 };
+  it('点按取量:0→1→…→到顶归 0;需求已满点新源返回 1(单选替换)', () => {
+    expect(nextSourceCount([], 2, 3, a)).toBe(1);
+    expect(nextSourceCount([{ ...a, count: 1 }], 2, 3, a)).toBe(2);
+    // 到顶(min(need, available)=2)再点归 0
+    expect(nextSourceCount([{ ...a, count: 2 }], 2, 2, a)).toBe(0);
+    // 需求已满(2/2)点新源 → 1(替换分支清掉旧源)
+    expect(nextSourceCount([{ ...a, count: 2 }], 2, 3, b)).toBe(1);
   });
 });
 
@@ -566,5 +660,45 @@ describe('networkCoalChoices（bug1：network 逐段煤源,模拟前段后的棋
       { location: 'dudley', slotIndex: 0, available: 1, owner: 0 },
       { location: 'wolverhampton', slotIndex: 1, available: 1, owner: 1 },
     ]);
+  });
+});
+
+describe('network 第二段候选随首段连通/煤费变化（引擎枚举驱动）', () => {
+  it('首段接上煤矿→两段煤全免→第二段可选；反向顺序煤不可达→整支不枚举', () => {
+    const game = newGame(4, 42);
+    game.era = 'rail';
+    const ps = game.players[0]!;
+    ps.money = 15; // 刚好 £15 双轨费,没有余钱从市场买煤
+    // 对手在 kidderminster slot0(印 cotton+coal)的煤矿(2 煤)
+    game.board.slots['kidderminster']![0] = {
+      tile: tileDef('coal', 1)!,
+      player: 1,
+      flipped: false,
+      resources: 2,
+    };
+    // 双轨须耗 1 酒:对手在 kidderminster 的酒厂(放路后经新路连通可用);
+    // 不用自家酒厂——否则玩家 network 被锚在该城,失去首建特例
+    game.board.slots['kidderminster']![1] = {
+      tile: tileDef('brewery', 1)!,
+      player: 1,
+      flipped: false,
+      resources: 1,
+    };
+    const nets = enumerateNetwork(game, 0).filter(
+      (a): a is NetworkAction => a.type === 'network',
+    );
+    const li = (a: string, b: string): number =>
+      LINKS.findIndex((l) => (l.a === a && l.b === b) || (l.a === b && l.b === a));
+    const i = li('dudley', 'kidderminster');
+    const j = li('dudley', 'wolverhampton');
+    // 首段 i:放上后锚点 dudley 经新路连通 kidderminster 矿 → 两段煤全免 → [i,j] 合法
+    expect(nets.some((a) => a.links.length === 2 && a.links[0] === i && a.links[1] === j)).toBe(true);
+    // 单段 [i] 同样合法(煤免费);单段 [j] 煤不可达(无连通商人位买市场煤) → 不枚举
+    expect(nets.some((a) => a.links.length === 1 && a.links[0] === i)).toBe(true);
+    expect(nets.some((a) => a.links[0] === j)).toBe(false);
+    // UI 口径:extendableLinks 完全由枚举前缀匹配驱动——选完 i 后第二段含 j;
+    // j 不是合法首段,选它(理论上不可点)无可延伸
+    expect(extendableLinks(nets, [i]).has(j)).toBe(true);
+    expect(extendableLinks(nets, [j]).size).toBe(0);
   });
 });

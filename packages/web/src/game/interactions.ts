@@ -116,24 +116,42 @@ export function targetsFor(
   return targets;
 }
 
-type BoardSlots = FilteredState['board']['slots'];
-
 /**
- * build 目标展开到槽位：城市内印刷产业命中且**仍为空**的槽位。
+ * build 目标展开到槽位：城市内印刷产业命中且**仍为空**的槽位——但仅当引擎规范化
+ * 落点（resolveBuildSlot）也是空槽放置时。若规范化落点是改建（己方/对手已占槽，
+ * 如运河时代同城已有己方板块时唯一合法解是改建自己的低级板块），空槽一律不高亮，
+ * 改建目标由 overbuildSlotTargets 单独圈出。
  * （engine 保证 (location, industry) 对全合法，具体槽位由 engine 定；此处只做高亮。）
  */
-export function buildSlotTargets(targets: ActionTargets, boardSlots: BoardSlots): SlotRef[] {
+export function buildSlotTargets(
+  state: FilteredState,
+  seat: PlayerIndex,
+  targets: ActionTargets,
+): SlotRef[] {
+  const seen = new Set<string>();
   const out: SlotRef[] = [];
   for (const [location, industries] of targets.industries) {
     const def = LOCATIONS[location];
-    const slots = boardSlots[location];
-    if (!def || !slots) continue;
-    def.slots.forEach((slot, slotIndex) => {
-      if (slots[slotIndex] !== null && slots[slotIndex] !== undefined) return;
-      if (slot.industries.some((ind) => industries.includes(ind))) {
-        out.push({ location, slotIndex });
+    const placed = state.board.slots[location];
+    if (!def || !placed) continue;
+    for (const ind of industries) {
+      const tileDef = state.players[seat]?.tiles.find((t) => t.industry === ind);
+      if (tileDef === undefined) continue;
+      const resolved = resolveBuildSlot(state, seat, location, ind, tileDef.level);
+      if (resolved === null) continue;
+      // 规范化落点已被占用 → 改建情形：空槽不高亮（否则误导为可在同城新造）
+      if (placed[resolved.slotIndex] !== null && placed[resolved.slotIndex] !== undefined) {
+        continue;
       }
-    });
+      def.slots.forEach((slot, slotIndex) => {
+        if (placed[slotIndex] !== null && placed[slotIndex] !== undefined) return;
+        if (!slot.industries.includes(ind)) return;
+        const key = `${location}:${slotIndex}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push({ location, slotIndex });
+      });
+    }
   }
   return out;
 }
@@ -393,7 +411,9 @@ export function sellOptions(candidates: readonly Action[]): SellOptions {
   for (const a of candidates) {
     if (a.type !== 'sell') continue;
     if (a.sales.length === 1) singles.push(a);
-    else fullSet = a;
+    // 多块取**最长**销售集：engine 枚举序为"最大可卖集合"在前、其后是全部
+    // "减一"子集，简单覆写会让一键推荐停留在 2 块子集而漏掉 3 块最大集。
+    else if (fullSet === null || a.sales.length > fullSet.sales.length) fullSet = a;
   }
   return { singles, fullSet };
 }
@@ -662,12 +682,71 @@ export function explicitIronSources(state: FilteredState, need: number): Resourc
 }
 
 /**
+ * 双轨酒源选项（§9.4）：两条路**放完后**的棋盘上，自家任意未翻面有余量酒厂
+ * （无需连通）+ 连通第二条铁路锚点的对手酒厂。可达性必须计入本次将放的两条
+ * 新路——engine 在两条路放完后的棋盘上判定（drinkExplicitBrewery）；不放路
+ * 直接算会漏掉"新路尽头那家酒厂"（如双修 stone–uttoxeter + derby–uttoxeter
+ * 时，uttoxeter 的对手酒厂只有放完路才连通）。
+ */
+export function networkBeerSources(
+  state: FilteredState,
+  seat: PlayerIndex,
+  links: readonly number[],
+): { location: LocationId; slotIndex: number; own: boolean; barrels: number }[] {
+  if (state.era !== 'rail' || links.length !== 2) return [];
+  const anchor = firstLocationEndpoint(links[1]!);
+  const withNewLinks = {
+    ...state,
+    board: {
+      ...state.board,
+      links: [
+        ...state.board.links,
+        ...links.map((i) => ({ linkIndex: i, player: seat, era: 'rail' as const })),
+      ],
+    },
+  };
+  const reach = reachableFrom(withNewLinks as unknown as GameState, [anchor]);
+  const out: { location: LocationId; slotIndex: number; own: boolean; barrels: number }[] = [];
+  for (const [loc, slots] of Object.entries(state.board.slots)) {
+    for (let i = 0; i < slots.length; i++) {
+      const t = slots[i];
+      if (!t || t.flipped || t.tile.industry !== 'brewery' || t.resources <= 0) continue;
+      if (t.player === seat) {
+        out.push({ location: loc as LocationId, slotIndex: i, own: true, barrels: t.resources });
+      } else if (reach.has(loc as LocationId)) {
+        out.push({ location: loc as LocationId, slotIndex: i, own: false, barrels: t.resources });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * 煤/铁源"点按取量"的下一计数（按钮与地图点选共用）：需求已满点新源 → 返回 1
+ * （setSourceCount 的单选替换分支会清掉其他源）；否则 +1，到顶（min(need, 余量)）
+ * 再点归 0 取消。
+ */
+export function nextSourceCount(
+  picked: readonly ResourceSourceRef[],
+  need: number,
+  available: number,
+  ref: SlotRef,
+): number {
+  const cur = picked.find((r) => r.location === ref.location && r.slotIndex === ref.slotIndex)?.count ?? 0;
+  const total = picked.reduce((s, r) => s + r.count, 0);
+  if (cur === 0 && total >= need) return 1;
+  const maxForThis = Math.min(need, available);
+  return cur >= maxForThis ? 0 : cur + 1;
+}
+
+/**
  * network 逐段煤源选择（bug1 修复）：铁路时代每段路独立选煤源（引擎
- * `coalSources[li]` 与 links 对齐）。第 li 段的候选在「前 li−1 段已放置且
- * 煤已消耗」的模拟棋盘上计算——与引擎串行仿真同口径（network.ts 枚举：
- * 放第 1 段→耗煤→放第 2 段→耗煤），经新路才连通的矿/被前段喝干的矿
- * 才会正确出现/消失。返回与 links 对齐的 choice 数组（null=该段无真实选择，
- * 规范化自动解析不打扰玩家）。
+ * `coalSources[li]` 与 links 对齐）。第 li 段的候选在「第 0..li 段已放置
+ * （含本段）、第 0..li−1 段的煤已消耗」的模拟棋盘上计算——与引擎串行仿真
+ * 同口径（network.ts 枚举：放第 1 段→耗煤→放第 2 段→耗煤→耗酒），经本段
+ * 新路才连通的矿/被前段喝干的矿才会正确出现/消失。双轨酒源同理：
+ * 在两条路都放完的棋盘上判定（networkBeerSources）。返回与 links 对齐的
+ * choice 数组（null=该段无真实选择，规范化自动解析不打扰玩家）。
  */
 export function networkCoalChoices(
   state: FilteredState,

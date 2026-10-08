@@ -69,6 +69,8 @@ export interface BoardHighlights {
   locations?: LocationId[];
   /** 啤酒源高亮(match 效果):有余量的自有酒厂地点与有桶商人位。 */
   beerSources?: { locations?: LocationId[]; merchants?: MerchantId[] };
+  /** 煤/铁源高亮:来源选择器激活时可点选的矿/厂槽位(已占用槽上的青色虚线圈)。 */
+  resourceSources?: SlotRef[];
   /** 可售贸易商高亮(卖出流:选了板块后能收这块货的贸易商,整位圈而非酒桶)。 */
   sellMerchants?: MerchantId[] | undefined;
 }
@@ -318,6 +320,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
   const highlightedLinks = new Set(highlights?.links ?? []);
   const highlightedSlots = new Set((highlights?.slots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const overbuildSlots = new Set((highlights?.overbuildSlots ?? []).map((s) => `${s.location}:${s.slotIndex}`));
+  const resourceSources = new Set((highlights?.resourceSources ?? []).map((s) => `${s.location}:${s.slotIndex}`));
   const highlightedLocations = new Set(highlights?.locations ?? []);
   const beerSourceLocs = new Set(highlights?.beerSources?.locations ?? []);
   const beerSourceMerchants = new Set(highlights?.beerSources?.merchants ?? []);
@@ -483,6 +486,7 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                 const tile = placed[si] ?? null;
                 const hl = highlightedSlots.has(`${id}:${si}`);
                 const overbuildHl = tile !== null && overbuildSlots.has(`${id}:${si}`);
+                const resourceHl = tile !== null && resourceSources.has(`${id}:${si}`);
                 // 印刷框精确矩形(几何标定);兜底退回中心方块
                 const r = rects[si] ?? { x: c.x - SLOT_SIZE / 2, y: c.y - SLOT_SIZE / 2, w: SLOT_SIZE, h: SLOT_SIZE };
                 const fresh =
@@ -534,6 +538,22 @@ export function BoardSvg({ state, highlights, spotlight, highlightSeat, thinking
                         opacity={0.4}
                         stroke="#f0c964"
                         strokeWidth={10}
+                        filter="url(#hl-glow)"
+                        pointerEvents="none"
+                      />
+                    ) : null}
+                    {/* 煤/铁源候选:已占用槽上的青色虚线圈(与建造实线圈/改建金虚线区分) */}
+                    {resourceHl ? (
+                      <rect
+                        x={r.x + 10}
+                        y={r.y + 10}
+                        width={r.w - 20}
+                        height={r.h - 20}
+                        rx={14}
+                        fill="none"
+                        stroke="#7ec8e3"
+                        strokeWidth={7}
+                        strokeDasharray="16 10"
                         filter="url(#hl-glow)"
                         pointerEvents="none"
                       />
