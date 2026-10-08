@@ -13,7 +13,7 @@ describe('<BoardSvg>', () => {
   it('渲染官方版图底图与 22 个城市 group、39 条连接热区', () => {
     const { container } = render(<BoardSvg state={freshState()} />);
     const img = container.querySelector('image.board-image');
-    expect(img?.getAttribute('href')).toBe('/assets/board.jpg');
+    expect(img?.getAttribute('href')).toBe('/board.jpg');
     expect(container.querySelectorAll('g.board-location')).toHaveLength(
       Object.keys(LOCATIONS).length,
     );
@@ -99,7 +99,7 @@ describe('<BoardSvg>', () => {
     expect(container.querySelector('polyline.board-link-visual')).toBeNull();
     // 运河时代建的 → 驳船 token；高亮连线中点出现 + 提示牌
     const token = container.querySelector('.link-token image');
-    expect(token?.getAttribute('href')).toBe('/assets/link-canal.png');
+    expect(token?.getAttribute('href')).toBe('/link-canal.png');
     expect(container.querySelector('.link-hl-chip')).not.toBeNull();
     const hl = container.querySelector('[data-link-index="3"]') as SVGLineElement;
     expect(hl.classList.contains('highlighted')).toBe(true);
@@ -135,8 +135,8 @@ describe('<BoardSvg>', () => {
     const { container } = render(<BoardSvg state={state} />);
     const tiles = container.querySelectorAll('g[data-location="birmingham"] image.board-tile');
     expect(tiles).toHaveLength(2);
-    expect(tiles[0]?.getAttribute('href')).toBe('/assets/tiles/coal-1-purple.png');
-    expect(tiles[1]?.getAttribute('href')).toBe('/assets/tiles/coal-1-yellow-back.png');
+    expect(tiles[0]?.getAttribute('href')).toBe('/tiles/coal-1-purple.png');
+    expect(tiles[1]?.getAttribute('href')).toBe('/tiles/coal-1-yellow-back.png');
     // 资源 token：3 煤方块 + 1 啤酒桶；数字角标同步
     const badges = container.querySelectorAll(
       'g[data-location="birmingham"] .tile-resources',

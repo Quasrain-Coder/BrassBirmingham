@@ -1,0 +1,1488 @@
+{
+  "version": 1,
+  "roomCode": "YATANA",
+  "playerCount": 4,
+  "seed": 3337793993,
+  "seats": [
+    {
+      "seat": 0,
+      "nickname": "Player1",
+      "isAI": false
+    },
+    {
+      "seat": 1,
+      "nickname": "Player2",
+      "isAI": false
+    },
+    {
+      "seat": 2,
+      "nickname": "AI-1（jsb-v20260910）",
+      "isAI": true
+    },
+    {
+      "seat": 3,
+      "nickname": "AI-2（jsb-v20260911）",
+      "isAI": true
+    }
+  ],
+  "actions": [
+    {
+      "seq": 0,
+      "player": 1,
+      "action": {
+        "type": "develop",
+        "cardId": "loc-kidderminster-0",
+        "removals": [
+          "brewery",
+          "brewery"
+        ]
+      }
+    },
+    {
+      "seq": 1,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "ind-pottery-2",
+        "links": [
+          20
+        ]
+      }
+    },
+    {
+      "seq": 2,
+      "player": 0,
+      "action": {
+        "type": "loan",
+        "cardId": "loc-belper-1"
+      }
+    },
+    {
+      "seq": 3,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "ind-iron-0",
+        "industry": "iron",
+        "location": "coalbrookdale"
+      }
+    },
+    {
+      "seq": 4,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "ind-coal-1",
+        "industry": "coal",
+        "location": "coalbrookdale"
+      }
+    },
+    {
+      "seq": 5,
+      "player": 0,
+      "action": {
+        "type": "develop",
+        "cardId": "loc-redditch-0",
+        "removals": [
+          "brewery",
+          "brewery"
+        ]
+      }
+    },
+    {
+      "seq": 6,
+      "player": 2,
+      "action": {
+        "type": "develop",
+        "cardId": "loc-coalbrookdale-0",
+        "removals": [
+          "brewery",
+          "brewery"
+        ]
+      }
+    },
+    {
+      "seq": 7,
+      "player": 2,
+      "action": {
+        "type": "build",
+        "cardId": "loc-coalbrookdale-1",
+        "industry": "iron",
+        "location": "coalbrookdale"
+      }
+    },
+    {
+      "seq": 8,
+      "player": 1,
+      "action": {
+        "type": "develop",
+        "cardId": "loc-tamworth-0",
+        "removals": [
+          "coal",
+          "iron"
+        ]
+      }
+    },
+    {
+      "seq": 9,
+      "player": 1,
+      "action": {
+        "type": "loan",
+        "cardId": "loc-stafford-0"
+      }
+    },
+    {
+      "seq": 10,
+      "player": 3,
+      "action": {
+        "type": "scout",
+        "cardIds": [
+          "loc-worcester-1",
+          "loc-stoke-on-trent-1",
+          "loc-cannock-1"
+        ]
+      }
+    },
+    {
+      "seq": 11,
+      "player": 3,
+      "action": {
+        "type": "develop",
+        "cardId": "ind-cotton-manufacturer-5",
+        "removals": [
+          "brewery",
+          "brewery"
+        ]
+      }
+    },
+    {
+      "seq": 12,
+      "player": 1,
+      "action": {
+        "type": "network",
+        "cardId": "ind-cotton-manufacturer-3",
+        "links": [
+          5
+        ]
+      }
+    },
+    {
+      "seq": 13,
+      "player": 1,
+      "action": {
+        "type": "build",
+        "cardId": "loc-birmingham-0",
+        "industry": "iron",
+        "location": "birmingham"
+      }
+    },
+    {
+      "seq": 14,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "loc-birmingham-1",
+        "industry": "cotton",
+        "location": "birmingham"
+      }
+    },
+    {
+      "seq": 15,
+      "player": 3,
+      "action": {
+        "type": "sell",
+        "cardId": "ind-pottery-0",
+        "sales": [
+          {
+            "location": "birmingham",
+            "slotIndex": 0,
+            "merchant": "oxford",
+            "useMerchantBeer": true
+          }
+        ]
+      }
+    },
+    {
+      "seq": 16,
+      "player": 0,
+      "action": {
+        "type": "develop",
+        "cardId": "ind-coal-0",
+        "removals": [
+          "manufacturer",
+          "iron"
+        ]
+      }
+    },
+    {
+      "seq": 17,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "loc-burton-on-trent-0",
+        "industry": "brewery",
+        "location": "burton-on-trent"
+      }
+    },
+    {
+      "seq": 18,
+      "player": 2,
+      "action": {
+        "type": "build",
+        "cardId": "loc-birmingham-2",
+        "industry": "manufacturer",
+        "location": "birmingham"
+      }
+    },
+    {
+      "seq": 19,
+      "player": 2,
+      "action": {
+        "type": "loan",
+        "cardId": "ind-cotton-manufacturer-4"
+      }
+    },
+    {
+      "seq": 20,
+      "player": 2,
+      "action": {
+        "type": "build",
+        "cardId": "loc-nuneaton-0",
+        "industry": "brewery",
+        "location": "nuneaton"
+      }
+    },
+    {
+      "seq": 21,
+      "player": 2,
+      "action": {
+        "type": "sell",
+        "cardId": "ind-cotton-manufacturer-7",
+        "sales": [
+          {
+            "location": "birmingham",
+            "slotIndex": 1,
+            "merchant": "oxford",
+            "useMerchantBeer": false
+          }
+        ]
+      }
+    },
+    {
+      "seq": 22,
+      "player": 1,
+      "action": {
+        "type": "network",
+        "cardId": "loc-coventry-1",
+        "links": [
+          2
+        ]
+      }
+    },
+    {
+      "seq": 23,
+      "player": 1,
+      "action": {
+        "type": "build",
+        "cardId": "loc-coventry-0",
+        "industry": "iron",
+        "location": "coventry"
+      }
+    },
+    {
+      "seq": 24,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "loc-walsall-0",
+        "industry": "brewery",
+        "location": "walsall"
+      }
+    },
+    {
+      "seq": 25,
+      "player": 0,
+      "action": {
+        "type": "network",
+        "cardId": "ind-brewery-3",
+        "links": [
+          8
+        ]
+      }
+    },
+    {
+      "seq": 26,
+      "player": 3,
+      "action": {
+        "type": "develop",
+        "cardId": "ind-pottery-1",
+        "removals": [
+          "manufacturer",
+          "coal"
+        ]
+      }
+    },
+    {
+      "seq": 27,
+      "player": 3,
+      "action": {
+        "type": "network",
+        "cardId": "ind-iron-2",
+        "links": [
+          21
+        ]
+      }
+    },
+    {
+      "seq": 28,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "ind-coal-2",
+        "industry": "coal",
+        "location": "wolverhampton"
+      }
+    },
+    {
+      "seq": 29,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "wild-location-0",
+        "industry": "iron",
+        "location": "walsall"
+      }
+    },
+    {
+      "seq": 30,
+      "player": 2,
+      "action": {
+        "type": "build",
+        "cardId": "ind-cotton-manufacturer-6",
+        "industry": "manufacturer",
+        "location": "birmingham"
+      }
+    },
+    {
+      "seq": 31,
+      "player": 2,
+      "action": {
+        "type": "build",
+        "cardId": "loc-stone-1",
+        "industry": "brewery",
+        "location": "stone"
+      }
+    },
+    {
+      "seq": 32,
+      "player": 0,
+      "action": {
+        "type": "network",
+        "cardId": "loc-leek-0",
+        "links": [
+          9
+        ]
+      }
+    },
+    {
+      "seq": 33,
+      "player": 0,
+      "action": {
+        "type": "develop",
+        "cardId": "loc-coalbrookdale-2",
+        "removals": [
+          "cotton",
+          "cotton"
+        ]
+      }
+    },
+    {
+      "seq": 34,
+      "player": 1,
+      "action": {
+        "type": "scout",
+        "cardIds": [
+          "loc-stoke-on-trent-2",
+          "loc-stone-0",
+          "loc-coventry-2"
+        ]
+      }
+    },
+    {
+      "seq": 35,
+      "player": 1,
+      "action": {
+        "type": "network",
+        "cardId": "ind-brewery-0",
+        "links": [
+          32
+        ]
+      }
+    },
+    {
+      "seq": 36,
+      "player": 1,
+      "action": {
+        "type": "build",
+        "cardId": "ind-cotton-manufacturer-1",
+        "industry": "manufacturer",
+        "location": "redditch"
+      }
+    },
+    {
+      "seq": 37,
+      "player": 1,
+      "action": {
+        "type": "build",
+        "cardId": "wild-location-0",
+        "industry": "brewery",
+        "location": "derby"
+      }
+    },
+    {
+      "seq": 38,
+      "player": 0,
+      "action": {
+        "type": "network",
+        "cardId": "ind-brewery-2",
+        "links": [
+          3
+        ]
+      }
+    },
+    {
+      "seq": 39,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "ind-iron-3",
+        "industry": "iron",
+        "location": "dudley"
+      }
+    },
+    {
+      "seq": 40,
+      "player": 3,
+      "action": {
+        "type": "network",
+        "cardId": "ind-brewery-1",
+        "links": [
+          7
+        ]
+      }
+    },
+    {
+      "seq": 41,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "wild-industry-0",
+        "industry": "coal",
+        "location": "tamworth"
+      }
+    },
+    {
+      "seq": 42,
+      "player": 2,
+      "action": {
+        "type": "loan",
+        "cardId": "loc-derby-2"
+      }
+    },
+    {
+      "seq": 43,
+      "player": 2,
+      "action": {
+        "type": "sell",
+        "cardId": "loc-kidderminster-1",
+        "sales": [
+          {
+            "location": "birmingham",
+            "slotIndex": 1,
+            "merchant": "oxford",
+            "useMerchantBeer": false
+          }
+        ]
+      }
+    },
+    {
+      "seq": 44,
+      "player": 2,
+      "action": {
+        "type": "scout",
+        "cardIds": [
+          "loc-leek-1",
+          "loc-burton-on-trent-1",
+          "loc-belper-0"
+        ]
+      }
+    },
+    {
+      "seq": 45,
+      "player": 2,
+      "action": {
+        "type": "build",
+        "cardId": "wild-location-0",
+        "industry": "brewery",
+        "location": "uttoxeter"
+      }
+    },
+    {
+      "seq": 46,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "loc-derby-0",
+        "industry": "manufacturer",
+        "location": "derby"
+      }
+    },
+    {
+      "seq": 47,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "loc-stafford-1",
+        "industry": "brewery",
+        "location": "stafford"
+      }
+    },
+    {
+      "seq": 48,
+      "player": 0,
+      "action": {
+        "type": "loan",
+        "cardId": "loc-dudley-0"
+      }
+    },
+    {
+      "seq": 49,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "ind-cotton-manufacturer-0",
+        "industry": "manufacturer",
+        "location": "birmingham"
+      }
+    },
+    {
+      "seq": 50,
+      "player": 1,
+      "action": {
+        "type": "loan",
+        "cardId": "loc-dudley-1"
+      }
+    },
+    {
+      "seq": 51,
+      "player": 1,
+      "action": {
+        "type": "build",
+        "cardId": "loc-uttoxeter-1",
+        "industry": "brewery",
+        "location": "uttoxeter"
+      }
+    },
+    {
+      "seq": 52,
+      "player": 2,
+      "action": {
+        "type": "develop",
+        "cardId": "loc-stoke-on-trent-0",
+        "removals": [
+          "manufacturer",
+          "coal"
+        ]
+      }
+    },
+    {
+      "seq": 53,
+      "player": 2,
+      "action": {
+        "type": "build",
+        "cardId": "wild-industry-0",
+        "industry": "iron",
+        "location": "coalbrookdale"
+      }
+    },
+    {
+      "seq": 54,
+      "player": 1,
+      "action": {
+        "type": "loan",
+        "cardId": "ind-iron-1"
+      }
+    },
+    {
+      "seq": 55,
+      "player": 1,
+      "action": {
+        "type": "sell",
+        "cardId": "wild-industry-1",
+        "sales": [
+          {
+            "location": "redditch",
+            "slotIndex": 0,
+            "merchant": "oxford",
+            "useMerchantBeer": false,
+            "beerSources": [
+              {
+                "kind": "brewery",
+                "location": "derby",
+                "slotIndex": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "seq": 56,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "loc-worcester-0",
+        "industry": "cotton",
+        "location": "worcester"
+      }
+    },
+    {
+      "seq": 57,
+      "player": 0,
+      "action": {
+        "type": "sell",
+        "cardId": "ind-brewery-4",
+        "sales": [
+          {
+            "location": "worcester",
+            "slotIndex": 0,
+            "merchant": "oxford",
+            "useMerchantBeer": false,
+            "beerSources": [
+              {
+                "kind": "brewery",
+                "location": "walsall",
+                "slotIndex": 1
+              }
+            ]
+          },
+          {
+            "location": "birmingham",
+            "slotIndex": 3,
+            "merchant": "oxford",
+            "useMerchantBeer": false,
+            "beerSources": [
+              {
+                "kind": "brewery",
+                "location": "burton-on-trent",
+                "slotIndex": 1
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "seq": 58,
+      "player": 3,
+      "action": {
+        "type": "network",
+        "cardId": "ind-cotton-manufacturer-2",
+        "links": [
+          23
+        ]
+      }
+    },
+    {
+      "seq": 59,
+      "player": 3,
+      "action": {
+        "type": "sell",
+        "cardId": "loc-wolverhampton-0",
+        "sales": [
+          {
+            "location": "derby",
+            "slotIndex": 1,
+            "merchant": "nottingham",
+            "useMerchantBeer": false
+          }
+        ]
+      }
+    },
+    {
+      "seq": 60,
+      "player": 1,
+      "action": {
+        "type": "network",
+        "cardId": "loc-wolverhampton-0",
+        "links": [
+          23,
+          24
+        ],
+        "beerSource": {
+          "location": "uttoxeter",
+          "slotIndex": 1
+        }
+      }
+    },
+    {
+      "seq": 61,
+      "player": 1,
+      "action": {
+        "type": "network",
+        "cardId": "ind-cotton-manufacturer-3",
+        "links": [
+          36,
+          11
+        ]
+      }
+    },
+    {
+      "seq": 62,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "loc-burton-on-trent-1",
+        "industry": "coal",
+        "location": "burton-on-trent"
+      }
+    },
+    {
+      "seq": 63,
+      "player": 3,
+      "action": {
+        "type": "network",
+        "cardId": "ind-brewery-0",
+        "links": [
+          12
+        ]
+      }
+    },
+    {
+      "seq": 64,
+      "player": 0,
+      "action": {
+        "type": "network",
+        "cardId": "loc-stone-0",
+        "links": [
+          10
+        ]
+      }
+    },
+    {
+      "seq": 65,
+      "player": 0,
+      "action": {
+        "type": "network",
+        "cardId": "loc-leek-1",
+        "links": [
+          16
+        ]
+      }
+    },
+    {
+      "seq": 66,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "ind-pottery-1",
+        "links": [
+          5
+        ]
+      }
+    },
+    {
+      "seq": 67,
+      "player": 2,
+      "action": {
+        "type": "develop",
+        "cardId": "ind-cotton-manufacturer-7",
+        "removals": [
+          "manufacturer",
+          "manufacturer"
+        ]
+      }
+    },
+    {
+      "seq": 68,
+      "player": 2,
+      "action": {
+        "type": "build",
+        "cardId": "loc-derby-2",
+        "industry": "iron",
+        "location": "derby"
+      }
+    },
+    {
+      "seq": 69,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "ind-cotton-manufacturer-6",
+        "links": [
+          8
+        ]
+      }
+    },
+    {
+      "seq": 70,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "loc-stone-1",
+        "industry": "coal",
+        "location": "stone"
+      }
+    },
+    {
+      "seq": 71,
+      "player": 0,
+      "action": {
+        "type": "network",
+        "cardId": "loc-dudley-1",
+        "links": [
+          4
+        ]
+      }
+    },
+    {
+      "seq": 72,
+      "player": 3,
+      "action": {
+        "type": "network",
+        "cardId": "ind-iron-1",
+        "links": [
+          0
+        ]
+      }
+    },
+    {
+      "seq": 73,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "loc-belper-0",
+        "industry": "coal",
+        "location": "belper"
+      }
+    },
+    {
+      "seq": 74,
+      "player": 1,
+      "action": {
+        "type": "build",
+        "cardId": "ind-cotton-manufacturer-1",
+        "industry": "manufacturer",
+        "location": "birmingham"
+      }
+    },
+    {
+      "seq": 75,
+      "player": 1,
+      "action": {
+        "type": "loan",
+        "cardId": "loc-coalbrookdale-1"
+      }
+    },
+    {
+      "seq": 76,
+      "player": 1,
+      "action": {
+        "type": "build",
+        "cardId": "loc-belper-1",
+        "industry": "manufacturer",
+        "location": "belper"
+      }
+    },
+    {
+      "seq": 77,
+      "player": 1,
+      "action": {
+        "type": "sell",
+        "cardId": "loc-cannock-1",
+        "sales": [
+          {
+            "location": "belper",
+            "slotIndex": 0,
+            "merchant": "nottingham",
+            "useMerchantBeer": true,
+            "beerSources": [
+              {
+                "kind": "merchant"
+              }
+            ]
+          },
+          {
+            "location": "birmingham",
+            "slotIndex": 0,
+            "merchant": "oxford",
+            "useMerchantBeer": true,
+            "beerSources": [
+              {
+                "kind": "merchant"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "seq": 78,
+      "player": 0,
+      "action": {
+        "type": "network",
+        "cardId": "loc-uttoxeter-1",
+        "links": [
+          6
+        ]
+      }
+    },
+    {
+      "seq": 79,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "ind-iron-3",
+        "industry": "iron",
+        "location": "redditch"
+      }
+    },
+    {
+      "seq": 80,
+      "player": 3,
+      "action": {
+        "type": "network",
+        "cardId": "ind-iron-2",
+        "links": [
+          37
+        ]
+      }
+    },
+    {
+      "seq": 81,
+      "player": 3,
+      "action": {
+        "type": "network",
+        "cardId": "ind-cotton-manufacturer-4",
+        "links": [
+          13
+        ]
+      }
+    },
+    {
+      "seq": 82,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "loc-uttoxeter-0",
+        "links": [
+          3
+        ]
+      }
+    },
+    {
+      "seq": 83,
+      "player": 2,
+      "action": {
+        "type": "build",
+        "cardId": "loc-dudley-0",
+        "industry": "coal",
+        "location": "dudley"
+      }
+    },
+    {
+      "seq": 84,
+      "player": 1,
+      "action": {
+        "type": "build",
+        "cardId": "loc-redditch-0",
+        "industry": "coal",
+        "location": "redditch"
+      }
+    },
+    {
+      "seq": 85,
+      "player": 1,
+      "action": {
+        "type": "network",
+        "cardId": "loc-coventry-0",
+        "links": [
+          2
+        ]
+      }
+    },
+    {
+      "seq": 86,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "loc-burton-on-trent-0",
+        "links": [
+          7
+        ]
+      }
+    },
+    {
+      "seq": 87,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "ind-cotton-manufacturer-2",
+        "links": [
+          33
+        ]
+      }
+    },
+    {
+      "seq": 88,
+      "player": 3,
+      "action": {
+        "type": "network",
+        "cardId": "ind-brewery-1",
+        "links": [
+          31
+        ]
+      }
+    },
+    {
+      "seq": 89,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "loc-nuneaton-0",
+        "industry": "coal",
+        "location": "nuneaton"
+      }
+    },
+    {
+      "seq": 90,
+      "player": 0,
+      "action": {
+        "type": "develop",
+        "cardId": "loc-derby-1",
+        "removals": [
+          "cotton",
+          "cotton"
+        ]
+      }
+    },
+    {
+      "seq": 91,
+      "player": 0,
+      "action": {
+        "type": "network",
+        "cardId": "ind-coal-1",
+        "links": [
+          34
+        ]
+      }
+    },
+    {
+      "seq": 92,
+      "player": 0,
+      "action": {
+        "type": "scout",
+        "cardIds": [
+          "loc-kidderminster-0",
+          "loc-birmingham-2",
+          "loc-coalbrookdale-0"
+        ]
+      }
+    },
+    {
+      "seq": 93,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "loc-stoke-on-trent-1",
+        "industry": "iron",
+        "location": "stoke-on-trent"
+      }
+    },
+    {
+      "seq": 94,
+      "player": 1,
+      "action": {
+        "type": "network",
+        "cardId": "loc-walsall-0",
+        "links": [
+          22
+        ]
+      }
+    },
+    {
+      "seq": 95,
+      "player": 1,
+      "action": {
+        "type": "develop",
+        "cardId": "ind-coal-2",
+        "removals": [
+          "manufacturer",
+          "manufacturer"
+        ]
+      }
+    },
+    {
+      "seq": 96,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "loc-birmingham-0",
+        "links": [
+          38
+        ]
+      }
+    },
+    {
+      "seq": 97,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "ind-brewery-4",
+        "links": [
+          32
+        ]
+      }
+    },
+    {
+      "seq": 98,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "loc-cannock-0",
+        "industry": "manufacturer",
+        "location": "cannock"
+      }
+    },
+    {
+      "seq": 99,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "loc-coventry-1",
+        "industry": "coal",
+        "location": "coventry"
+      }
+    },
+    {
+      "seq": 100,
+      "player": 1,
+      "action": {
+        "type": "build",
+        "cardId": "loc-coventry-2",
+        "industry": "pottery",
+        "location": "coventry"
+      }
+    },
+    {
+      "seq": 101,
+      "player": 1,
+      "action": {
+        "type": "build",
+        "cardId": "loc-stoke-on-trent-0",
+        "industry": "manufacturer",
+        "location": "stoke-on-trent"
+      }
+    },
+    {
+      "seq": 102,
+      "player": 0,
+      "action": {
+        "type": "loan",
+        "cardId": "ind-coal-0"
+      }
+    },
+    {
+      "seq": 103,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "loc-stafford-0",
+        "industry": "pottery",
+        "location": "stafford"
+      }
+    },
+    {
+      "seq": 104,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "loc-worcester-1",
+        "links": [
+          9
+        ]
+      }
+    },
+    {
+      "seq": 105,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "loc-leek-0",
+        "links": [
+          27
+        ]
+      }
+    },
+    {
+      "seq": 106,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "ind-pottery-2",
+        "industry": "pottery",
+        "location": "belper"
+      }
+    },
+    {
+      "seq": 107,
+      "player": 3,
+      "action": {
+        "type": "sell",
+        "cardId": "ind-brewery-2",
+        "sales": [
+          {
+            "location": "belper",
+            "slotIndex": 2,
+            "merchant": "gloucester",
+            "useMerchantBeer": true
+          }
+        ]
+      }
+    },
+    {
+      "seq": 108,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "loc-kidderminster-1",
+        "links": [
+          20
+        ]
+      }
+    },
+    {
+      "seq": 109,
+      "player": 2,
+      "action": {
+        "type": "build",
+        "cardId": "loc-coalbrookdale-2",
+        "industry": "coal",
+        "location": "coalbrookdale"
+      }
+    },
+    {
+      "seq": 110,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "loc-stoke-on-trent-2",
+        "industry": "cotton",
+        "location": "stoke-on-trent"
+      }
+    },
+    {
+      "seq": 111,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "loc-tamworth-0",
+        "industry": "cotton",
+        "location": "tamworth"
+      }
+    },
+    {
+      "seq": 112,
+      "player": 3,
+      "action": {
+        "type": "scout",
+        "cardIds": [
+          "loc-worcester-0",
+          "ind-cotton-manufacturer-0",
+          "ind-cotton-manufacturer-5"
+        ]
+      }
+    },
+    {
+      "seq": 113,
+      "player": 3,
+      "action": {
+        "type": "build",
+        "cardId": "wild-location-1",
+        "industry": "iron",
+        "location": "coalbrookdale"
+      }
+    },
+    {
+      "seq": 114,
+      "player": 1,
+      "action": {
+        "type": "network",
+        "cardId": "ind-pottery-0",
+        "links": [
+          35
+        ]
+      }
+    },
+    {
+      "seq": 115,
+      "player": 1,
+      "action": {
+        "type": "sell",
+        "cardId": "loc-stafford-1",
+        "sales": [
+          {
+            "location": "coventry",
+            "slotIndex": 0,
+            "merchant": "warrington",
+            "useMerchantBeer": true,
+            "beerSources": [
+              {
+                "kind": "merchant"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "seq": 116,
+      "player": 1,
+      "action": {
+        "type": "build",
+        "cardId": "loc-derby-0",
+        "industry": "brewery",
+        "location": "derby"
+      }
+    },
+    {
+      "seq": 117,
+      "player": 1,
+      "action": {
+        "type": "sell",
+        "cardId": "ind-iron-0",
+        "sales": [
+          {
+            "location": "stoke-on-trent",
+            "slotIndex": 2,
+            "merchant": "oxford",
+            "useMerchantBeer": false,
+            "beerSources": [
+              {
+                "kind": "brewery",
+                "location": "derby",
+                "slotIndex": 0
+              },
+              {
+                "kind": "brewery",
+                "location": "derby",
+                "slotIndex": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "seq": 118,
+      "player": 3,
+      "action": {
+        "type": "network",
+        "cardId": "loc-birmingham-1",
+        "links": [
+          17
+        ]
+      }
+    },
+    {
+      "seq": 119,
+      "player": 3,
+      "action": {
+        "type": "network",
+        "cardId": "wild-industry-1",
+        "links": [
+          21
+        ]
+      }
+    },
+    {
+      "seq": 120,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "loc-wolverhampton-1",
+        "links": [
+          26
+        ]
+      }
+    },
+    {
+      "seq": 121,
+      "player": 2,
+      "action": {
+        "type": "network",
+        "cardId": "ind-brewery-3",
+        "links": [
+          19
+        ]
+      }
+    },
+    {
+      "seq": 122,
+      "player": 0,
+      "action": {
+        "type": "build",
+        "cardId": "wild-industry-0",
+        "industry": "brewery",
+        "location": "farm-north"
+      }
+    },
+    {
+      "seq": 123,
+      "player": 0,
+      "action": {
+        "type": "sell",
+        "cardId": "wild-location-0",
+        "sales": [
+          {
+            "location": "stafford",
+            "slotIndex": 1,
+            "merchant": "warrington",
+            "useMerchantBeer": false,
+            "beerSources": [
+              {
+                "kind": "brewery",
+                "location": "farm-north",
+                "slotIndex": 0
+              }
+            ]
+          },
+          {
+            "location": "stoke-on-trent",
+            "slotIndex": 0,
+            "merchant": "nottingham",
+            "useMerchantBeer": true,
+            "beerSources": [
+              {
+                "kind": "merchant"
+              }
+            ]
+          },
+          {
+            "location": "tamworth",
+            "slotIndex": 1,
+            "merchant": "oxford",
+            "useMerchantBeer": false,
+            "beerSources": [
+              {
+                "kind": "brewery",
+                "location": "farm-north",
+                "slotIndex": 0
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

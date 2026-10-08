@@ -18,7 +18,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
-import { MERCHANTS, buyCoalCost, buyIronCost, firstLocationEndpoint, merchantHasUsableBarrel, reachableFrom } from '@brass/engine';
+import { MERCHANTS, buyCoalCost, buyIronCost, merchantHasUsableBarrel, reachableFrom } from '@brass/engine';
 import type { Action, BeerSourceRef, Card, IndustryType, LocationId, MerchantId, PlayerIndex, ResourceSourceRef } from '@brass/engine';
 import type { FilteredState } from '@brass/protocol';
 import type { BoardHighlights, SlotRef } from '../board/BoardSvg';
@@ -44,7 +44,9 @@ import {
   merchantBarrelOptions,
   merchantBarrelRemaining,
   merchantsForTile,
+  networkBeerSources,
   networkCoalChoices,
+  nextSourceCount,
   overbuildSlotTargets,
   placeableBuildsAt,
   resolveBuildSlot,
@@ -328,7 +330,7 @@ export function useActionDraft({
       };
     }
     const targets = targetsFor(selectedCard, legalActions);
-    let buildSlots = buildSlotTargets(targets, state.board.slots);
+    let buildSlots = buildSlotTargets(state, seat, targets);
     // 产业预选:高亮只留能落该产业的槽位
     if (buildIndustry !== null) {
       const ind = buildIndustry;
@@ -356,26 +358,14 @@ export function useActionDraft({
 
   const networkMatch = matchNetwork(candidates, pickedLinks);
   // 双轨酒源:选完两条路后,所有可消耗的酒 token(自家任意未翻面有余量酒厂;
-  // 对手酒厂须连通第二条铁路放置后的位置;不可用商人桶 §9.4)
-  const networkBeerOptions = useMemo(() => {
-    const exact = networkMatch.exact;
-    if (state.era !== 'rail' || exact === null || exact.links.length !== 2) return [];
-    const anchor = firstLocationEndpoint(exact.links[1]!);
-    const reach = reachableFrom(state as unknown as import('@brass/engine').GameState, [anchor]);
-    const out: { location: LocationId; slotIndex: number; own: boolean; barrels: number }[] = [];
-    for (const [loc, slots] of Object.entries(state.board.slots)) {
-      for (let i = 0; i < slots.length; i++) {
-        const t = slots[i];
-        if (!t || t.flipped || t.tile.industry !== 'brewery' || t.resources <= 0) continue;
-        if (t.player === seat) {
-          out.push({ location: loc as LocationId, slotIndex: i, own: true, barrels: t.resources });
-        } else if (reach.has(loc as LocationId)) {
-          out.push({ location: loc as LocationId, slotIndex: i, own: false, barrels: t.resources });
-        }
-      }
-    }
-    return out;
-  }, [state, seat, networkMatch.exact]);
+  // 对手酒厂须连通第二条铁路放置后的位置——可达性计入两条新路,§9.4)
+  const networkBeerOptions = useMemo(
+    () =>
+      networkMatch.exact === null
+        ? []
+        : networkBeerSources(state, seat, networkMatch.exact.links),
+    [state, seat, networkMatch.exact],
+  );
   const pickNetworkBeer = (ref: { location: LocationId; slotIndex: number }): void => {
     clearChosen();
     setNetworkBeer((prev) =>
@@ -748,6 +738,39 @@ export function useActionDraft({
       pickNetworkBeer({ location, slotIndex });
       return;
     }
+    // 煤/铁源图上点选(等价行动栏"点按取量"按钮):来源选择器激活时,点对应矿/厂
+    // 即按按钮同规则取量(到顶再点取消;需求已满点新源=单选替换)。
+    // network 逐段煤:赋给首个"该源为合法候选"的路段(该段内同样单选替换)。
+    if (placedT && !placedT.flipped && placedT.resources > 0) {
+      const ref = { location, slotIndex };
+      const isOption = (c: ResourceSourceChoice | null | undefined): boolean =>
+        c !== null && c !== undefined && c.options.some((o) => o.location === location && o.slotIndex === slotIndex);
+      if (placedT.tile.industry === 'coal') {
+        const li = networkCoalChoicesArr.findIndex((c) => isOption(c));
+        if (li >= 0) {
+          const cur = (networkCoal[li] ?? []).find((r) => r.location === location && r.slotIndex === slotIndex)?.count ?? 0;
+          setNetworkCoalCount(li, ref, cur > 0 ? 0 : 1);
+          return;
+        }
+        if (isOption(coalChoice) && buildCoal !== null) {
+          const o = coalChoice!.options.find((x) => x.location === location && x.slotIndex === slotIndex)!;
+          setBuildCoalCount(ref, nextSourceCount(buildCoal, buildCoalNeed, o.available, ref));
+          return;
+        }
+      }
+      if (placedT.tile.industry === 'iron') {
+        if (isOption(ironChoice) && buildIron !== null) {
+          const o = ironChoice!.options.find((x) => x.location === location && x.slotIndex === slotIndex)!;
+          setBuildIronCount(ref, nextSourceCount(buildIron, buildIronNeed, o.available, ref));
+          return;
+        }
+        if (isOption(developIronChoice) && developIron !== null) {
+          const o = developIronChoice!.options.find((x) => x.location === location && x.slotIndex === slotIndex)!;
+          setDevelopIronCountFn(ref, nextSourceCount(developIron, developIronNeed, o.available, ref));
+          return;
+        }
+      }
+    }
     // 卖出流图上点选(顺序约束同按钮行):自己可卖板块 = 选本组建筑;
     // 酒厂 = 加一桶啤酒(须已选建筑+贸易商,先点酒厂无效)。
     // 产业预选(按钮流走建造)或拖拽(forceBuild)时,占用槽一律按建造解析(含己方改建)
@@ -910,22 +933,44 @@ export function useActionDraft({
     });
   }, [resolved, state.board.slots, seat, sellGroups, sellTile, sellMerchant, sellBeer]);
 
+  // 煤/铁源候选高亮:来源选择器激活(network 逐段煤/建造煤铁/研发铁)时,
+  // 把可点选的矿/厂槽位圈出来,提示玩家除按钮外也可直接点图。
+  const resourceSourceSlots = useMemo(() => {
+    const seen = new Set<string>();
+    const out: SlotRef[] = [];
+    const push = (o: ResourceSourceOption): void => {
+      const key = `${o.location}:${o.slotIndex}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ location: o.location, slotIndex: o.slotIndex });
+    };
+    for (const c of networkCoalChoicesArr) c?.options.forEach(push);
+    coalChoice?.options.forEach(push);
+    ironChoice?.options.forEach(push);
+    developIronChoice?.options.forEach(push);
+    return out;
+  }, [networkCoalChoicesArr, coalChoice, ironChoice, developIronChoice]);
+
   // 铺路中的啤酒高亮:双轨不可用商人桶——选完两条路后只圈可用酒源
   // (自家任意 + 连通第二条的对手酒厂);铺路未满两条时只留自家酒厂提示
   const highlightsFinal = useMemo(() => {
-    if (pickedLinks.length === 0) return highlights;
-    const base = highlights.beerSources ?? { locations: [], merchants: [] };
-    if (networkBeerOptions.length > 0) {
-      return {
-        ...highlights,
-        beerSources: {
-          locations: [...new Set(networkBeerOptions.map((o) => o.location))] as LocationId[],
-          merchants: [] as MerchantId[],
-        },
-      };
+    let h = highlights;
+    if (pickedLinks.length > 0) {
+      const base = h.beerSources ?? { locations: [], merchants: [] };
+      h =
+        networkBeerOptions.length > 0
+          ? {
+              ...h,
+              beerSources: {
+                locations: [...new Set(networkBeerOptions.map((o) => o.location))] as LocationId[],
+                merchants: [] as MerchantId[],
+              },
+            }
+          : { ...h, beerSources: { locations: base.locations ?? [], merchants: [] as MerchantId[] } };
     }
-    return { ...highlights, beerSources: { locations: base.locations ?? [], merchants: [] as MerchantId[] } };
-  }, [highlights, pickedLinks.length, networkBeerOptions]);
+    if (resourceSourceSlots.length > 0) h = { ...h, resourceSources: resourceSourceSlots };
+    return h;
+  }, [highlights, pickedLinks.length, networkBeerOptions, resourceSourceSlots]);
 
   return {
     candidates,
@@ -1609,23 +1654,14 @@ export function ResourceSourceDetails({
         {options.map((o) => {
           const cur =
             picked.find((r) => r.location === o.location && r.slotIndex === o.slotIndex)?.count ?? 0;
-          const maxForThis = Math.min(need, o.available);
-          const total = picked.reduce((s, r) => s + r.count, 0);
           return (
             <button
               key={`${o.location}:${o.slotIndex}`}
               type="button"
               data-testid={`${testid}-${o.location}-${o.slotIndex}`}
               className={cur > 0 ? 'selected' : undefined}
-              title={`${o.owner === seat ? '自家' : '对手'}${kind === 'coal' ? '煤矿' : '铁厂'}·点按取量(到顶再点取消)`}
-              onClick={() => {
-                if (cur === 0 && total >= need) {
-                  // 需求已满且点新源 → 单选替换(setSourceCount 替换分支)
-                  onSet(o, 1);
-                  return;
-                }
-                onSet(o, cur >= maxForThis ? 0 : cur + 1);
-              }}
+              title={`${o.owner === seat ? '自家' : '对手'}${kind === 'coal' ? '煤矿' : '铁厂'}·点按取量(到顶再点取消);也可直接点地图上的矿/厂`}
+              onClick={() => onSet(o, nextSourceCount(picked, need, o.available, o))}
             >
               {o.owner === seat ? '自家' : '对手'}·{locationName(o.location)}
               {cur > 0 ? ` ×${cur}` : ''}

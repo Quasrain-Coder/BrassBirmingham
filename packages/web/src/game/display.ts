@@ -5,7 +5,7 @@
  * web 一律经本模块取中文名。消除原先 Panels/interactions/ActionBar 三处重复映射。
  */
 import type { Action, Card, IndustryType, LocationId, MerchantId } from '@brass/engine';
-import { LOCATIONS } from '@brass/engine';
+import { LINKS, LOCATIONS } from '@brass/engine';
 
 /** 城市/地点中文名（含 2 个农场酒厂）。 */
 export const LOCATION_ZH: Record<string, string> = {
@@ -69,6 +69,13 @@ export function nodeName(id: string): string {
   return LOCATION_ZH[id] ?? MERCHANT_ZH[id as MerchantId] ?? id;
 }
 
+/** 连接边一句话：两端点名（含商人位中文名）。 */
+function linkName(linkIndex: number): string {
+  const l = LINKS[linkIndex];
+  if (!l) return `#${linkIndex}`;
+  return `${nodeName(l.a)}—${nodeName(l.b)}`;
+}
+
 /**
  * cardId → Card 还原（id 即牌面 key + 副本序号:`loc-x-1`/`ind-x-y-2`/`wild-location-0`）。
  * 行动记录里只有 cardId,画卡面/写牌名都要先还原。
@@ -120,7 +127,8 @@ export function describeAction(action: Action): string {
     case 'build':
       return `建造 ${locationName(action.location)}${industryName(action.industry)}`;
     case 'network':
-      return `建设连接 ×${action.links.length}`;
+      // 打出记录要能回看"连的哪到哪"：逐条边写两端点名（含商人位）
+      return `建设连接 ${action.links.map(linkName).join(' + ')}`;
     case 'develop':
       return `研发：移除 ${action.removals.map(industryName).join('、')}`;
     case 'sell':
