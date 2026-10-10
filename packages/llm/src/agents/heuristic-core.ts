@@ -301,6 +301,12 @@ const BASE_CFG = {
      * 本系数计入未来价值——高价值未翻板块（棉/制造/陶）大概率会翻,
      * 其图标在时代末会兑现,高手局该系数应 >0.5。 */
     unflippedIconCoefficient: 0,
+    /** 低值路压制（lowValuePenalty>0 开启，1010）：铁路时代 Link 期望分
+     * （current + 折扣后 future，未乘 networkW）低于 lowValueFloor 时，
+     * 按差值×系数罚分——人类修路条条 3-7vp，AI 却修 0-2vp 垃圾路
+     * （真人回放：gloucester-worcester 0vp / redditch-oxford 1vp）。 */
+    lowValueFloor: 0,
+    lowValuePenalty: 0,
   },
   develop: {
     railEraTile: 0.35,
@@ -513,6 +519,18 @@ const BASE_CFG = {
     rolloutPlies: 24,
     /** 推演 ε-随机概率（防同一确定化下轨迹全同）。 */
     policyEpsilon: 0.1,
+    /** 推演垃圾路过滤（>0 开启，1010）：铁路时代推演候选中，全部边期望分
+     * （current+0.5×future）低于本值的 network 行动从推演策略池剔除——
+     * 推演策略与根评估同病灶（修 0-2vp 垃圾路）会污染叶估值；
+     * 真人局垃圾路均分 3-7vp、AI 自对局却人均 2+ 条 <3vp 路。 */
+    rolloutJunkLinkFloor: 0,
+    /** 推演卖货偏置（0=关闭，1010 track-2）：铁路时代存在合法卖出时，
+     * 按本概率把当步策略池限制为纯卖出——真人 rail 期人均卖出 3-5 块，
+     * 启发式推演却几乎不卖（1.5/人），叶估值系统性看不到翻面兑现。 */
+    rolloutSellBias: 0,
+    /** 推演末轮禁煤（0=关闭，1010 track-2）：铁路时代剩余轮数 ≤ 本值时
+     * 从策略池剔除造煤——末轮煤矿来不及翻面=纯亏（真人铁路中后期基本不造煤）。 */
+    rolloutLateCoalBanRounds: 0,
     /** 触发门槛：仅当 2-ply 前两名价值差 < 本值时触发（难决策才花算力）。 */
     gateMargin: 3.0,
     /** 模拟 LCG 种子基（与 round/rngState 混合，保证同局面同决策——回放可复现）。 */
@@ -1990,6 +2008,14 @@ function scoreNetworkLink(state: GameState, ctx: EvalCtx, linkIndex: number, cos
   // 时代权重：Rail-Early 铺的网是所有计分的载体，Link 更值钱；
   // 运河时代 networkW 仅 0.1（config.rs 照抄）。
   let vp = (current + futureDiscount(ctx) * future) * ctx.profile.networkW;
+  // 低值路压制（1010）：铁路时代期望分过低的路直接罚——垃圾路（0-2vp）
+  // 占位耗煤耗动数，不如把动作让给建造/研发/卖货。
+  if (!isCanalPhase(ctx.phase) && CFG.network.lowValuePenalty > 0) {
+    const eff = current + futureDiscount(ctx) * future;
+    if (eff < CFG.network.lowValueFloor) {
+      vp -= (CFG.network.lowValueFloor - eff) * CFG.network.lowValuePenalty;
+    }
+  }
   // Link 确定性溢价（hint:铁路低值建筑不如修高分路——Link VP 时代末必得,
   // 不像建筑要看翻面概率脸色;仅铁路时代,运河网反正要拆）。
   if (!isCanalPhase(ctx.phase)) vp += current * CFG.network.railCertaintyBonus;
@@ -2828,13 +2854,36 @@ function guidedRollout(state: GameState, pid: PlayerIndex, rand: () => number): 
     const legal = enumerateActions(s, p);
     if (legal.length === 0) break;
     let pick: Action;
+    // 推演策略整形（1010）：铁路时代——先剔纯低值 network 行动（垃圾路），
+    // 再按概率限池为卖出（人类式 rail 卖货），末轮禁造煤。
+    let pool = legal;
+    if (s.era === 'rail') {
+      if (w.rolloutJunkLinkFloor > 0) {
+        const filtered = pool.filter((a) => {
+          if (a.type !== 'network') return true;
+          return a.links.some((li) => {
+            const { current, future } = linkCurrentAndPotentialVps(s, li);
+            return current + 0.5 * future >= w.rolloutJunkLinkFloor;
+          });
+        });
+        if (filtered.length > 0) pool = filtered;
+      }
+      if (w.rolloutSellBias > 0 && rand() < w.rolloutSellBias) {
+        const sells = pool.filter((a) => a.type === 'sell');
+        if (sells.length > 0) pool = sells;
+      }
+      if (w.rolloutLateCoalBanRounds > 0 && roundsRemaining(s) <= w.rolloutLateCoalBanRounds) {
+        const noCoal = pool.filter((a) => !(a.type === 'build' && a.industry === 'coal'));
+        if (noCoal.length > 0) pool = noCoal;
+      }
+    }
     if (rand() < w.policyEpsilon) {
-      pick = legal[Math.floor(rand() * legal.length)]!;
+      pick = pool[Math.floor(rand() * pool.length)]!;
     } else {
       const t0 = performance.now();
       const pCtx = getCtx(s, p);
       const t1 = performance.now();
-      pick = scoreLegal(s, pCtx, legal, ZERO_DEVELOPS, 1)[0]!.action;
+      pick = scoreLegal(s, pCtx, pool, ZERO_DEVELOPS, 1)[0]!.action;
       ISMCTS_PROFILE.rolloutCtxMs += t1 - t0;
       ISMCTS_PROFILE.rolloutScoreMs += performance.now() - t1;
     }
