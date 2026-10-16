@@ -25,6 +25,10 @@ import jsbV20260908 from './jsb-v20260908.js';
 import jsbV20260910 from './jsb-v20260910.js';
 import jsbV20260911 from './jsb-v20260911.js';
 import jsbV20261010 from './jsb-v20261010.js';
+import zjkV20261013Crn from './zjk-v20261013-crn.js';
+import zjkV20261013Maxn from './zjk-v20261013-maxn.js';
+import zjkV20261013Scoutroll from './zjk-v20261013-scoutroll.js';
+import zjkV20261014Greedyroll from './zjk-v20261014-greedyroll.js';
 
 const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'lm-heuristic-v20260826': lmV20260826,
@@ -41,10 +45,18 @@ const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'jsb-v20260910': jsbV20260910,
   'jsb-v20260911': jsbV20260911,
   'jsb-v20261010': jsbV20261010,
+  'zjk-v20261013-crn': zjkV20261013Crn,
+  'zjk-v20261013-maxn': zjkV20261013Maxn,
+  'zjk-v20261013-scoutroll': zjkV20261013Scoutroll,
+  'zjk-v20261014-greedyroll': zjkV20261014Greedyroll,
 };
 
 /** 大厅缺省 AI：jsb-v20260903（0902b 迭代：真实概率叶，vs 0902b 56.2%（×500）、内战 114.3，2026-09-03 切默认）。 */
-export const DEFAULT_SPEC = 'builtin:jsb-v20260903';
+/** 大厅缺省 AI：jsb-v20261010（0911 + 酒厂卖货支撑 1.557 + 未翻图标 0.786，ISMCTS）。
+ * 2026-10-16 E26 对决：vs zjk-greedyroll ×20 名次积分 +0.60/局、人均 +5.9
+ * 双高胜出切默认；greedyroll 保留注册（vs 0903 ×500 +0.332/局，0903 直系
+ * 最强）。0903（前任默认）同样保留。×120 确认批进行中。 */
+export const DEFAULT_SPEC = 'builtin:jsb-v20261010';
 
 /** 已登记的内置插件清单（大厅可选列表/跑分用）。 */
 export function listAgentPlugins(): AgentPlugin['meta'][] {

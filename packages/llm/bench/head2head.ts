@@ -32,8 +32,8 @@ async function playOne(seed: number, swap: boolean): Promise<{ vps: number[]; sp
   return { vps: state.players.map((p) => p.vp), specs };
 }
 
-const sum: Record<string, { vp: number; n: number; wins: number }> = {};
-for (const s of [SPEC_A, SPEC_B]) sum[s] = { vp: 0, n: 0, wins: 0 };
+const sum: Record<string, { vp: number; n: number; wins: number; pts: number }> = {};
+for (const s of [SPEC_A, SPEC_B]) sum[s] = { vp: 0, n: 0, wins: 0, pts: 0 };
 const t0 = Date.now();
 let total = 0;
 for (let g = 0; g < GAMES; g++) {
@@ -44,6 +44,19 @@ for (let g = 0; g < GAMES; g++) {
     total += 1;
     const winVp = Math.max(...vps);
     console.log(`game ${g}${PAIRED ? (swap ? '· swapped' : '· mirror') : ''}: ${specs.map((s, i) => `${s === SPEC_A ? 'A' : 'B'}=${vps[i]}`).join(' ')}`);
+    // 名次积分 v2（2026-10-16，零和制）：(1,2)+4 / (3,4)-4，(1,3)+2 / (2,4)-2，
+    // (1,4)/(2,3)=0；同分按座位序破平（严格名次 1-4，保证每局两队积分和恒 0；
+    // 座位布局 ABAB/BABA 随种子轮换，破平偏差在批次内对消）。
+    const order = [0, 1, 2, 3].sort((a, b) => vps[b]! - vps[a]! || a - b);
+    const rank = [0, 0, 0, 0];
+    order.forEach((i, pos) => {
+      rank[i] = pos + 1;
+    });
+    const RANK_PTS: Record<string, number> = { '1,2': 4, '3,4': -4, '1,3': 2, '2,4': -2 };
+    for (const spec of [SPEC_A, SPEC_B]) {
+      const ranks = rank.filter((_, i) => specs[i] === spec).sort((a, b) => a - b);
+      sum[spec]!.pts += RANK_PTS[ranks.join(',')] ?? 0;
+    }
     for (let i = 0; i < 4; i++) {
       const s = sum[specs[i]!]!;
       s.vp += vps[i]!;
@@ -56,5 +69,11 @@ for (let g = 0; g < GAMES; g++) {
   }
 }
 for (const [spec, s] of Object.entries(sum)) {
-  console.log(`${spec}: 人均 ${(s.vp / s.n).toFixed(1)} | 胜率 ${((s.wins / total) * 100).toFixed(0)}% (${s.wins}/${total})`);
+  console.log(`${spec}: 人均 ${(s.vp / s.n).toFixed(1)} | 胜率 ${((s.wins / total) * 100).toFixed(0)}% (${s.wins}/${total}) | 名次积分 ${(s.pts / total).toFixed(3)}/局 (总 ${s.pts})`);
 }
+// 合入判定（B=候选侧）：名次积分均值与人均 VP 双高 → 可合入（2026-10-16 新规矩，不强求 55% 胜率）。
+const a = sum[SPEC_A]!;
+const b = sum[SPEC_B]!;
+const ptsHigh = b.pts > a.pts;
+const vpHigh = b.vp / b.n > a.vp / a.n;
+console.log(`合入判定（B 对 A）: 名次积分 ${ptsHigh ? '高' : '低'}（${(b.pts / total).toFixed(3)} vs ${(a.pts / total).toFixed(3)}），人均 VP ${vpHigh ? '高' : '低'}（${(b.vp / b.n).toFixed(1)} vs ${(a.vp / a.n).toFixed(1)}）→ ${ptsHigh && vpHigh ? '✅ 可合入' : '✗ 不合入'}`);
