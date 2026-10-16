@@ -485,6 +485,16 @@ const BASE_CFG = {
     /** 仅当两个候选的价值差小于该阈值时，才触发推演（将模拟次数只用于候选价值接近的情况，
      * 它们才是真正的难决策；差距明显的交给启发式）。 */
     rolloutDeltaThreshold: 2.0,
+    /** 引导推演（0=关闭）：推演中决策者自己的前 N 步不用随机，而用 scoreLegal
+     * 贪心 argmax（对手仍随机）——随机自走会把自己后续 tempo 在两分支里同等
+     * 程度地埋掉，候选间真实差异被系统性稀释；前 N 步贪心让“选 A 还是 B”
+     * 的差异在自己手里延续放大（信号侧修复，区别于 CRN 的方差侧）。
+     * E25 ×500 跨带终验：vs 0903 名次积分 1.576 vs 1.262、人均 +2.3 双高
+     * （zjk-v20261014-greedyroll，2026-10-16 名次积分制合入切默认）。 */
+    rolloutGreedySelf: 0,
+    /** 共同随机数（CRN，0=关闭）：同 k 局推演跨候选取同一随机流（种子只依赖 k）。
+     * E19 ×20 无收益（行为退化回无 rollout），保留旋钮供复测。 */
+    rolloutCrn: 0,
     /** UCT MCTS 模拟次数（0=关闭，默认待消融）：对 top-K 根动作做 UCT 树搜索，
      * 随机推演到终局，按我方 VP 归集（用户 2026-09-04 指定）。 */
     mctsSimulations: 0,
@@ -2741,16 +2751,34 @@ function evaluatePosition(state: GameState, pid: PlayerIndex): number {
 }
 
 /** 随机推演到终局（LCG 种子保证确定性），返回 pid 座位的终局 VP。 */
-function randomRollout(state: GameState, pid: PlayerIndex, rngSeed: number): number {
+/** 随机推演到终局（LCG 种子保证确定性），返回 pid 座位的终局 VP。
+ * greedySelf>0：pid 自己的前 N 步改用 scoreLegal 贪心 argmax（对手仍随机）；
+ * 贪心分支不消费随机流（N=0 的 rand 消费序列保持不变，旧行为字节等价）。 */
+function randomRollout(state: GameState, pid: PlayerIndex, rngSeed: number, greedySelf = 0): number {
   let s = state;
   let seed = rngSeed >>> 0;
   const rand = (): number => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 0x100000000);
   let steps = 0;
+  let ownGreedyLeft = greedySelf;
+  let ownDevelops: DevelopCounts = { canal: 0, rail: 0 };
   while (s.phase !== 'game-over') {
     const player = s.turnOrder[s.currentPlayerIdx]!;
     const legal = enumerateActions(s, player);
     if (legal.length === 0) break;
-    s = applyAction(s, legal[Math.floor(rand() * legal.length)]!, { assumeLegal: true });
+    let pick: Action;
+    if (player === pid && ownGreedyLeft > 0) {
+      ownGreedyLeft--;
+      const scored = scoreLegal(s, getCtx(s, pid), legal, ownDevelops, 0);
+      const best = scored[0];
+      pick = best ? best.action : legal[0]!;
+      if (pick.type === 'develop') {
+        if (s.era === 'canal') ownDevelops.canal += 1;
+        else ownDevelops.rail += 1;
+      }
+    } else {
+      pick = legal[Math.floor(rand() * legal.length)]!;
+    }
+    s = applyAction(s, pick, { assumeLegal: true });
     if (++steps > 100_000) break;
   }
   return s.players[pid]!.vp;
@@ -3175,6 +3203,10 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
   ) {
     ranked.sort((a, b) => b.value - a.value);
     const top = ranked.slice(0, Math.max(2, CFG.lookahead.rolloutTopK));
+    // CRN（rolloutCrn=1）：种子只依赖 k，跨候选共用随机流（E19：无收益，供复测）；
+    // 旧路径种子含 i，保持不变。greedySelf 参数透传（见 randomRollot 注释）。
+    const crn = CFG.lookahead.rolloutCrn > 0;
+    const means: number[] = [];
     let bestRoll = -1;
     let bestIdx = 0;
     for (let i = 0; i < top.length; i++) {
@@ -3182,29 +3214,34 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
       for (let k = 0; k < CFG.lookahead.rolloutK; k++) {
         try {
           const s1 = applyAction(state, top[i]!.action, { assumeLegal: true });
-          sum += randomRollout(s1, pid, 0x9e3779b9 ^ (i * 0x10001 + k));
+          sum += randomRollout(s1, pid, crn ? 0x9e3779b9 ^ k : 0x9e3779b9 ^ (i * 0x10001 + k), CFG.lookahead.rolloutGreedySelf);
         } catch {
           sum += 0;
         }
       }
       const mean = sum / CFG.lookahead.rolloutK;
+      means.push(mean);
       if (mean > bestRoll) {
         bestRoll = mean;
         bestIdx = i;
       }
     }
     if (bestIdx > 0 && bestRoll > 0) {
-      const topMean = (() => {
-        let sum = 0;
-        for (let k = 0; k < CFG.lookahead.rolloutK; k++) {
-          try {
-            const s1 = applyAction(state, top[0]!.action, { assumeLegal: true });
-            sum += randomRollout(s1, pid, 0x9e3779b9 ^ k);
-          } catch {
-            sum += 0;
-          }
-        }
-        return sum / CFG.lookahead.rolloutK;
+      // 旧路径 topMean 重算的种子恰与首轮 i=0 相同（确定性重复推演，纯浪费，
+      // 保留以保行为不变）；CRN 路径直接复用缓存均分。
+      const topMean = crn
+        ? means[0]!
+        : (() => {
+            let sum = 0;
+            for (let k = 0; k < CFG.lookahead.rolloutK; k++) {
+              try {
+                const s1 = applyAction(state, top[0]!.action, { assumeLegal: true });
+                sum += randomRollout(s1, pid, 0x9e3779b9 ^ k);
+              } catch {
+                sum += 0;
+              }
+            }
+            return sum / CFG.lookahead.rolloutK;
       })();
       if (bestRoll > topMean + CFG.lookahead.rolloutMargin) best = { action: top[bestIdx]!.action, value: bestRoll };
     }

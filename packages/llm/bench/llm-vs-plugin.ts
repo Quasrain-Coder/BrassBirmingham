@@ -11,7 +11,7 @@ import { createAgent } from '../src/agents/registry.js';
 import { describeAction } from '../src/summarize.js';
 
 const GAMES = Number(process.argv[2] ?? 10);
-const SPEC = 'builtin:jsb-v20260902b';
+const SPEC = process.env['OPPONENT_SPEC'] ?? 'builtin:jsb-v20260903';
 const client = new AnthropicClient({});
 
 let llmVp = 0, jsbVp = 0, llmWins = 0, decisions = 0, degraded = 0, inTok = 0, outTok = 0;

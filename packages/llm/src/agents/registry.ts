@@ -25,6 +25,10 @@ import jsbV20260908 from './jsb-v20260908.js';
 import jsbV20260910 from './jsb-v20260910.js';
 import jsbV20260911 from './jsb-v20260911.js';
 import jsbV20261010 from './jsb-v20261010.js';
+import zjkV20261013Crn from './zjk-v20261013-crn.js';
+import zjkV20261013Maxn from './zjk-v20261013-maxn.js';
+import zjkV20261013Scoutroll from './zjk-v20261013-scoutroll.js';
+import zjkV20261014Greedyroll from './zjk-v20261014-greedyroll.js';
 
 const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'lm-heuristic-v20260826': lmV20260826,
@@ -41,10 +45,18 @@ const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'jsb-v20260910': jsbV20260910,
   'jsb-v20260911': jsbV20260911,
   'jsb-v20261010': jsbV20261010,
+  'zjk-v20261013-crn': zjkV20261013Crn,
+  'zjk-v20261013-maxn': zjkV20261013Maxn,
+  'zjk-v20261013-scoutroll': zjkV20261013Scoutroll,
+  'zjk-v20261014-greedyroll': zjkV20261014Greedyroll,
 };
 
 /** 大厅缺省 AI：jsb-v20260903（0902b 迭代：真实概率叶，vs 0902b 56.2%（×500）、内战 114.3，2026-09-03 切默认）。 */
-export const DEFAULT_SPEC = 'builtin:jsb-v20260903';
+/** 大厅缺省 AI：zjk-v20261014-greedyroll（0906-rollout + 推演引导 greedySelf=2）。
+ * 2026-10-16 名次积分新规矩合入：E25 跨种子带 ×500 vs 0903——名次积分
+ * 1.576 vs 1.262（高）、人均 116.4 vs 114.1（+2.3，四段全正），双高成立。
+ * 前任 0903（2026-09-03 起）保留注册为 baseline；待对决：vs jsb-v20261010（E26）。 */
+export const DEFAULT_SPEC = 'builtin:zjk-v20261014-greedyroll';
 
 /** 已登记的内置插件清单（大厅可选列表/跑分用）。 */
 export function listAgentPlugins(): AgentPlugin['meta'][] {
