@@ -589,6 +589,20 @@ const BASE_CFG = {
     developCoalPenaltyBase: 1.5,
     developCoalPenaltyPerLevel: 0.2,
   },
+  /** 打法选择层（E28，2026-10-16）：开局按手牌/座位检测适配套路，
+   * canal 时代对对应产业的 build 行动分乘 boost——“套路按需选择”而非全局
+   * 规则。v1 单套路启用制：仅 cotton3 线（影子探测错位最惨：cotton3 手牌
+   * 座位 108.8 vs iron-beer 123.3，AI 拿棉花手却打煤）。 */
+  playbook: {
+    /** 总开关（0=关闭，行为字节不变）。 */
+    enabled: 0,
+    /** cotton3 线触发阈值（手牌对棉花的精确支持度：产业卡+槽位匹配位置卡+百搭×0.5）。 */
+    cotton3Threshold: 3.0,
+    /** cotton3 线 canal 时代各产业建造分乘数。 */
+    cottonBoost: 1.35,
+    breweryBoost: 1.15,
+    coalBoost: 1.1,
+  },
 };
 
 type Cfg = typeof BASE_CFG;
@@ -3067,10 +3081,52 @@ function ismctsPaired(
 }
 
 /** choose_action：首动候选 × 次动最优的确定性前瞻，返回 legal 中的最佳行动。 */
-function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], develops: DevelopCounts): Action {
+/** 手牌对某产业的精确支持度：产业卡（industries 含之）+ 位置卡（该城的槽位
+ * 接受之）+ 百搭×0.5（playbook 检测用，比 playbook-probe 的城市名近似精确）。 */
+function handIndustrySupport(hand: readonly Card[], ind: IndustryType): number {
+  let s = 0;
+  for (const c of hand) {
+    if (c.kind === 'industry' && c.industries.includes(ind)) s += 1;
+    else if (c.kind === 'location' && (LOCATIONS[c.location]?.slots ?? []).some((slot) => slot.industries.includes(ind))) s += 1;
+    else if (c.kind === 'wild-industry' || c.kind === 'wild-location') s += 0.5;
+  }
+  return s;
+}
+
+/** 打法选择层适配结果（null=无适配，走通用风格）。 */
+interface PlaybookState {
+  kind: 'cotton3';
+}
+
+/** 开局一次性检测（首决策时手牌+座位）。v1 仅 cotton3：棉支持 ≥ 阈值。 */
+function detectPlaybook(state: GameState, pid: PlayerIndex): PlaybookState | null {
+  if (handIndustrySupport(state.players[pid]!.hand, 'cotton') >= CFG.playbook.cotton3Threshold) {
+    return { kind: 'cotton3' };
+  }
+  return null;
+}
+
+/** 套路加权：canal 时代对适配产业的 build 行动分乘 boost（首动候选筛选前）。 */
+function applyPlaybookBoost(scored: Scored[], state: GameState, pb: PlaybookState | null): Scored[] {
+  if (!pb || state.era !== 'canal' || pb.kind !== 'cotton3') return scored;
+  return scored.map((s) => {
+    if (s.action.type !== 'build') return s;
+    const m =
+      s.action.industry === 'cotton'
+        ? CFG.playbook.cottonBoost
+        : s.action.industry === 'brewery'
+          ? CFG.playbook.breweryBoost
+          : s.action.industry === 'coal'
+            ? CFG.playbook.coalBoost
+            : 1;
+    return m === 1 ? s : { ...s, score: s.score * m };
+  });
+}
+
+function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], develops: DevelopCounts, pb?: PlaybookState | null): Action {
   const ctx = getCtx(state, pid);
   const incomeBefore = incomeLevelAt(state.players[pid]!.incomeSpace);
-  const scored = scoreLegal(state, ctx, legal, develops, 0);
+  const scored = applyPlaybookBoost(scoreLegal(state, ctx, legal, develops, 0), state, pb ?? null);
   const firstCandidates = topPerType(scored, CFG.lookahead.firstActionK);
 
   // UCT MCTS（mctsSimulations>0）：对 top-K 根动作做 UCB1 树搜索，随机推演
@@ -3257,10 +3313,13 @@ function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], devel
 
 
   const develops: DevelopCounts = { canal: 0, rail: 0 };
+  // 打法选择层：首决策一次性检测（enabled=0 时恒不检测，行为字节不变）。
+  let playbook: PlaybookState | null | undefined;
   return {
     decide: ({ state, seat, legal }: { state: GameState; seat: PlayerIndex; legal: Action[] }) => {
       if (legal.length === 0) throw new Error(`${meta.name}: no legal actions`);
-      const action = chooseAction(state, seat, legal, develops);
+      if (playbook === undefined && CFG.playbook.enabled > 0) playbook = detectPlaybook(state, seat);
+      const action = chooseAction(state, seat, legal, develops, playbook);
       if (action.type === 'develop') {
         if (state.era === 'canal') develops.canal += 1;
         else develops.rail += 1;

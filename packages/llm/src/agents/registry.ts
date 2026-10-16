@@ -29,6 +29,7 @@ import zjkV20261013Crn from './zjk-v20261013-crn.js';
 import zjkV20261013Maxn from './zjk-v20261013-maxn.js';
 import zjkV20261013Scoutroll from './zjk-v20261013-scoutroll.js';
 import zjkV20261014Greedyroll from './zjk-v20261014-greedyroll.js';
+import zjkV20261016PlaybookCotton from './zjk-v20261016-playbook-cotton.js';
 
 const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'lm-heuristic-v20260826': lmV20260826,
@@ -49,6 +50,7 @@ const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'zjk-v20261013-maxn': zjkV20261013Maxn,
   'zjk-v20261013-scoutroll': zjkV20261013Scoutroll,
   'zjk-v20261014-greedyroll': zjkV20261014Greedyroll,
+  'zjk-v20261016-playbook-cotton': zjkV20261016PlaybookCotton,
 };
 
 /** 大厅缺省 AI：jsb-v20260903（0902b 迭代：真实概率叶，vs 0902b 56.2%（×500）、内战 114.3，2026-09-03 切默认）。 */
