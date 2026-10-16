@@ -52,11 +52,11 @@ const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
 };
 
 /** 大厅缺省 AI：jsb-v20260903（0902b 迭代：真实概率叶，vs 0902b 56.2%（×500）、内战 114.3，2026-09-03 切默认）。 */
-/** 大厅缺省 AI：zjk-v20261014-greedyroll（0906-rollout + 推演引导 greedySelf=2）。
- * 2026-10-16 名次积分新规矩合入：E25 跨种子带 ×500 vs 0903——名次积分
- * 1.576 vs 1.262（高）、人均 116.4 vs 114.1（+2.3，四段全正），双高成立。
- * 前任 0903（2026-09-03 起）保留注册为 baseline；待对决：vs jsb-v20261010（E26）。 */
-export const DEFAULT_SPEC = 'builtin:zjk-v20261014-greedyroll';
+/** 大厅缺省 AI：jsb-v20261010（0911 + 酒厂卖货支撑 1.557 + 未翻图标 0.786，ISMCTS）。
+ * 2026-10-16 E26 对决：vs zjk-greedyroll ×20 名次积分 +0.60/局、人均 +5.9
+ * 双高胜出切默认；greedyroll 保留注册（vs 0903 ×500 +0.332/局，0903 直系
+ * 最强）。0903（前任默认）同样保留。×120 确认批进行中。 */
+export const DEFAULT_SPEC = 'builtin:jsb-v20261010';
 
 /** 已登记的内置插件清单（大厅可选列表/跑分用）。 */
 export function listAgentPlugins(): AgentPlugin['meta'][] {
