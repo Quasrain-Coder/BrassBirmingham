@@ -73,6 +73,10 @@ const BASE_CFG = {
     vp: 1.0,
     moneyBase: 0.12,
     incomeBase: 0.25,
+    /** 终局现金衰减（E29 金钱燃烧）：铁路时代剩余轮数 ≤ 此值时，moneyW 按
+     * roundsRemaining/本值 线性衰减到 0（终局余钱零价值——审计 20261010
+     * 冠军线人均余 £51.5 是纯漏斗）。0=关闭（默认，旧插件行为不变）。 */
+    moneyEndgameRound: 0,
     flex: 0.8,
     ownOverbuildVpLoss: 1.0,
     /** 运河时代 L2+ 板块双计分权重（0=关闭/1×；1=完整 2×）：
@@ -841,7 +845,7 @@ interface EvalCtx {
   cardKeepById: Map<string, number>;
 }
 
-function eraProfileOf(phase: Phase, eraFrac: number): EraProfile {
+function eraProfileOf(phase: Phase, eraFrac: number, roundsRemaining: number): EraProfile {
   const p =
     phase === 'canal-early'
       ? CFG.era.canalEarly
@@ -850,10 +854,16 @@ function eraProfileOf(phase: Phase, eraFrac: number): EraProfile {
         : phase === 'rail-early'
           ? CFG.era.railEarly
           : CFG.era.railLate;
+  // 终局现金衰减：仅铁路时代（运河余钱带入铁路，不可衰减）
+  const m = CFG.value.moneyEndgameRound;
+  const burn =
+    m > 0 && !isCanalPhase(phase) && roundsRemaining <= m
+      ? Math.max(0, roundsRemaining / m)
+      : 1;
   return {
     phase,
     incomeW: CFG.value.incomeBase * (p.incomeAdd + p.incomeFrac * eraFrac),
-    moneyW: CFG.value.moneyBase * p.moneyMult,
+    moneyW: CFG.value.moneyBase * p.moneyMult * burn,
     networkW: p.networkW,
     alpha: p.alpha,
     endgameRounds: p.endgameRounds,
@@ -893,7 +903,7 @@ function getCtx(state: GameState, pid: PlayerIndex): EvalCtx {
   const ctx: EvalCtx = {
     pid,
     phase,
-    profile: eraProfileOf(phase, eraFrac),
+    profile: eraProfileOf(phase, eraFrac, remain),
     roundsRemaining: remain,
     eraFrac,
     plan: { industry: 'cotton', count: 0, beerNeeded: 0 },
@@ -2725,7 +2735,8 @@ function evaluatePosition(state: GameState, pid: PlayerIndex): number {
   const w = CFG.leaf;
   const p = state.players[pid]!;
   const phase = eraPhase(state);
-  const profile = eraProfileOf(phase, clamp01(roundsRemaining(state) / ERA_ROUNDS));
+  const remain = roundsRemaining(state);
+  const profile = eraProfileOf(phase, clamp01(remain / ERA_ROUNDS), remain);
   // realFlipProb=1 时未翻面板按真实 flipProb 折算（叶评估从粗估升级为
   // 与建造评分同款的精确概率——"从仅 mcts 叶再拓展"：叶值逼近短程模拟）。
   const leafCtx = w.realFlipProb > 0 ? getCtx(state, pid) : null;
