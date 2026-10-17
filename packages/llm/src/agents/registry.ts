@@ -30,6 +30,7 @@ import zjkV20261013Maxn from './zjk-v20261013-maxn.js';
 import zjkV20261013Scoutroll from './zjk-v20261013-scoutroll.js';
 import zjkV20261014Greedyroll from './zjk-v20261014-greedyroll.js';
 import zjkV20261016PlaybookCotton from './zjk-v20261016-playbook-cotton.js';
+import zjkV20261010Noburn from './zjk-v20261010-noburn.js';
 import zjkV20261017Burn3 from './zjk-v20261017-burn3.js';
 import zjkV20261017CanalIncome from './zjk-v20261017-canal-income.js';
 
@@ -53,15 +54,17 @@ const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'zjk-v20261013-scoutroll': zjkV20261013Scoutroll,
   'zjk-v20261014-greedyroll': zjkV20261014Greedyroll,
   'zjk-v20261016-playbook-cotton': zjkV20261016PlaybookCotton,
+  'zjk-v20261010-noburn': zjkV20261010Noburn,
   'zjk-v20261017-burn3': zjkV20261017Burn3,
   'zjk-v20261017-canal-income': zjkV20261017CanalIncome,
 };
 
 /** 大厅缺省 AI：jsb-v20260903（0902b 迭代：真实概率叶，vs 0902b 56.2%（×500）、内战 114.3，2026-09-03 切默认）。 */
 /** 大厅缺省 AI：jsb-v20261010（0911 + 酒厂卖货支撑 1.557 + 未翻图标 0.786，ISMCTS）。
- * 2026-10-16 E26 对决：vs zjk-greedyroll ×20 名次积分 +0.60/局、人均 +5.9
- * 双高胜出切默认；greedyroll 保留注册（vs 0903 ×500 +0.332/局，0903 直系
- * 最强）。0903（前任默认）同样保留。×120 确认批进行中。 */
+ * 2026-10-16 E26 对决：vs zjk-greedyroll ×20 +0.60/局 双高切默认，×120 +1.65/局 压实。
+ * 2026-10-17 E29a：+ 终局金钱燃烧 moneyEndgameRound=3（×20 +1.80/局 强双高、
+ * ×120 +0.333/局 双高合入；×500 跨带终验在跑，翻案则回退）。
+ * greedyroll / 0903（前任默认）保留注册。 */
 export const DEFAULT_SPEC = 'builtin:jsb-v20261010';
 
 /** 已登记的内置插件清单（大厅可选列表/跑分用）。 */

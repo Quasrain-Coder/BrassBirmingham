@@ -46,6 +46,10 @@ export default createHeuristicPlugin({
     develop: {
       endgameZeroRound: 1.5,
     },
+    // E29a（2026-10-17）：终局金钱燃烧——铁路末 3 轮 moneyW 线性衰减到 0。
+    // ×20 +1.80/局 人均 +7.2 强双高；×120 +0.333/局 人均 +1.0 双高合入。
+    // 审计动机：冠军线人均终局余钱 £51.5 纯漏斗。×500 跨带终验中。
+    value: { moneyEndgameRound: 3 },
     ismcts: {
       simulations: 40,
       topK: 4,
