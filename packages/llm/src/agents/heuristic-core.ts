@@ -68,6 +68,10 @@ export interface HeuristicPluginOptions {
   tuneEnvVar?: string;
 }
 
+/** E28b 机制待查插桩：检测率/加权动作数/决策翻转数（进程级累计，
+ * bench/playbook-instrument.ts 读取；buildAgent 体内经闭包访问）。 */
+export const PB_STATS = { agents: 0, detected: 0, boostedActions: 0, flippedDecisions: 0 };
+
 const BASE_CFG = {
   value: {
     vp: 1.0,
@@ -3111,7 +3115,10 @@ interface PlaybookState {
 
 /** 开局一次性检测（首决策时手牌+座位）。v1 仅 cotton3：棉支持 ≥ 阈值。 */
 function detectPlaybook(state: GameState, pid: PlayerIndex): PlaybookState | null {
-  if (handIndustrySupport(state.players[pid]!.hand, 'cotton') >= CFG.playbook.cotton3Threshold) {
+  const hit = handIndustrySupport(state.players[pid]!.hand, 'cotton') >= CFG.playbook.cotton3Threshold;
+  PB_STATS.agents++;
+  if (hit) {
+    PB_STATS.detected++;
     return { kind: 'cotton3' };
   }
   return null;
@@ -3120,7 +3127,9 @@ function detectPlaybook(state: GameState, pid: PlayerIndex): PlaybookState | nul
 /** 套路加权：canal 时代对适配产业的 build 行动分乘 boost（首动候选筛选前）。 */
 function applyPlaybookBoost(scored: Scored[], state: GameState, pb: PlaybookState | null): Scored[] {
   if (!pb || state.era !== 'canal' || pb.kind !== 'cotton3') return scored;
-  return scored.map((s) => {
+  let bestBefore = -Infinity;
+  for (const s of scored) if (s.score > bestBefore) bestBefore = s.score;
+  const after = scored.map((s) => {
     if (s.action.type !== 'build') return s;
     const m =
       s.action.industry === 'cotton'
@@ -3130,8 +3139,20 @@ function applyPlaybookBoost(scored: Scored[], state: GameState, pb: PlaybookStat
           : s.action.industry === 'coal'
             ? CFG.playbook.coalBoost
             : 1;
-    return m === 1 ? s : { ...s, score: s.score * m };
+    if (m === 1) return s;
+    PB_STATS.boostedActions++;
+    return { ...s, score: s.score * m };
   });
+  let bestAfterIdx = -1, bestAfter = -Infinity;
+  after.forEach((s, i) => {
+    if (s.score > bestAfter) { bestAfter = s.score; bestAfterIdx = i; }
+  });
+  let bestBeforeIdx = -1;
+  scored.forEach((s, i) => {
+    if (s.score === bestBefore) bestBeforeIdx = i;
+  });
+  if (bestAfterIdx !== bestBeforeIdx) PB_STATS.flippedDecisions++;
+  return after;
 }
 
 function chooseAction(state: GameState, pid: PlayerIndex, legal: Action[], develops: DevelopCounts, pb?: PlaybookState | null): Action {
