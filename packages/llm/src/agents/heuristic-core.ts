@@ -425,6 +425,13 @@ const BASE_CFG = {
     richLightPenalty: 1.0,
     unlockMinAfterScore: 0.8,
     unlockBonus: 3.2,
+    /** 低值替代救济（E32，用户 meta 指令 2026-10-19："不要惧怕贷款，
+     * 没钱就贷，特别是当发现需要修低分路/造煤时"）：当当前最优非贷款
+     * 动作评分 < reliefFloor（即只剩垃圾路/造煤等低值选项）时，贷款按
+     * 差额 × reliefScale 加分——把节奏从低值动作切换到贷款+高值建造。
+     * 0=关闭（默认）。仅 depth=0 主决策计算（避免仿真内成本）。 */
+    reliefFloor: 0,
+    reliefScale: 0,
     // startupMaxRound: 2 / canalLateMinRound: 6 是"时代内轮数"，本引擎
     // round 跨时代累计，改用时代进度近似（见 scoreLoan 注释）。
     startupMaxProgress: 0.25,
@@ -2522,6 +2529,24 @@ function scoreLoanOp(
 
   // 闲置保护：手上的钱什么正事都干不了时就借。
   if (cash < w.idleCashThreshold) p.strategic += w.idleBonus;
+
+  // 低值替代救济（E32）：最优非贷款动作本身价值低（垃圾路/造煤）时，
+  // 贷款+高值建造优先于低值动作——用户 meta 指令，仅主决策层计算。
+  if (w.reliefScale > 0 && depth === 0) {
+    let bestAlt = Number.NEGATIVE_INFINITY;
+    const seenAlt = new Set<string>();
+    for (const a of enumerateActions(state, pid)) {
+      if (a.type === 'loan') continue;
+      const key = operationKey(a);
+      if (seenAlt.has(key)) continue;
+      seenAlt.add(key);
+      const s = scoreOp(state, ctx, a, develops, depth + 1);
+      if (s > bestAlt) bestAlt = s;
+    }
+    if (bestAlt !== Number.NEGATIVE_INFINITY && bestAlt < w.reliefFloor) {
+      p.strategic += (w.reliefFloor - bestAlt) * w.reliefScale;
+    }
+  }
 
   // 解锁加成：贷款让可负担建造出现。
   if (now <= 0 && after > w.unlockMinAfterScore) p.strategic += w.unlockBonus;
