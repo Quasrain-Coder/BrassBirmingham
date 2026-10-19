@@ -14,6 +14,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +24,9 @@ TOKEN_FILE = Path("/home/quasrain/repos/QuasAssistant/backend/data/system-token"
 API_BASE = "http://localhost:3001"
 CHANNEL = os.environ.get("BRASS_REPORT_CHANNEL", "ch-e2bc8b16")
 DRY = os.environ.get("BRASS_REPORT_DRY") == "1"
+WATCH = "--watch" in sys.argv
+SYNC = "--sync" in sys.argv
+STATE = Path("/tmp/iteration-report.state.json")
 
 
 def sh(cmd: str) -> str:
@@ -98,6 +102,66 @@ def finished_summaries() -> list[str]:
     return out
 
 
+def completed_batches() -> list[tuple[str, float, list[str]]]:
+    """已收官批次（状态文件含 finished at）：(文件, mtime, 判定行)。"""
+    out = []
+    files = sorted(
+        glob.glob("/tmp/*status*.txt") + glob.glob("/tmp/*summary*.txt"),
+        key=os.path.getmtime,
+    )
+    for f in files:
+        try:
+            txt = Path(f).read_text(errors="ignore")
+        except OSError:
+            continue
+        if "finished at" not in txt:
+            continue
+        verdicts = re.findall(r"合入判定（B 对 A）: (.+)", txt)
+        out.append((f, os.path.getmtime(f), verdicts))
+    return out
+
+
+def load_state() -> dict:
+    try:
+        return json.loads(STATE.read_text())
+    except Exception:
+        return {}
+
+
+def save_state(st: dict) -> None:
+    STATE.write_text(json.dumps(st, ensure_ascii=False))
+
+
+def watch_mode() -> None:
+    """事件推送：新收官批次 → 立即推判定结果（去重：文件名+mtime 已见则跳过）。"""
+    st = load_state()
+    seen: dict = st.setdefault("seen", {})
+    batches = completed_batches()
+    fresh = [(f, m, v) for f, m, v in batches if seen.get(f) != m]
+    if not fresh:
+        return
+    token = TOKEN_FILE.read_text().strip()
+    for f, m, verdicts in fresh:
+        seen[f] = m
+        name = os.path.basename(f).replace("-status.txt", "").replace("-summary.txt", "")
+        lines = [f"🏁 批次收官: {name}（{datetime.fromtimestamp(m):%m-%d %H:%M}）"]
+        for v in verdicts[-6:]:
+            lines.append(f"  {v}")
+        text = "\n".join(lines)
+        print(text)
+        if not DRY:
+            body = json.dumps({"text": text, "source": "brass-report"}, ensure_ascii=False)
+            req = urllib.request.Request(
+                f"{API_BASE}/api/system/channels/{CHANNEL}/push",
+                data=body.encode(),
+                headers={"content-type": "application/json", "x-system-token": token},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=15) as r:
+                print("[push]", r.status)
+    save_state(st)
+
+
 def main() -> None:
     now = datetime.now()
     hour = now.hour
@@ -139,4 +203,21 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if SYNC:
+        # 纯状态同步（不推送）：把当前已收官批次标记为已见
+        st = load_state()
+        seen = st.setdefault("seen", {})
+        for f, m, _v in completed_batches():
+            seen[f] = m
+        save_state(st)
+        sys.exit(0)
+    if WATCH:
+        watch_mode()
+    else:
+        # 定时报告后同步状态（避免 watch 重复推已报告过的收官）
+        st = load_state()
+        seen = st.setdefault("seen", {})
+        for f, m, _v in completed_batches():
+            seen[f] = m
+        save_state(st)
+        main()
