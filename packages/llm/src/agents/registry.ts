@@ -36,6 +36,7 @@ import zjkV20261017CanalIncome from './zjk-v20261017-canal-income.js';
 import zjkV20261019Junkpen from './zjk-v20261019-junkpen.js';
 import zjkV20261019Iconprem from './zjk-v20261019-iconprem.js';
 import zjkV20261019Loanrelief from './zjk-v20261019-loanrelief.js';
+import zjkV20261019LoanreliefB from './zjk-v20261019-loanrelief-b.js';
 
 const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'lm-heuristic-v20260826': lmV20260826,
@@ -63,6 +64,7 @@ const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'zjk-v20261019-junkpen': zjkV20261019Junkpen,
   'zjk-v20261019-iconprem': zjkV20261019Iconprem,
   'zjk-v20261019-loanrelief': zjkV20261019Loanrelief,
+  'zjk-v20261019-loanrelief-b': zjkV20261019LoanreliefB,
 };
 
 /** 大厅缺省 AI：jsb-v20260903（0902b 迭代：真实概率叶，vs 0902b 56.2%（×500）、内战 114.3，2026-09-03 切默认）。 */
