@@ -311,6 +311,10 @@ const BASE_CFG = {
      * （真人回放：gloucester-worcester 0vp / redditch-oxford 1vp）。 */
     lowValueFloor: 0,
     lowValuePenalty: 0,
+    /** 死端探索保留比（E33，规划层）：链接两端（含额外端点）均无当前可建造
+     * 目标（合法 build 之 location）时，探索溢价乘本系数。1=关闭（现状，
+     * 无条件支付——垃圾路发生器）；0=死端不付探索。变体 zjk-v20261021-e33。 */
+    deadendExplorationKeep: 1,
   },
   develop: {
     railEraTile: 0.35,
@@ -2070,7 +2074,7 @@ function scoreNetworkLink(state: GameState, ctx: EvalCtx, linkIndex: number, cos
 
   // 探索先验：本时代头几条进空白区域的连接是溢价。
   const linksBuilt = state.board.links.filter((x) => x.player === ctx.pid).length;
-  const exploration = Math.max(0, w.explorationBase - w.explorationPerLink * linksBuilt);
+  let exploration = Math.max(0, w.explorationBase - w.explorationPerLink * linksBuilt);
 
   // 计划（流派）加成：触及"计划产业仍有空槽"的城市 = 打开产能（Canal-Late 起）。
   let planBonus = 0;
@@ -2096,6 +2100,16 @@ function scoreNetworkLink(state: GameState, ctx: EvalCtx, linkIndex: number, cos
 
   // Rail-Early 酒厂农场锁定：农场边锁定啤酒供应。
   const endpoints: NetworkNode[] = [a, b, ...(LINK_EXTRA_ENDPOINTS[linkIndex] ?? [])];
+
+  // E33 死端门控：两端均无当前可建造目标 → 探索溢价按保留比衰减
+  // （修到死城不该拿“拓荒”分——垃圾路的发生器修复）。
+  if (CFG.network.deadendExplorationKeep < 1) {
+    const unlockable = endpoints.some(
+      (e) => !isMerchantNode(e) && ctx.targets.some((t) => t.location === e),
+    );
+    if (!unlockable) exploration *= CFG.network.deadendExplorationKeep;
+  }
+
   const beerLock =
     ctx.phase === 'rail-early' && endpoints.some((e) => !isMerchantNode(e) && LOCATIONS[e]?.region === 'farm')
       ? w.beerLockBonus
