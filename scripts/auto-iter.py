@@ -39,8 +39,8 @@ def save_state(st):
     json.dump(st, open(STATE_F, "w"), ensure_ascii=False, indent=1)
 
 def busy():
-    # 任何 head2head 在跑即视为忙（含人工手发的批次）
-    return sh("pgrep -fc 'bench/head2head'").stdout.strip() not in ("", "0")
+    # 任何 head2head 在跑即视为忙（含人工手发的批次）；bracket 防 sh 包装自匹配
+    return sh("pgrep -fc 'bench/head2h[e]ad'").stdout.strip() not in ("", "0")
 
 # ---------- 结算 ----------
 GAME_RE = re.compile(r"^game \d+: ((?:[AB]=\d+ ?){4})")
