@@ -1,0 +1,21 @@
+[
+  {
+    "name": "e34-sims80",
+    "agentA": "builtin:jsb-v20261010",
+    "agentB": "builtin:zjk-v20261022-e34-sims80",
+    "games_per_seg": 10,
+    "segs": 4,
+    "seed0": 6600,
+    "escalate_games": 30,
+    "note": "E34 搜索层：ISMCTS simulations 40→80（估值层七连否后的新层）"
+  },
+  {
+    "name": "e26-x500",
+    "agentA": "builtin:jsb-v20261010",
+    "agentB": "builtin:jsb-v20260911",
+    "games_per_seg": 125,
+    "segs": 4,
+    "seed0": 7000,
+    "note": "E26 换基线 ×500 跨带终验（20261010 vs 0911），~2 天"
+  }
+]

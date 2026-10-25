@@ -38,6 +38,7 @@ import zjkV20261019Iconprem from './zjk-v20261019-iconprem.js';
 import zjkV20261019Loanrelief from './zjk-v20261019-loanrelief.js';
 import zjkV20261019LoanreliefB from './zjk-v20261019-loanrelief-b.js';
 import zjkV20261021E33 from './zjk-v20261021-e33.js';
+import zjkV20261022E34Sims80 from './zjk-v20261022-e34-sims80.js';
 
 const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'lm-heuristic-v20260826': lmV20260826,
@@ -67,6 +68,7 @@ const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'zjk-v20261019-loanrelief': zjkV20261019Loanrelief,
   'zjk-v20261019-loanrelief-b': zjkV20261019LoanreliefB,
   'zjk-v20261021-e33': zjkV20261021E33,
+  'zjk-v20261022-e34-sims80': zjkV20261022E34Sims80,
 };
 
 /** 大厅缺省 AI：jsb-v20260903（0902b 迭代：真实概率叶，vs 0902b 56.2%（×500）、内战 114.3，2026-09-03 切默认）。 */
