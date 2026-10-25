@@ -81,6 +81,7 @@ def finalize(item):
         f.write(f"{item.get('agentA','?')}: 人均 {vpA:.1f} | 名次积分 {ptsA:+.3f}/局\n")
         f.write(f"{item.get('agentB','?')}: 人均 {vpB:.1f} | 名次积分 {ptsB:+.3f}/局\n")
         f.write(f"合入判定（B 对 A）: 名次积分 {'高' if ptsB>ptsA else '低'}（{ptsB:+.3f} vs {ptsA:+.3f}），人均 VP {'高' if vpB>vpA else '低'}（{vpB:.1f} vs {vpA:.1f}）→ {verdict}\n")
+        f.write(f"总判定: {verdict}（n={T['n']}，B {ptsB:+.3f} vs A {ptsA:+.3f} 分/局，VP {vpB:.1f} vs {vpA:.1f}）\n")
     log(f"{name}: n={T['n']} A {ptsA:+.3f}/{vpA:.1f} | B {ptsB:+.3f}/{vpB:.1f} → {verdict}")
     return dict(n=T["n"], ptsA=ptsA, ptsB=ptsB, vpA=vpA, vpB=vpB, passed=pas, verdict=verdict)
 

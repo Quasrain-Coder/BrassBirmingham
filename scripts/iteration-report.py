@@ -145,7 +145,9 @@ def watch_mode() -> None:
         seen[f] = m
         name = os.path.basename(f).replace("-status.txt", "").replace("-summary.txt", "")
         lines = [f"🏁 批次收官: {name}（{datetime.fromtimestamp(m):%m-%d %H:%M}）"]
-        for v in verdicts[-6:]:
+        summary = re.findall(r"总判定: (.+)", Path(f).read_text(errors="ignore"))
+        shown = summary if summary else verdicts[-6:]
+        for v in shown:
             lines.append(f"  {v}")
         text = "\n".join(lines)
         print(text)
