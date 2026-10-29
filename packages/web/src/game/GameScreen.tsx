@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Action, Card, PlayerIndex } from '@brass/engine';
 import { buildDeck } from '@brass/engine';
 import type { IndustryType, LocationId } from '@brass/engine';
-import type { DraftPreview, FilteredState, RoomState } from '@brass/protocol';
+import type { AIReasoningEntry, DraftPreview, FilteredState, RoomState } from '@brass/protocol';
 import { BoardSvg, BOARD_VIEW } from '../board/BoardSvg';
 import { PLAYER_COLORS } from '../board/BoardSvg';
 import type { ActionSpotlight } from '../board/BoardSvg';
@@ -119,6 +119,16 @@ function GameBoard({
   playedCards,
   eraActions,
 }: GameBoardProps): ReactElement {
+  const aiReasoning = useGameStore(store).aiReasoning;
+  const reasoningFor = (i: PlayerIndex): { entries: AIReasoningEntry[]; loading: boolean; onOpen: () => void } | undefined => {
+    if (state.phase !== 'game-over' || room?.seats.find((info) => info?.seat === i)?.isAI !== true) return undefined;
+    const entries = aiReasoning[i];
+    return {
+      entries: entries ?? [],
+      loading: entries === undefined,
+      onOpen: () => store.requestAIReasoning(i),
+    };
+  };
   const current = state.turnOrder[state.currentPlayerIdx] ?? seat;
   // 上家回合仍被扣住(turnHold)时,即使轮到自己也不能行动——服务端会拒
   // (awaiting-turn-confirm);此时按"等待确认"显示,避免误以为行动被退回
@@ -881,7 +891,7 @@ function GameBoard({
           <aside className="wide-col wide-col-left">
             {fixedSeats.slice(0, Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} hourglass={i === hourglassSeat} timeStats={timeStats[i]} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} roundNow={roundNow} turnHold={turnHold} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? [...draft.developPicks, ...(draft.bonusDevelop !== null ? [draft.bonusDevelop] : [])] : undefined} buildPicks={i === seat && draft.buildPreview !== null ? [draft.buildPreview.industry] : undefined} developBinRef={i === seat ? developBinRef : undefined} />
+                <PlayerBoard reasoning={reasoningFor(i)} state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} hourglass={i === hourglassSeat} timeStats={timeStats[i]} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} roundNow={roundNow} turnHold={turnHold} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? [...draft.developPicks, ...(draft.bonusDevelop !== null ? [draft.bonusDevelop] : [])] : undefined} buildPicks={i === seat && draft.buildPreview !== null ? [draft.buildPreview.industry] : undefined} developBinRef={i === seat ? developBinRef : undefined} />
               </div>
             ))}
           </aside>
@@ -892,7 +902,7 @@ function GameBoard({
           <aside className="wide-col wide-col-right">
             {fixedSeats.slice(Math.ceil(fixedSeats.length / 2)).map((i) => (
               <div key={i} className="wide-seat" ref={i === seat ? selfBoardRef : undefined}>
-                <PlayerBoard state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} hourglass={i === hourglassSeat} timeStats={timeStats[i]} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} roundNow={roundNow} turnHold={turnHold} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? [...draft.developPicks, ...(draft.bonusDevelop !== null ? [draft.bonusDevelop] : [])] : undefined} buildPicks={i === seat && draft.buildPreview !== null ? [draft.buildPreview.industry] : undefined} developBinRef={i === seat ? developBinRef : undefined} />
+                <PlayerBoard reasoning={reasoningFor(i)} state={state} seat={i} room={room ?? undefined} defaultOpen pulse={spotlight?.player === i} activeTurn={highlightSeat === i} hourglass={i === hourglassSeat} timeStats={timeStats[i]} compact buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} eraActions={eraActions[i] ?? []} roundNow={roundNow} turnHold={turnHold} onTileDragStart={i === seat ? onTileDragStart : undefined} hiddenTopInd={i === seat ? (dragTile?.ind ?? null) : undefined} stackView={stackView} developPicks={i === seat ? [...draft.developPicks, ...(draft.bonusDevelop !== null ? [draft.bonusDevelop] : [])] : undefined} buildPicks={i === seat && draft.buildPreview !== null ? [draft.buildPreview.industry] : undefined} developBinRef={i === seat ? developBinRef : undefined} />
               </div>
             ))}
           </aside>
@@ -902,18 +912,18 @@ function GameBoard({
         <>
           <div className="player-boards">
             {seatsBefore.map((i) => (
-              <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} hourglass={i === hourglassSeat} timeStats={timeStats[i]} buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} />
+              <PlayerBoard key={i} reasoning={reasoningFor(i)} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} hourglass={i === hourglassSeat} timeStats={timeStats[i]} buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} />
             ))}
           </div>
           <AIIndicator room={room ?? undefined} thinkingSeats={thinkingSeats} />
           {boardEl}
           {handEl}
           {actionEl}
-          <PlayerBoard state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} hourglass={seat === hourglassSeat} timeStats={timeStats[seat]} buildStatus={buildability} playedCards={playedCards[seat] ?? []} />
+          <PlayerBoard reasoning={reasoningFor(seat)} state={state} seat={seat} room={room ?? undefined} defaultOpen pulse={spotlight?.player === seat} hourglass={seat === hourglassSeat} timeStats={timeStats[seat]} buildStatus={buildability} playedCards={playedCards[seat] ?? []} />
           {seatsAfter.length > 0 ? (
             <div className="player-boards player-boards-after">
               {seatsAfter.map((i) => (
-                <PlayerBoard key={i} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} hourglass={i === hourglassSeat} timeStats={timeStats[i]} buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} />
+                <PlayerBoard key={i} reasoning={reasoningFor(i)} state={state} seat={i} room={room ?? undefined} defaultOpen={false} pulse={spotlight?.player === i} hourglass={i === hourglassSeat} timeStats={timeStats[i]} buildStatus={i === seat ? buildability : undefined} playedCards={playedCards[i] ?? []} />
               ))}
             </div>
           ) : null}

@@ -8,12 +8,15 @@
  * - DecidingAgent：LLMAgent 与 HeuristicAgent 共同实现，server 按此接口驱动 AI 座位。
  */
 import type { Action, GameState, PlayerIndex } from '@brass/engine';
+import type { AgentDecisionReasoning } from './agents/contract.js';
 
 export interface Decision {
   action: Action;
   reason: string;
   degraded: boolean;
   usage: { input: number; output: number };
+  /** 完整推理仅用于服务端落库，禁止随实时行动广播。 */
+  reasoning?: AgentDecisionReasoning;
 }
 
 export interface DecidingAgent {

@@ -57,6 +57,20 @@ describe('db repo', () => {
     ]);
   });
 
+  it('行动推理 JSON 原样往返，缺省保持兼容', () => {
+    const db = openDb(':memory:');
+    createGame(db, makeGame('g1'));
+    const reasoning = {
+      rounds: [{ round: 1, reasoning: '第一段\n第二段', text: '可见说明', toolCalls: ['observe', 'submit_action'] }],
+    };
+    appendAction(db, 'g1', 0, 1, { type: 'pass', cardId: 'c0' }, reasoning);
+    appendAction(db, 'g1', 1, 0, { type: 'pass', cardId: 'c1' });
+    expect(listActions(db, 'g1')).toEqual([
+      { seq: 0, player: 1, action: { type: 'pass', cardId: 'c0' }, reasoning },
+      { seq: 1, player: 0, action: { type: 'pass', cardId: 'c1' } },
+    ]);
+  });
+
   it('finishGame 落 finalState 并把 status 置为 finished', () => {
     const db = openDb(':memory:');
     createGame(db, makeGame('g1'));

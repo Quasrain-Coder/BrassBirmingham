@@ -11,8 +11,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import { INCOME_LEVEL_SPACES, MERCHANTS, TILES, incomeLevelAt } from '@brass/engine';
 import type { Action, Card, IndustryType, MerchantId, PlayerIndex } from '@brass/engine';
-import type { FilteredState, RoomState } from '@brass/protocol';
+import type { AIReasoningEntry, FilteredState, RoomState } from '@brass/protocol';
 import { INDUSTRY_STYLE, PLAYER_COLORS, PLAYER_COLOR_KEYS } from '../board/BoardSvg';
+import { AIReasoningModal } from './AIReasoningModal';
 import { cardFaceKey, cardFromId, cardName, describeAction, industryName, locationName, merchantName } from './display';
 import { actionCardsText, buildRounds, incomeSuffix } from './eraLog';
 import { INDUSTRY_ORDER } from './interactions';
@@ -344,6 +345,7 @@ export function PlayerBoard({
   developPicks,
   buildPicks,
   developBinRef,
+  reasoning,
 }: {
   state: FilteredState;
   seat: PlayerIndex;
@@ -389,10 +391,13 @@ export function PlayerBoard({
   buildPicks?: IndustryType[] | undefined;
   /** 垃圾桶(研发拖放目标)的容器 ref——只有拖到垃圾桶上松手才算研发。 */
   developBinRef?: React.LegacyRef<HTMLDivElement> | undefined;
+  /** 终局 AI 推理；onOpen 用于在线终局按需向服务端读取。 */
+  reasoning?: { entries: AIReasoningEntry[]; loading?: boolean | undefined; onOpen?: (() => void) | undefined } | undefined;
 }): ReactElement {
   const [open, setOpen] = useState<boolean>(defaultOpen || compact);
   // 单人打出记录弹层开关(版图/明细切换旁的"打出"按钮)
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [reasoningOpen, setReasoningOpen] = useState(false);
   // 前几回合动作下拉(第二行末尾箭头)
   const [historyOpen, setHistoryOpen] = useState(false);
   // 堆叠视图:版图(官方玩家面板美术)/明细(#19 列表)——记住玩家选择
@@ -428,6 +433,21 @@ export function PlayerBoard({
   // 单人打出记录数据(稀疏数组,按座位号入桶)
   const playedCardsAll: Card[][] =
     playedCards !== undefined ? Object.assign([], { [seat]: playedCards }) as Card[][] : [];
+  const canViewReasoning = state.phase === 'game-over'
+    && reasoning !== undefined
+    && room?.seats.find((info) => info?.seat === seat)?.isAI === true;
+  const openReasoning = (): void => {
+    reasoning?.onOpen?.();
+    setReasoningOpen(true);
+  };
+  const reasoningModal = canViewReasoning && reasoningOpen && reasoning !== undefined ? (
+    <AIReasoningModal
+      name={playerName(room, seat)}
+      entries={reasoning.entries}
+      loading={reasoning.loading ?? false}
+      onClose={() => setReasoningOpen(false)}
+    />
+  ) : null;
 
   if (compact) {
     // 第一行:顺位 + 名称 + 钱(椭圆底);行末"打出"按钮
@@ -489,6 +509,17 @@ export function PlayerBoard({
               onClick={() => setDiscardOpen(true)}
             >
               打出
+            </button>
+          ) : null}
+          {canViewReasoning ? (
+            <button
+              type="button"
+              className="discard-open-btn reasoning-open-btn"
+              data-testid={`reasoning-open-${seat}`}
+              title="对局已结束，查看该 AI 每一动的完整推理"
+              onClick={openReasoning}
+            >
+              思路
             </button>
           ) : null}
         </div>
@@ -637,6 +668,7 @@ export function PlayerBoard({
             onClose={() => setDiscardOpen(false)}
           />
         ) : null}
+        {reasoningModal}
       </section>
     );
   }
@@ -682,6 +714,17 @@ export function PlayerBoard({
         <span className="head-vp">{self.vp} 分</span>
         <span className="board-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
       </button>
+      {canViewReasoning ? (
+        <button
+          type="button"
+          className="discard-open-btn reasoning-open-btn reasoning-open-noncompact"
+          data-testid={`reasoning-open-${seat}`}
+          title="对局已结束，查看该 AI 每一动的完整推理"
+          onClick={openReasoning}
+        >
+          思路
+        </button>
+      ) : null}
       {open ? (
         <div className="player-board-body">
           <p className="board-meta" data-testid={`player-board-meta-${seat}`}>
@@ -811,6 +854,7 @@ export function PlayerBoard({
           onClose={() => setDiscardOpen(false)}
         />
       ) : null}
+      {reasoningModal}
     </section>
   );
 }

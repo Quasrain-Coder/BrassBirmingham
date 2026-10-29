@@ -25,6 +25,7 @@ import jsbV20260908 from './jsb-v20260908.js';
 import jsbV20260910 from './jsb-v20260910.js';
 import jsbV20260911 from './jsb-v20260911.js';
 import jsbV20261010 from './jsb-v20261010.js';
+import agentbgaLlm from './agentbga-llm.js';
 import zjkV20261013Crn from './zjk-v20261013-crn.js';
 import zjkV20261013Maxn from './zjk-v20261013-maxn.js';
 import zjkV20261013Scoutroll from './zjk-v20261013-scoutroll.js';
@@ -45,6 +46,7 @@ const BUILTIN_PLUGINS: Record<string, AgentPlugin> = {
   'jsb-v20260910': jsbV20260910,
   'jsb-v20260911': jsbV20260911,
   'jsb-v20261010': jsbV20261010,
+  'agentbga-llm': agentbgaLlm,
   'zjk-v20261013-crn': zjkV20261013Crn,
   'zjk-v20261013-maxn': zjkV20261013Maxn,
   'zjk-v20261013-scoutroll': zjkV20261013Scoutroll,
@@ -85,11 +87,13 @@ export function createAgent(spec: string, ctx: AgentContext): DecidingAgent {
   return {
     decide: async (state: GameState, player: PlayerIndex, legal: Action[]): Promise<Decision> => {
       const action = await instance.decide({ state, seat: player, legal });
+      const meta = instance.decisionMeta?.();
       return {
         action,
-        reason: instance.explain?.() ?? plugin.meta.name,
-        degraded: true, // 非 LLM 直连路径（与 HeuristicAgent 旧语义一致）
-        usage: { input: 0, output: 0 },
+        reason: meta?.reason ?? instance.explain?.() ?? plugin.meta.name,
+        degraded: meta?.degraded ?? true, // 非 LLM 直连路径（与 HeuristicAgent 旧语义一致）
+        usage: meta?.usage ?? { input: 0, output: 0 },
+        ...(meta?.reasoning ? { reasoning: meta.reasoning } : {}),
       };
     },
   };

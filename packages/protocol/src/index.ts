@@ -2,6 +2,16 @@ import type { Action, Card, GameState, IndustryType, LocationId, MerchantId, Pla
 
 export const PROTOCOL_VERSION = 1;
 
+/** 一次模型响应的完整思考记录；仅终局后允许读取。 */
+export interface AIReasoningRound {
+  round: number;
+  reasoning: string;
+  text: string;
+  toolCalls: string[];
+}
+export interface AIReasoning { rounds: AIReasoningRound[] }
+export interface AIReasoningEntry { seq: number; action: Action; reasoning: AIReasoning }
+
 /** 导出/导入对局记录:种子 + 全量行动日志,确定性重放(newGame + 逐条 applyAction)。 */
 export interface GameRecord {
   version: 1;
@@ -10,7 +20,7 @@ export interface GameRecord {
   playerCount: 2 | 3 | 4;
   seed: number;
   seats: { seat: PlayerIndex; nickname: string; isAI: boolean }[];
-  actions: { seq: number; player: PlayerIndex; action: Action }[];
+  actions: { seq: number; player: PlayerIndex; action: Action; reasoning?: AIReasoning }[];
 }
 
 export { filterStateFor } from './filter.js';
@@ -40,6 +50,7 @@ export type ServerMessage =
   | { type: 'ai_thinking'; protocolVersion: number; seat: PlayerIndex; thinking: boolean } // AI 决策中指示（true→false 成对）
   | { type: 'game_over'; protocolVersion: number; winner: PlayerIndex[]; finalScores: number[] } // finalScores = 终局 state.players[].vp 按座位序
   | { type: 'export_data'; protocolVersion: number; record: GameRecord } // export_game 的应答:整局记录(开局到当前进度)
+  | { type: 'ai_reasoning'; protocolVersion: number; seat: PlayerIndex; entries: AIReasoningEntry[] } // 仅终局后按座位单发
   | { type: 'agent_plugins'; protocolVersion: number; plugins: AgentPluginMeta[]; defaultSpec: string } // list_agent_plugins 的应答:可用 AI 插件清单(大厅下拉用) + 服务器默认 spec
   | { type: 'error'; protocolVersion: number; code: string; message: string }
   | { type: 'pong'; protocolVersion: number };
@@ -85,6 +96,7 @@ export type ClientMessage =
   | { type: 'draft_update'; protocolVersion: number; token: string; draft: DraftPreview | null } // 暂存预览同步(null=清除);服务器广播 player_draft 给同房其他人
   | { type: 'leave'; protocolVersion: number; token: string } // 主动退出：清座位索引 + 广播 + 断开本连接（对局继续）
   | { type: 'export_game'; protocolVersion: number; token: string } // 导出当前对局记录(服务器从库读出整局行动日志)
+  | { type: 'get_ai_reasoning'; protocolVersion: number; token: string; seat: PlayerIndex } // 仅终局后读取指定 AI 的推理全文
   | { type: 'list_agent_plugins'; protocolVersion: number } // 查询可用 AI 插件清单(大厅下拉用,无需 token)
   | { type: 'import_game'; protocolVersion: number; record: GameRecord; seat: PlayerIndex; nickname: string } // 从记录的某个前缀开新局:seat=导入者座位(其余座位开放加入),actions 须为从开局起的前缀
   | { type: 'ping'; protocolVersion: number };

@@ -154,6 +154,33 @@ describe('<PlayerBoard>', () => {
     );
   });
 
+  it('AI 推理仅终局可见，按小动展示完整原文且不改变头部行', () => {
+    const state = freshState();
+    const room = roomFixture();
+    room.seats[1]!.isAI = true;
+    const reasoning = {
+      entries: [{
+        seq: 0,
+        action: { type: 'pass', cardId: 'c0' } as const,
+        reasoning: { rounds: [{ round: 1, reasoning: '完整第一行\n第二行', text: '', toolCalls: ['submit_action'] }] },
+      }],
+    };
+    const { rerender } = render(
+      <PlayerBoard state={state} seat={1} room={room} compact playedCards={[]} reasoning={reasoning} />,
+    );
+    expect(screen.queryByTestId('reasoning-open-1')).not.toBeInTheDocument();
+    state.phase = 'game-over';
+    rerender(<PlayerBoard state={state} seat={1} room={room} compact playedCards={[]} reasoning={reasoning} />);
+    const button = screen.getByTestId('reasoning-open-1');
+    expect(button.parentElement?.classList.contains('compact-head')).toBe(true);
+    fireEvent.click(button);
+    expect(screen.getByTestId('reasoning-action-0')).toHaveTextContent('第 1 动');
+    expect(screen.getByTestId('ai-reasoning-modal')).toHaveTextContent('完整第一行');
+    expect(screen.getByTestId('ai-reasoning-modal')).toHaveTextContent('第二行');
+    rerender(<PlayerBoard state={state} seat={0} room={room} compact playedCards={[]} reasoning={reasoning} />);
+    expect(screen.queryByTestId('reasoning-open-0')).not.toBeInTheDocument();
+  });
+
   it('默认折叠：不展开时无 meta；点击展开', () => {
     const state = freshState();
     render(<PlayerBoard state={state} seat={1} room={roomFixture()} defaultOpen={false} />);

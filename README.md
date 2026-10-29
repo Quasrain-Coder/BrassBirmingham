@@ -161,6 +161,15 @@ transport for external single-file agents (Python/Rust, stdio NDJSON with
 the same payload shape) is planned next — `contract.ts` doubles as its
 protocol document.
 
+## Acknowledgements
+
+**Special thanks to the following open-source projects and their authors:**
+
+- [AgentBGA](https://github.com/fengrui-z/AgentBGA) — inspiration for the LLM agent framework's observe/legal-action harness and tool-driven design.
+- [Eluvk/brass-assistant](https://github.com/Eluvk/brass-assistant) — the original reference for our heuristic evaluation lineage, including the `lm-heuristic` built-ins and their successors.
+
+This project keeps its own TypeScript engine as the sole authority for rules and legal actions.
+
 ## Legal note
 
 This is an unofficial, **personal, non-commercial** fan project (for the

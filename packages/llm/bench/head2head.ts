@@ -25,9 +25,14 @@ async function playOne(seed: number, swap: boolean): Promise<{ vps: number[]; sp
     const player = state.turnOrder[state.currentPlayerIdx]!;
     const legal = enumerateActions(state, player);
     if (legal.length === 0) throw new Error(`no legal at ${steps}`);
-    const { action } = await agents[player]!.decide(state, player, legal);
+    const decisionStart = Date.now();
+    console.log(`step ${seed}: begin=${steps + 1} era=${state.era} round=${state.round} seat=${player} spec=${specs[player]} legal=${legal.length}`);
+    const { action, reason, degraded, usage } = await agents[player]!.decide(state, player, legal);
+    console.log(`step ${seed}: decided=${steps + 1} seat=${player} elapsed=${((Date.now() - decisionStart) / 1000).toFixed(1)}s degraded=${degraded} usage=${usage.input}/${usage.output} reason=${reason}`);
     state = applyAction(state, action);
-    if (++steps > 100_000) throw new Error('runaway');
+    steps += 1;
+    console.log(`step ${seed}: applied=${steps} era=${state.era} round=${state.round} phase=${state.phase}`);
+    if (steps > 100_000) throw new Error('runaway');
   }
   return { vps: state.players.map((p) => p.vp), specs };
 }

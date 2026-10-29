@@ -5,6 +5,7 @@
  * - specs 非法：长度不等于 count / 未知 spec → error invalid-config。
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import { DEFAULT_SPEC } from '@brass/llm';
 import { createTestHarness } from './helpers.js';
 
 const PV = 1;
@@ -21,7 +22,8 @@ describe('WS AI 席位版本选择', () => {
     const names = (res.plugins as { name: string }[]).map((p) => p.name);
     expect(names).toContain('jsb-v20260902b');
     expect(names).toContain('lm-heuristic-v20260829');
-    expect(res.defaultSpec).toBe('builtin:jsb-v20260903');
+    expect(names).toContain('agentbga-llm');
+    expect(res.defaultSpec).toBe(DEFAULT_SPEC);
   });
 
   it('create_room 带 specs → AI 席位昵称带插件短名，对局推进', async () => {
