@@ -29,7 +29,7 @@ import {
 } from '@brass/engine';
 import type { Action, Card, GameState, PlayerIndex } from '@brass/engine';
 import { filterStateFor } from '@brass/protocol';
-import type { FilteredState } from '@brass/protocol';
+import type { AIReasoning, FilteredState } from '@brass/protocol';
 import { appendAction, createGame, deleteActionsFrom, findGameById, finishGame, listActions, listSeats, type Db } from './db/repo.js';
 
 /**
@@ -232,7 +232,7 @@ export class GameSession {
   submitAction(
     seat: PlayerIndex,
     action: Action,
-    opts?: { deferRoundEnd?: boolean },
+    opts?: { deferRoundEnd?: boolean; reasoning?: AIReasoning },
   ): { seq: number; roundEndPending: boolean } {
     if (this.finished) {
       throw new SessionError('game-finished', `对局 ${this.gameId} 已结束，拒绝行动`);
@@ -267,7 +267,7 @@ export class GameSession {
     const moneyBefore = this.gameState.players[actingSeat]!.money;
     const roundBefore = this.gameState.round;
     const eraBefore = this.gameState.era;
-    appendAction(this.db, this.gameId, this.seq, seat, action);
+    appendAction(this.db, this.gameId, this.seq, seat, action, opts?.reasoning);
     this.gameState = next;
     // deferRoundEnd 时补牌被跳过:该行动若恰好结束本玩家的回合(换人/轮末挂起),
     // 记下待补牌座位,end_turn 的 settleTurnEnd 才真正发牌

@@ -3,7 +3,7 @@ import type { Database as SqliteDatabase } from 'better-sqlite3';
 import { asc, eq, and, gte } from 'drizzle-orm';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { Action } from '@brass/engine';
-import type { RoomConfig } from '@brass/protocol';
+import type { AIReasoning, RoomConfig } from '@brass/protocol';
 import { actions, games, schema, seats } from './schema.js';
 
 export type Db = BetterSQLite3Database<typeof schema> & { $client: SqliteDatabase };
@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS actions (
   game_id TEXT NOT NULL,
   seq INTEGER NOT NULL,
   player INTEGER NOT NULL,
-  action TEXT NOT NULL
+  action TEXT NOT NULL,
+  reasoning TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS actions_game_id_seq_unique ON actions (game_id, seq);
 CREATE TABLE IF NOT EXISTS seats (
@@ -52,6 +53,10 @@ export function openDb(path: string): Db {
   if (!seatCols.some((c) => c.name === 'is_ai')) {
     sqlite.exec('ALTER TABLE seats ADD COLUMN is_ai INTEGER NOT NULL DEFAULT 0');
     sqlite.exec("UPDATE seats SET is_ai = 1 WHERE nickname LIKE 'AI-%（%'");
+  }
+  const actionCols = sqlite.prepare('PRAGMA table_info(actions)').all() as { name: string }[];
+  if (!actionCols.some((c) => c.name === 'reasoning')) {
+    sqlite.exec('ALTER TABLE actions ADD COLUMN reasoning TEXT');
   }
   return drizzle(sqlite, { schema });
 }
@@ -88,9 +93,9 @@ export function createGame(db: Db, game: NewGame): void {
 }
 
 /** 追加一条行动。(game_id, seq) 冲突抛 UNIQUE 约束错。 */
-export function appendAction(db: Db, gameId: string, seq: number, player: number, action: Action): void {
+export function appendAction(db: Db, gameId: string, seq: number, player: number, action: Action, reasoning?: AIReasoning): void {
   db.insert(actions)
-    .values({ gameId, seq, player, action: JSON.stringify(action) })
+    .values({ gameId, seq, player, action: JSON.stringify(action), ...(reasoning ? { reasoning: JSON.stringify(reasoning) } : {}) })
     .run();
 }
 
@@ -187,12 +192,17 @@ export function listSeats(db: Db, gameId: string): PersistedSeat[] {
 }
 
 /** 按 seq 升序取某对局全部行动（Task 5 重放校验用）。 */
-export function listActions(db: Db, gameId: string): { seq: number; player: number; action: Action }[] {
+export function listActions(db: Db, gameId: string): { seq: number; player: number; action: Action; reasoning?: AIReasoning }[] {
   const rows = db
-    .select({ seq: actions.seq, player: actions.player, action: actions.action })
+    .select({ seq: actions.seq, player: actions.player, action: actions.action, reasoning: actions.reasoning })
     .from(actions)
     .where(eq(actions.gameId, gameId))
     .orderBy(asc(actions.seq))
     .all();
-  return rows.map((r) => ({ seq: r.seq, player: r.player, action: JSON.parse(r.action) as Action }));
+  return rows.map((r) => ({
+    seq: r.seq,
+    player: r.player,
+    action: JSON.parse(r.action) as Action,
+    ...(r.reasoning ? { reasoning: JSON.parse(r.reasoning) as AIReasoning } : {}),
+  }));
 }

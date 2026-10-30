@@ -23,6 +23,7 @@
 import { useSyncExternalStore } from 'react';
 import { PROTOCOL_VERSION } from '@brass/protocol';
 import type {
+  AIReasoningEntry,
   AgentPluginMeta,
   ClientMessage,
   DraftPreview,
@@ -203,6 +204,8 @@ export interface GameStoreState {
   /** 正在决策中的 AI 座位（ai_thinking true 加入、false 移除）。 */
   thinkingSeats: PlayerIndex[];
   gameOver: GameOverInfo | null;
+  /** 终局后按座位读取的 AI 推理全文；进行中始终为空。 */
+  aiReasoning: Partial<Record<PlayerIndex, AIReasoningEntry[]>>;
   lastError: { code: string; message: string } | null;
   selectedCard: string | null;
   /** 连接被另一标签页（同 token）接管：停止自动重连，等用户 reclaim/leaveRoom。 */
@@ -241,6 +244,7 @@ const INITIAL_STATE: GameStoreState = {
   log: [],
   thinkingSeats: [],
   gameOver: null,
+  aiReasoning: {},
   lastError: null,
   selectedCard: null,
   takenOver: false,
@@ -436,6 +440,14 @@ export class GameStore {
     this.send({ type: 'export_game', protocolVersion: PROTOCOL_VERSION, token });
   }
 
+  /** 终局后按座位获取 AI 推理；进行中不发送，服务端仍会再次强制校验。 */
+  requestAIReasoning(seat: PlayerIndex): void {
+    const token = this.state.token;
+    if (token === null || this.state.snapshot?.phase !== 'game-over') return;
+    if (this.state.aiReasoning[seat] !== undefined) return;
+    this.send({ type: 'get_ai_reasoning', protocolVersion: PROTOCOL_VERSION, token, seat });
+  }
+
   /** 进入回看模式(导入记录,纯前端逐步回放);持久化到 localStorage(刷新不丢)。 */
   enterReview(record: GameRecord): void {
     this.patch({ review: { record, step: record.actions.length, viewSeat: 0 as PlayerIndex } });
@@ -515,6 +527,7 @@ export class GameStore {
       legalActions: [],
       seq: 0,
       gameOver: null,
+      aiReasoning: {},
       takenOver: false,
       fixedSeats: null,
     });
@@ -737,6 +750,9 @@ export class GameStore {
           this.clearSession();
         }
         this.patch({ lastError: { code: msg.code, message: msg.message } });
+        break;
+      case 'ai_reasoning':
+        this.patch({ aiReasoning: { ...this.state.aiReasoning, [msg.seat]: msg.entries } });
         break;
       case 'export_data': {
         // 导出记录下载为 JSON 文件(文件名带房间号与步数,便于归档/回传 debug)

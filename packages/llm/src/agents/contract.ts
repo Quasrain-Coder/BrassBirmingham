@@ -36,10 +36,21 @@ export interface DecideInput {
   clockMs?: number;
 }
 
+/** 一次模型响应的完整思考记录；只在终局后对外展示。 */
+export interface AgentReasoningRound {
+  round: number;
+  reasoning: string;
+  text: string;
+  toolCalls: string[];
+}
+export interface AgentDecisionReasoning { rounds: AgentReasoningRound[] }
+
 /** 插件实例：一个座位一个实例，允许携带内部状态（如 MCTS 树缓存）。 */
 export interface AgentInstance {
   /** 返回 legal 中的一个行动。 */
   decide(input: DecideInput): Action | Promise<Action>;
+  /** 可选：返回最近一次决策的原因、降级标记和 token 用量。 */
+  decisionMeta?(): { reason: string; degraded: boolean; usage: { input: number; output: number }; reasoning?: AgentDecisionReasoning };
   /** 可选：一句话决策说明（写入 action_applied 的 reason，前端可见）。 */
   explain?(): string;
 }

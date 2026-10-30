@@ -31,7 +31,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import { PROTOCOL_VERSION } from '@brass/protocol';
-import type { ClientMessage, DraftPreview, GameRecord, ServerMessage } from '@brass/protocol';
+import type { AIReasoning, ClientMessage, DraftPreview, GameRecord, ServerMessage } from '@brass/protocol';
 import { applyAction, enumerateActions, newGame } from '@brass/engine';
 import type { Action, PlayerIndex } from '@brass/engine';
 import { HeuristicAgent, agentFactoryFromSpec, listAgentPlugins, DEFAULT_SPEC, type DecidingAgent, type Difficulty } from '@brass/llm';
@@ -428,8 +428,8 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
   }
 
   /** AI 行动落库 + 广播（action_applied 带 reason/degraded；终局则补 game_over）。 */
-  function applyAIAction(entry: SessionEntry, seat: PlayerIndex, action: Action, reason: string, degraded: boolean): void {
-    const { seq } = entry.session.submitAction(seat, action);
+  function applyAIAction(entry: SessionEntry, seat: PlayerIndex, action: Action, reason: string, degraded: boolean, reasoning?: AIReasoning): void {
+    const { seq } = entry.session.submitAction(seat, action, reasoning ? { reasoning } : {});
     broadcast(entry.room, {
       type: 'action_applied',
       protocolVersion: PROTOCOL_VERSION,
@@ -494,7 +494,7 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
           const state = entry.session.state;
           const legal = enumerateActions(state, seat);
           const decision = await agent.decide(state, seat, legal);
-          applyAIAction(entry, seat, decision.action, decision.reason, decision.degraded);
+          applyAIAction(entry, seat, decision.action, decision.reason, decision.degraded, decision.reasoning);
           // usage 只在行动成功落库后计数（submit 抛错不虚增）
           entry.usage.decisions += 1;
           entry.usage.input += decision.usage.input;
@@ -819,6 +819,9 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
       case 'export_game':
         handleExportGame(conn, msg);
         break;
+      case 'get_ai_reasoning':
+        handleGetAIReasoning(conn, msg);
+        break;
       case 'import_game':
         handleImportGame(conn, msg);
         break;
@@ -854,9 +857,27 @@ export async function createGameServer(options: GameServerOptions): Promise<Game
         seq: r.seq,
         player: r.player as PlayerIndex,
         action: r.action,
+        ...(entry.session.finished && r.reasoning ? { reasoning: r.reasoning } : {}),
       })),
     };
     send(conn, { type: 'export_data', protocolVersion: PROTOCOL_VERSION, record });
+  }
+
+  /** 推理全文只落库、不实时广播；终局后才允许按 AI 座位单发。 */
+  function handleGetAIReasoning(conn: Conn, msg: { token: string; seat: PlayerIndex }): void {
+    if (typeof msg.token !== 'string' || typeof msg.seat !== 'number') {
+      throw new WsError('bad-message', 'get_ai_reasoning 需要 token 与 seat');
+    }
+    const entry = sessionByToken.get(msg.token);
+    if (entry === undefined) throw new WsError('invalid-token', 'token 不属于任何对局');
+    if (!entry.session.finished) throw new WsError('game-not-finished', '对局结束后才能查看 AI 推理');
+    if (!entry.agents.has(msg.seat)) throw new WsError('invalid-seat', `座位 ${String(msg.seat)} 不是本局 AI`);
+    const entries = listActions(db, entry.session.gameId).flatMap((r) => (
+      r.player === msg.seat && r.reasoning
+        ? [{ seq: r.seq, action: r.action, reasoning: r.reasoning }]
+        : []
+    ));
+    send(conn, { type: 'ai_reasoning', protocolVersion: PROTOCOL_VERSION, seat: msg.seat, entries });
   }
 
   /**

@@ -8,7 +8,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { buildDeck } from '@brass/engine';
 import type { PlayerIndex } from '@brass/engine';
-import type { RoomState } from '@brass/protocol';
+import type { AIReasoningEntry, RoomState } from '@brass/protocol';
 import { BoardSvg } from '../board/BoardSvg';
 import { HandBar, PlayerBoard } from './Panels';
 import { ActionLogModal } from './DiscardModal';
@@ -75,6 +75,14 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
   const eraRoundText = `${state.era === 'canal' ? '运河时代' : '铁路时代'} · 第 ${Math.min(roundNow, eraTotal)}/${eraTotal} 轮`;
 
   const scoreEntries: EraScoreEntry[] = canalEntry !== null ? [canalEntry] : [];
+  const reasoningFor = (i: PlayerIndex): { entries: AIReasoningEntry[] } | undefined => {
+    const entries = record.actions.flatMap((entry) => (
+      entry.player === i && entry.reasoning
+        ? [{ seq: entry.seq, action: entry.action, reasoning: entry.reasoning }]
+        : []
+    ));
+    return entries.length > 0 ? { entries } : undefined;
+  };
 
   const boardOf = (i: PlayerIndex): ReactElement => (
     <PlayerBoard
@@ -89,6 +97,7 @@ export function ReviewScreen({ store }: { store: GameStore }): ReactElement {
       stackView={stackView}
       seatSwitch={{ current: viewSeat, onSwitch: (s) => store.setReviewSeat(s) }}
       actsLatestRound={frame.roundJustEnded}
+      reasoning={reasoningFor(i)}
     />
   );
 

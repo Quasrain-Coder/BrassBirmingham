@@ -245,9 +245,15 @@ class RecordingAgent implements DecidingAgent {
   calls = 0;
   private readonly inner = new HeuristicAgent();
 
-  decide(state: GameState, player: PlayerIndex, legal: Action[]): Promise<Decision> {
+  async decide(state: GameState, player: PlayerIndex, legal: Action[]): Promise<Decision> {
     this.calls += 1;
-    return this.inner.decide(state, player, legal);
+    const decision = await this.inner.decide(state, player, legal);
+    return {
+      ...decision,
+      reasoning: {
+        rounds: [{ round: 1, reasoning: `座位 ${player} 第 ${this.calls} 动\n完整推理`, text: '', toolCalls: ['submit_action'] }],
+      },
+    };
   }
 }
 
@@ -422,6 +428,25 @@ describe('WS 集成：AI 座位与驱动循环', () => {
     expect(creds[0]!.seat).toBe(0);
   });
 
+  it('推理只落库：进行中禁止读取且导出不携带', async () => {
+    const { players } = await setupGame({
+      playerCount: 2,
+      humans: 1,
+      aiCount: 1,
+      seed: 42,
+      aiAgentFactory: () => new RecordingAgent(),
+    });
+    const human = players[0]!;
+    const applied = await human.client.nextMessage('action_applied', (m) => m.player === 1);
+    expect(applied).not.toHaveProperty('reasoning');
+    human.client.send({ type: 'get_ai_reasoning', protocolVersion: PV, token: human.token, seat: 1 });
+    const denied = await human.client.nextMessage('error');
+    expect(denied.code).toBe('game-not-finished');
+    human.client.send({ type: 'export_game', protocolVersion: PV, token: human.token });
+    const exported = await human.client.nextMessage('export_data');
+    expect(exported.record.actions.every((entry: { player: number; reasoning?: unknown }) => entry.reasoning === undefined)).toBe(true);
+  });
+
   it(
     '2 真人 + 2 AI 完整对局：ai_thinking 成对、AI action_applied 带 reason、seq 连续',
     { timeout: 180_000 },
@@ -471,6 +496,17 @@ describe('WS 集成：AI 座位与驱动循环', () => {
         const seqs = msgs.filter((m) => m.type === 'action_applied').map((m) => m.seq);
         expect(seqs).toEqual(Array.from({ length: seqs.length }, (_, i) => i));
       }
+      const requester = players[0]!;
+      requester.client.send({ type: 'get_ai_reasoning', protocolVersion: PV, token: requester.token, seat: 2 });
+      const reasoning = await requester.client.nextMessage('ai_reasoning');
+      expect(reasoning.seat).toBe(2);
+      expect(reasoning.entries.length).toBeGreaterThan(0);
+      expect(reasoning.entries[0]!.reasoning.rounds[0]!.reasoning).toContain('完整推理');
+      requester.client.send({ type: 'export_game', protocolVersion: PV, token: requester.token });
+      const exported = await requester.client.nextMessage('export_data');
+      const aiActions = exported.record.actions.filter((entry: { player: number; reasoning?: unknown }) => entry.player === 2);
+      expect(aiActions.length).toBeGreaterThan(0);
+      expect(aiActions.every((entry: { player: number; reasoning?: unknown }) => entry.reasoning !== undefined)).toBe(true);
     },
   );
 

@@ -25,6 +25,7 @@ export const actions = sqliteTable(
     seq: integer('seq').notNull(),
     player: integer('player').notNull(),
     action: text('action').notNull(), // JSON: Action
+    reasoning: text('reasoning'), // JSON: AIReasoning；仅终局后允许读取
   },
   (t) => [uniqueIndex('actions_game_id_seq_unique').on(t.gameId, t.seq)],
 );
